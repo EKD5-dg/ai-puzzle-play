@@ -5,6 +5,7 @@ import MemoryMatch, { meta as metaMemory } from '../games/MemoryMatch';
 import SlidingPuzzle, { meta as metaSliding } from '../games/SlidingPuzzle';
 import Sudoku, { meta as metaSudoku } from '../games/Sudoku';
 import Tetris, { meta as metaTetris } from '../games/Tetris';
+import DragonQuest, { meta as metaDragon } from '../games/DragonQuest';
 
 /**
  * 游戏注册表 —— 新增游戏的唯一入口：
@@ -18,6 +19,7 @@ export const games: GameDefinition[] = [
   { meta: metaSliding, component: SlidingPuzzle },
   { meta: metaSudoku, component: Sudoku },
   { meta: metaTetris, component: Tetris },
+  { meta: metaDragon, component: DragonQuest },
 ];
 
 /** 按 id 查找游戏 */

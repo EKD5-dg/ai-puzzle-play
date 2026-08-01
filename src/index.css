@@ -1265,3 +1265,298 @@ code {
     transform: translateY(0);
   }
 }
+
+/* ============ 勇者斗恶龙 ============ */
+.dq {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(560px, 94vw);
+  gap: 16px;
+}
+
+.dq-player {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.dq-avatar {
+  font-size: 40px;
+  flex-shrink: 0;
+  animation: dqFloat 3s ease-in-out infinite;
+}
+
+@keyframes dqFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.dq-bars {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.dq-statline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dq-gold {
+  color: #fde047;
+}
+
+.dq-kills {
+  color: #fca5a5;
+  margin-left: auto;
+}
+
+.dq-bar {
+  position: relative;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.dq-bar > div {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.dq-bar.hp > div {
+  background: linear-gradient(90deg, #dc2626, #f87171);
+}
+
+.dq-bar.mp > div {
+  background: linear-gradient(90deg, #2563eb, #60a5fa);
+}
+
+.dq-bar.xp > div {
+  background: linear-gradient(90deg, #b45309, #fbbf24);
+}
+
+.dq-bar.mhp > div {
+  background: linear-gradient(90deg, #7c2d12, #f97316);
+}
+
+.dq-bar > span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.dq-menu {
+  width: 100%;
+  text-align: center;
+  padding: 30px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.dq-menu-icon {
+  font-size: 60px;
+  filter: drop-shadow(0 8px 20px rgba(124, 92, 255, 0.5));
+  animation: dqFloat 4s ease-in-out infinite;
+}
+
+.dq-menu h2 {
+  font-size: 24px;
+  background: linear-gradient(90deg, #fbbf24, #f87171);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.dq-menu p {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.dq-btn {
+  min-width: 240px;
+  font-size: 15px;
+  padding: 12px 24px;
+}
+
+.dq-help {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.9;
+}
+
+.dq-battle {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: pageIn 0.3s ease;
+}
+
+.dq-monster {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 24px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 100%;
+  animation: dqSlam 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes dqSlam {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.dq-monster-emoji {
+  font-size: 72px;
+  line-height: 1;
+  animation: dqBreath 2.4s ease-in-out infinite;
+}
+
+@keyframes dqBreath {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.dq-monster-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fca5a5;
+}
+
+.dq-monster .dq-bar {
+  width: min(380px, 90%);
+}
+
+.dq-log {
+  width: 100%;
+  min-height: 96px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.dq-log p {
+  color: var(--text-dim);
+}
+
+.dq-log p.hl {
+  color: #fde047;
+  font-weight: 700;
+}
+
+.dq-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.dq-action {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 10px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.dq-action span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.dq-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.dq-action.flee {
+  grid-column: 1 / -1;
+}
+
+.dq-overlay {
+  width: 100%;
+  text-align: center;
+  padding: 36px 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  animation: pop 0.5s ease;
+}
+
+.dq-overlay h2 {
+  font-size: 26px;
+}
+
+.dq-overlay p {
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .dq-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dq-action.flee {
+    grid-column: 1 / -1;
+  }
+
+  .dq-monster-emoji {
+    font-size: 56px;
+  }
+}

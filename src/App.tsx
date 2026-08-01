@@ -118,7 +118,7 @@ export default function App() {
               </span>
               <div>
                 <h1>PuzzlePlay 益智乐园</h1>
-                <p>六款经典益智游戏 · 一触即玩 · 成绩永久保存</p>
+                <p>七款经典益智游戏 · 一触即玩 · 成绩永久保存</p>
               </div>
             </div>
             <div className="lobby-stats">
