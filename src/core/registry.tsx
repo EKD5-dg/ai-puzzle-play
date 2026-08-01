@@ -10,6 +10,10 @@ import Sokoban, { meta as metaSokoban } from '../games/Sokoban';
 import Snake, { meta as metaSnake } from '../games/Snake';
 import Gomoku, { meta as metaGomoku } from '../games/Gomoku';
 import Othello, { meta as metaOthello } from '../games/Othello';
+import PacMan, { meta as metaPacMan } from '../games/PacMan';
+import SpaceInvaders, { meta as metaInvaders } from '../games/SpaceInvaders';
+import Frogger, { meta as metaFrogger } from '../games/Frogger';
+import WhackMole, { meta as metaMole } from '../games/WhackMole';
 
 /**
  * 游戏注册表 —— 新增游戏的唯一入口：
@@ -28,6 +32,10 @@ export const games: GameDefinition[] = [
   { meta: metaSnake, component: Snake },
   { meta: metaGomoku, component: Gomoku },
   { meta: metaOthello, component: Othello },
+  { meta: metaPacMan, component: PacMan },
+  { meta: metaInvaders, component: SpaceInvaders },
+  { meta: metaFrogger, component: Frogger },
+  { meta: metaMole, component: WhackMole },
 ];
 
 /** 按 id 查找游戏 */
