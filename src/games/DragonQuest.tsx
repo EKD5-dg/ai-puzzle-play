@@ -256,7 +256,7 @@ export default function DragonQuest() {
         setMonsterAnim('hit');
         window.setTimeout(() => {
           setMonsterAnim('idle');
-          window.setTimeout(() => monsterAttack(), 280); // 受击僵直
+          window.setTimeout(() => monsterAttack(), 450); // 受击僵直
         }, 320);
       } else {
         setMonsterAnim('dead');
@@ -293,7 +293,7 @@ export default function DragonQuest() {
           setMonsterAnim('hit');
           window.setTimeout(() => {
             setMonsterAnim('idle');
-            window.setTimeout(() => monsterAttack(), 280); // 受击僵直
+            window.setTimeout(() => monsterAttack(), 450); // 受击僵直
           }, 320);
         } else {
           setMonsterAnim('dead');
