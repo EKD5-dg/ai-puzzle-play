@@ -252,9 +252,12 @@ export default function DragonQuest() {
       setMonster({ ...monster, hp: newHp });
       addFloater(`-${dmg}`, 'monster');
       if (newHp > 0) {
+        // 阶段 2：怪物受击动画结束后，才进入阶段 3 反击
         setMonsterAnim('hit');
-        window.setTimeout(() => setMonsterAnim('idle'), 300);
-        monsterAttack(); // 怪物反击
+        window.setTimeout(() => {
+          setMonsterAnim('idle');
+          monsterAttack(); // 怪物反击
+        }, 320);
       } else {
         setMonsterAnim('dead');
       }
@@ -286,9 +289,12 @@ export default function DragonQuest() {
         setMonster({ ...monster, hp: newHp });
         addFloater(`-${dmg}`, 'monster');
         if (newHp > 0) {
+          // 阶段 2：受击动画结束后再反击
           setMonsterAnim('hit');
-          window.setTimeout(() => setMonsterAnim('idle'), 300);
-          monsterAttack(); // 怪物反击
+          window.setTimeout(() => {
+            setMonsterAnim('idle');
+            monsterAttack(); // 怪物反击
+          }, 320);
         } else {
           setMonsterAnim('dead');
         }
