@@ -171,6 +171,45 @@ export default function App() {
     setSyncMsg('已断开云同步');
   };
 
+  /** 重新生成同步码：自动把旧码云端成绩 + 本地成绩迁移到新码 */
+  const regenerateSync = async () => {
+    const oldCode = syncCode;
+    const newCode = generateSyncCode();
+    const created = await createPair(newCode);
+    if (!created) {
+      setSyncMsg('⚠️ 需要联网生成同步码，请检查网络后重试');
+      return;
+    }
+    // 1. 拉取旧码云端成绩
+    const merged: Record<string, number> = {};
+    try {
+      const res = await fetch(`https://puzzle-play.pages.dev/api/sync?code=${encodeURIComponent(oldCode ?? '')}`);
+      const data = (await res.json()) as { scores?: Record<string, number> };
+      Object.assign(merged, data.scores ?? {});
+    } catch {
+      /* 旧码云端不可达则跳过 */
+    }
+    // 2. 合并本地成绩
+    for (const g of games) {
+      const lv = Number(localStorage.getItem(`pp:best:${g.meta.id}`));
+      if (!Number.isNaN(lv) && lv > 0) merged[g.meta.id] = Math.max(merged[g.meta.id] ?? 0, lv);
+    }
+    // 3. 写入新码
+    try {
+      await fetch('https://puzzle-play.pages.dev/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: newCode, scores: merged }),
+      });
+    } catch {
+      /* ignore */
+    }
+    setSyncCode(newCode);
+    setSyncCodeState(newCode);
+    setSyncMsg(`已生成新同步码 ${newCode}（5 分钟内有效），旧码成绩已迁移`);
+    sfx.record();
+  };
+
   return (
     <div className="app">
       <div className="bg-decor" aria-hidden>
@@ -293,8 +332,11 @@ export default function App() {
                   <div className="sync-current">
                     <span>当前同步码</span>
                     <strong>{syncCode}</strong>
+                    <button className="btn btn-ghost" onClick={regenerateSync}>
+                      🔄 重新生成
+                    </button>
                     <button className="btn btn-ghost" onClick={disconnectSync}>
-                      断开同步
+                      断开
                     </button>
                   </div>
                 ) : (
