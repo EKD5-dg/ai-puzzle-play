@@ -71,24 +71,32 @@ const SKIN = '#ffccaa'; // Pico-8 皮肤
 const PURPLE = '#83769c'; // Pico-8 紫
 const BROWN = '#ab5236'; // Pico-8 棕
 
-/* ============ 勇者：红头巾 · 金发 · 蓝甲（2 头身） ============ */
+/* ============ 勇者：红头巾 · 金发 · 蓝甲 · 佩剑（24×24 特制） ============ */
 export const HERO_PIXELS = [
-  '.....kkkk.......',
-  '....kRRRRk......',
-  '....kRRRRk......',
-  '....kRRRRk......',
-  '....kGGGGk......',
-  '....kGssGk......',
-  '....kGsWsGk.....',
-  '.....kkkk.......',
-  '....kBBBBk......',
-  '...kBBBBBBk.....',
-  '...kBBbbBBk.....',
-  '..kBBWBBBBk.....',
-  '..kBBBBBBk......',
-  '...kSSSSk.......',
-  '...kSkkSk.......',
-  '................',
+  '.........kkkkk..........',
+  '........kkRRRRRkk.......',
+  '.......kkRRRRRRRkk......',
+  '......kRRkkkkkRRk.......',
+  '......kGGGGGGGGGk.......',
+  '......kGsssssssGk.......',
+  '......kGsWWssWWsGk......',
+  '......kGsssssssGk.......',
+  '.......kGsssssGk........',
+  '........kkkkkkk.........',
+  '......kkkkkkkkkkkk......',
+  '.....kkBBBBBBBBBBkk.....',
+  '......kBbBBBBBBbBk...wW.',
+  '......kBBBBBBBBBBk....w.',
+  '......kBBBBWWBBBBk....w.',
+  '........kBBBBBBk......w.',
+  '........kDDDDDDk......w.',
+  '.........kBBBBk.......w.',
+  '.........kSS..kSS.......',
+  '.........kSS..kSS.......',
+  '........kSSS..kSSS......',
+  '........kkkk..kkkk......',
+  '........................',
+  '........................',
 ];
 
 export const HERO_PALETTE: PixelPalette = {
@@ -97,8 +105,10 @@ export const HERO_PALETTE: PixelPalette = {
   G: YELLOW,
   s: SKIN,
   W: WHITE,
+  w: WHITE,
   B: BLUE,
   b: '#1f7fa8',
+  D: ORANGE,
   S: BROWN,
 };
 
