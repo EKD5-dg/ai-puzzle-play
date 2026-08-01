@@ -1,0 +1,186 @@
+import { useEffect, useRef, useState } from 'react';
+import { GameShell } from '../core/GameShell';
+import { useLocalStorage } from '../core/useLocalStorage';
+import type { GameMeta } from '../core/types';
+
+export const meta: GameMeta = {
+  id: 'memory-match',
+  title: '记忆翻牌',
+  description: '记住图案的位置，翻出所有配对！',
+  icon: '🃏',
+  difficulty: '简单',
+  category: '记忆',
+  tags: ['配对', '记忆'],
+  bestScoreLabel: '最少步数',
+};
+
+const EMOJIS = ['🍎', '🍌', '🍇', '🍉', '🍒', '🍓', '🥝', '🍍', '🥑', '🍑', '🥥', '🍋'];
+
+interface Level {
+  label: string;
+  pairs: number;
+}
+
+const LEVELS: Level[] = [
+  { label: '简单 4×3', pairs: 6 },
+  { label: '中等 4×4', pairs: 8 },
+  { label: '困难 6×4', pairs: 12 },
+];
+
+interface Card {
+  id: number;
+  emoji: string;
+  matched: boolean;
+}
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildDeck(pairs: number): Card[] {
+  const emojis = shuffle(EMOJIS).slice(0, pairs);
+  const cards: Card[] = shuffle(
+    [...emojis, ...emojis].map((emoji, i) => ({ id: i, emoji, matched: false })),
+  );
+  return cards;
+}
+
+export default function MemoryMatch() {
+  const [levelIdx, setLevelIdx] = useState(1);
+  const [deck, setDeck] = useState<Card[]>(() => buildDeck(LEVELS[1].pairs));
+  const [flipped, setFlipped] = useState<number[]>([]); // 当前翻开（未配对）的卡 id
+  const [moves, setMoves] = useState(0);
+  const [time, setTime] = useState(0);
+  const [won, setWon] = useState(false);
+  const lockRef = useRef(false);
+  const timerRef = useRef<number | null>(null);
+  const best = useLocalStorage<number>(`best:${meta.id}`);
+  const matchedCount = deck.filter((c) => c.matched).length;
+
+  // 计时（仅进行中）
+  useEffect(() => {
+    if (matchedCount > 0 && !won) {
+      timerRef.current = window.setInterval(() => setTime((t) => t + 1), 1000);
+      return () => {
+        if (timerRef.current) window.clearInterval(timerRef.current);
+      };
+    }
+  }, [matchedCount > 0, won]);
+
+  // 翻牌配对检测
+  useEffect(() => {
+    if (flipped.length !== 2) return;
+    lockRef.current = true;
+    const [a, b] = flipped;
+    const cardA = deck.find((c) => c.id === a);
+    const cardB = deck.find((c) => c.id === b);
+    if (cardA && cardB && cardA.emoji === cardB.emoji) {
+      setDeck((prev) =>
+        prev.map((c) => (c.id === a || c.id === b ? { ...c, matched: true } : c)),
+      );
+      setFlipped([]);
+      lockRef.current = false;
+    } else {
+      window.setTimeout(() => {
+        setFlipped([]);
+        lockRef.current = false;
+      }, 900);
+    }
+  }, [flipped, deck]);
+
+  // 胜利判定
+  useEffect(() => {
+    if (deck.length > 0 && deck.every((c) => c.matched) && !won) {
+      setWon(true);
+      best.updateBest(moves, (a, b) => a < b);
+    }
+  }, [deck, won, moves, best]);
+
+  const startNew = (idx: number) => {
+    setLevelIdx(idx);
+    setDeck(buildDeck(LEVELS[idx].pairs));
+    setFlipped([]);
+    setMoves(0);
+    setTime(0);
+    setWon(false);
+    lockRef.current = false;
+  };
+
+  const flip = (card: Card) => {
+    if (lockRef.current || won || card.matched) return;
+    if (flipped.includes(card.id)) return;
+    if (flipped.length >= 2) return;
+    setFlipped((prev) => [...prev, card.id]);
+    if (flipped.length === 1) setMoves((m) => m + 1);
+  };
+
+  const cols = LEVELS[levelIdx].pairs === 12 ? 6 : 4;
+  const gridW = cols * 88;
+
+  return (
+    <GameShell
+      meta={meta}
+      onBack={() => (window.location.hash = '#/')}
+      stats={
+        <>
+          <div className="stat-box">
+            <span>步数</span>
+            <strong>{moves}</strong>
+          </div>
+          <div className="stat-box">
+            <span>时间</span>
+            <strong>{time}s</strong>
+          </div>
+          <div className="stat-box">
+            <span>{meta.bestScoreLabel}</span>
+            <strong>{best.value ?? '--'}</strong>
+          </div>
+        </>
+      }
+    >
+      <div className="memory">
+        <div className="level-bar">
+          {LEVELS.map((lv, i) => (
+            <button
+              key={lv.label}
+              className={`btn ${i === levelIdx ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => startNew(i)}
+            >
+              {lv.label}
+            </button>
+          ))}
+        </div>
+        {won && (
+          <div className="banner won">
+            🎉 全部配对成功！用了 {moves} 步，{time}s
+          </div>
+        )}
+        <div
+          className="memory-grid"
+          style={{ gridTemplateColumns: `repeat(${cols}, 88px)`, width: gridW }}
+        >
+          {deck.map((card) => {
+            const isUp = card.matched || flipped.includes(card.id);
+            return (
+              <button
+                key={card.id}
+                className={`memory-card ${isUp ? 'up' : ''}`}
+                onClick={() => flip(card)}
+                disabled={isUp || lockRef.current || won}
+                aria-label={isUp ? card.emoji : '未翻开的牌'}
+              >
+                <span className="memory-face memory-back">❓</span>
+                <span className="memory-face memory-front">{card.emoji}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </GameShell>
+  );
+}

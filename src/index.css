@@ -1,0 +1,876 @@
+/* ============ PuzzlePlay 全局主题 ============ */
+:root {
+  --bg-0: #0f1222;
+  --bg-1: #171b30;
+  --bg-2: #1f2440;
+  --card: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #e8eaf6;
+  --text-dim: #9aa1bf;
+  --primary: #7c5cff;
+  --primary-2: #00d4ff;
+  --danger: #f87171;
+  --success: #34d399;
+  --radius: 14px;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  color: var(--text);
+  background: radial-gradient(1200px 800px at 20% -10%, #232851 0%, transparent 55%),
+    radial-gradient(1000px 700px at 90% 110%, #16304d 0%, transparent 55%),
+    linear-gradient(160deg, var(--bg-0), var(--bg-1));
+  background-attachment: fixed;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+/* ============ 通用元素 ============ */
+.btn {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 18px;
+  border-radius: 10px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  transition: all 0.2s;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary), #9a7bff);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.12);
+  background: linear-gradient(135deg, var(--primary), #9a7bff);
+}
+
+.btn-ghost {
+  background: transparent;
+}
+
+.chip {
+  display: inline-block;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  margin-right: 6px;
+}
+
+.chip-lg {
+  font-size: 13px;
+  padding: 6px 14px;
+}
+
+.badge {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.badge-简单 {
+  background: rgba(52, 211, 153, 0.15);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.badge-中等 {
+  background: rgba(250, 204, 21, 0.15);
+  color: #fde047;
+  border: 1px solid rgba(250, 204, 21, 0.35);
+}
+
+.badge-困难 {
+  background: rgba(248, 113, 113, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.hint {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+code {
+  background: rgba(124, 92, 255, 0.18);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.92em;
+  color: #c4b5fd;
+}
+
+/* ============ 大厅 ============ */
+.lobby-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.logo-icon {
+  font-size: 52px;
+  filter: drop-shadow(0 6px 18px rgba(124, 92, 255, 0.5));
+  animation: float 4s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.logo h1 {
+  font-size: 34px;
+  background: linear-gradient(90deg, #a78bfa, #00d4ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.logo p {
+  color: var(--text-dim);
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.game-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border-radius: var(--radius);
+  background: var(--card);
+  border: 1px solid var(--border);
+  text-decoration: none;
+  color: var(--text);
+  transition: all 0.25s;
+  position: relative;
+  overflow: hidden;
+}
+
+.game-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.12), rgba(0, 212, 255, 0.08));
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.game-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(124, 92, 255, 0.55);
+  box-shadow: var(--shadow);
+}
+
+.game-card:hover::before {
+  opacity: 1;
+}
+
+.game-card-icon {
+  font-size: 44px;
+  flex-shrink: 0;
+}
+
+.game-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.game-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.game-card-title h3 {
+  font-size: 19px;
+}
+
+.game-card-desc {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin: 6px 0 10px;
+}
+
+.game-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.best {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.game-card-play {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  font-size: 12px;
+  color: #a78bfa;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.game-card:hover .game-card-play {
+  opacity: 1;
+}
+
+.lobby-footer {
+  margin-top: 44px;
+  padding: 20px 24px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed var(--border);
+}
+
+.lobby-footer h3 {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.lobby-footer p {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+/* ============ 游戏外壳 ============ */
+.game-page {
+  animation: pageIn 0.35s ease;
+}
+
+@keyframes pageIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.game-header {
+  margin-bottom: 28px;
+}
+
+.game-title-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.game-icon {
+  font-size: 46px;
+}
+
+.game-title-row h1 {
+  font-size: 28px;
+}
+
+.game-desc {
+  color: var(--text-dim);
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+.game-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.stat-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 86px;
+}
+
+.stat-box span {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.stat-box strong {
+  font-size: 20px;
+  margin-top: 2px;
+}
+
+.game-body {
+  display: flex;
+  justify-content: center;
+}
+
+.level-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.banner {
+  text-align: center;
+  padding: 12px 20px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  animation: pop 0.4s ease;
+}
+
+.banner.won {
+  background: rgba(52, 211, 153, 0.15);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #6ee7b7;
+}
+
+.banner.lost {
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  color: #fca5a5;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ============ 2048 ============ */
+.g2048 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  touch-action: none;
+}
+
+.g2048-grid {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius);
+  width: min(420px, 92vw);
+  aspect-ratio: 1;
+  position: relative;
+}
+
+.g2048-cell {
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(22px, 7vw, 38px);
+  font-weight: 800;
+  transition: background 0.15s;
+}
+
+.g2048-tile {
+  animation: tilePop 0.18s ease;
+}
+
+@keyframes tilePop {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.g2048-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(15, 18, 34, 0.82);
+  border-radius: var(--radius);
+  z-index: 5;
+}
+
+.g2048-overlay h2 {
+  font-size: 24px;
+}
+
+.g2048-overlay p {
+  color: var(--text-dim);
+}
+
+/* ============ 扫雷 ============ */
+.mines {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.mines-grid {
+  display: grid;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.mines-cell {
+  border: none;
+  border-radius: 4px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #3a4168, #2c3254);
+  color: var(--text);
+  transition: filter 0.1s;
+  line-height: 1;
+  user-select: none;
+}
+
+.mines-cell:hover:not(.revealed) {
+  filter: brightness(1.2);
+}
+
+.mines-cell.revealed {
+  background: rgba(255, 255, 255, 0.06);
+  cursor: default;
+}
+
+.mines-cell.flagged {
+  background: linear-gradient(180deg, #3a4168, #2c3254);
+}
+
+.mines-cell.n1 { color: #60a5fa; }
+.mines-cell.n2 { color: #34d399; }
+.mines-cell.n3 { color: #f87171; }
+.mines-cell.n4 { color: #c084fc; }
+.mines-cell.n5 { color: #fbbf24; }
+.mines-cell.n6 { color: #22d3ee; }
+.mines-cell.n7 { color: #f472b6; }
+.mines-cell.n8 { color: #e2e8f0; }
+
+/* ============ 记忆翻牌 ============ */
+.memory {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.memory-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.memory-card {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  perspective: 600px;
+  transition: transform 0.2s;
+}
+
+.memory-card:hover:not(:disabled) {
+  transform: translateY(-3px);
+}
+
+.memory-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 38px;
+  border-radius: 12px;
+  backface-visibility: hidden;
+  transition: transform 0.4s ease;
+}
+
+.memory-back {
+  background: linear-gradient(135deg, #4c3f8f, #2e5f8f);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.memory-front {
+  background: linear-gradient(135deg, #fff, #e8ecff);
+  transform: rotateY(180deg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.memory-card.up .memory-back {
+  transform: rotateY(180deg);
+}
+
+.memory-card.up .memory-front {
+  transform: rotateY(0deg);
+}
+
+.memory-card:disabled {
+  cursor: default;
+}
+
+/* ============ 华容道 ============ */
+.sliding {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sliding-board {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius);
+}
+
+.sliding-tile {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  font-weight: 800;
+  color: var(--text);
+  background: linear-gradient(160deg, #4a4f86, #333963);
+  cursor: pointer;
+  transition: transform 0.15s, background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.sliding-tile:hover:not(.blank) {
+  background: linear-gradient(160deg, #5b62a8, #3d4480);
+  transform: scale(1.04);
+}
+
+.sliding-tile.blank {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: transparent;
+  cursor: default;
+}
+
+.sliding-tile.done {
+  background: linear-gradient(160deg, #2f9e77, #1e7a5c);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+/* ============ 数独 ============ */
+.sudoku {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sudoku-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.sudoku-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 46px);
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.35);
+  border: 3px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.sudoku-cell {
+  width: 46px;
+  height: 46px;
+  border: none;
+  background: #1b2038;
+  color: var(--text);
+  font-size: 19px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sudoku-cell.given {
+  color: #c4b5fd;
+  font-weight: 800;
+}
+
+.sudoku-cell.hl {
+  background: rgba(124, 92, 255, 0.16);
+}
+
+.sudoku-cell.selected {
+  background: rgba(124, 92, 255, 0.42);
+}
+
+.sudoku-cell.same {
+  background: rgba(0, 212, 255, 0.22);
+}
+
+.sudoku-cell.wrong {
+  background: rgba(248, 113, 113, 0.28);
+  color: #fca5a5;
+}
+
+.sudoku-cell.rb {
+  border-bottom: 2px solid rgba(255, 255, 255, 0.35);
+}
+
+.sudoku-cell.cb {
+  border-right: 2px solid rgba(255, 255, 255, 0.35);
+}
+
+.num-pad {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.num-btn {
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* ============ 俄罗斯方块 ============ */
+.tetris {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tetris-main {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.tetris-board {
+  display: grid;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 6px;
+  border-radius: 10px;
+  position: relative;
+}
+
+.tetris-cell {
+  width: 30px;
+  height: 30px;
+  border-radius: 3px;
+}
+
+.tetris-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(15, 18, 34, 0.85);
+  border-radius: 10px;
+  z-index: 5;
+  text-align: center;
+}
+
+.tetris-overlay p {
+  color: var(--text-dim);
+}
+
+.tetris-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.tetris-next {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+}
+
+.tetris-next span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.tetris-preview {
+  display: grid;
+  gap: 2px;
+  width: 92px;
+  height: 92px;
+  margin: 0 auto;
+}
+
+.tetris-preview div {
+  border-radius: 3px;
+}
+
+.tetris-controls {
+  display: grid;
+  grid-template-columns: repeat(3, 52px);
+  gap: 8px;
+}
+
+.tetris-controls .btn {
+  padding: 10px 0;
+  font-size: 18px;
+}
+
+/* ============ 响应式 ============ */
+@media (max-width: 640px) {
+  .app {
+    padding: 20px 14px 48px;
+  }
+
+  .logo h1 {
+    font-size: 26px;
+  }
+
+  .logo-icon {
+    font-size: 40px;
+  }
+
+  .game-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .game-stats {
+    gap: 8px;
+  }
+
+  .stat-box {
+    min-width: 72px;
+    padding: 6px 12px;
+  }
+
+  .sudoku-grid {
+    grid-template-columns: repeat(9, 36px);
+  }
+
+  .sudoku-cell {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+
+  .tetris-cell {
+    width: 24px;
+    height: 24px;
+  }
+
+  .tetris-main {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .memory-card {
+    width: 72px;
+    height: 72px;
+  }
+
+  .memory-grid {
+    gap: 8px;
+  }
+
+  .memory-face {
+    font-size: 30px;
+  }
+}
