@@ -2167,13 +2167,13 @@ code {
 
 @keyframes dqLungeFlip {
   0% {
-    transform: scaleX(-1);
+    transform: translateX(0);
   }
   35% {
-    transform: scaleX(-1) translateX(46px) scale(1.1);
+    transform: translateX(46px) scale(1.1);
   }
   100% {
-    transform: scaleX(-1);
+    transform: translateX(0);
   }
 }
 
