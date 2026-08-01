@@ -1676,7 +1676,7 @@ code {
 }
 
 .dq-monster .dq-monster-canvas {
-  height: 215px;
+  height: var(--mh, 190px);
   width: auto;
   max-width: 240px;
   object-fit: contain;

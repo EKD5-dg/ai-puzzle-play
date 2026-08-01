@@ -10,13 +10,18 @@ import type { GameMeta } from '../core/types';
 /** 角色立绘素材映射（AI 生成，深蓝底自动抠图） */
 const PORTRAITS = '/portraits';
 const HERO_PORTRAIT = `${PORTRAITS}/hero.png`;
-const MONSTER_PORTRAITS: Record<string, string> = {
-  史莱姆: `${PORTRAITS}/slime.png`,
-  骷髅兵: `${PORTRAITS}/skeleton.png`,
-  僵尸: `${PORTRAITS}/zombie.png`,
-  暗影幽魂: `${PORTRAITS}/ghost.png`,
-  火焰魔: `${PORTRAITS}/firedemon.png`,
-  恶龙: `${PORTRAITS}/dragon.png`,
+interface PortraitRef {
+  src: string;
+  /** 立绘显示高度（px），体现体型差异 */
+  height: number;
+}
+const MONSTER_PORTRAITS: Record<string, PortraitRef> = {
+  史莱姆: { src: `${PORTRAITS}/slime.png`, height: 120 },
+  骷髅兵: { src: `${PORTRAITS}/skeleton.png`, height: 155 },
+  僵尸: { src: `${PORTRAITS}/zombie.png`, height: 160 },
+  暗影幽魂: { src: `${PORTRAITS}/ghost.png`, height: 165 },
+  火焰魔: { src: `${PORTRAITS}/firedemon.png`, height: 190 },
+  恶龙: { src: `${PORTRAITS}/dragon.png`, height: 215 },
 };
 
 export const meta: GameMeta = {
@@ -487,9 +492,9 @@ export default function DragonQuest() {
                   <Portrait src={HERO_PORTRAIT} className="dq-hero-canvas" />
                   {heroAnim === 'attack' && <span className="dq-slash" aria-hidden />}
                 </div>
-                <div className={`dq-monster ${monsterAnim}`}>
+                <div className={`dq-monster ${monsterAnim}`} style={{ ['--mh' as string]: `${MONSTER_PORTRAITS[monster.name]?.height ?? 160}px` }}>
                   <Portrait
-                    src={MONSTER_PORTRAITS[monster.name] ?? MONSTER_PORTRAITS['史莱姆']}
+                    src={MONSTER_PORTRAITS[monster.name]?.src ?? MONSTER_PORTRAITS['史莱姆'].src}
                     className="dq-monster-canvas"
                   />
                 </div>
