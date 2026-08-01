@@ -124,6 +124,12 @@ npx wrangler pages deploy dist --project-name=puzzle-play --branch=main
 
 React 18 · TypeScript 5 · Vite 5 · 无任何 UI 框架依赖
 
+## 🙏 素材致谢
+
+- 勇者与怪物像素精灵：[DawnLike - 16x16 Universal Rogue-like tileset](https://opengameart.org/content/dawnlike-16x16-universal-rogue-like-tileset-v181) by DragonDePlatino（[CC-BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)）
+- 楼层场景、血条、光效等 UI 为项目原创代码绘制
+
 ## 📜 许可
 
 本项目代码可自由使用与修改，保留原作者署名即可。
+第三方素材（DawnLike）遵循其各自的 CC-BY-SA 3.0 许可。

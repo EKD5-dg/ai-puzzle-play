@@ -3,8 +3,26 @@ import { GameShell } from '../core/GameShell';
 import { useLocalStorage } from '../core/useLocalStorage';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import { PixelSprite, HERO_PIXELS, HERO_PALETTE, MONSTER_SPRITES, sceneTheme } from './pixelart';
+import { SpriteSheet } from './SpriteSheet';
+import { sceneTheme } from './pixelart';
 import type { GameMeta } from '../core/types';
+
+/** DawnLike 精灵素材映射（CC-BY-SA 3.0，作者 DragonDePlatino） */
+const SPR = '/sprites/dawnlike/Characters';
+interface SpriteRef {
+  src: string;
+  index: number;
+  scale: number;
+}
+const HERO_SPRITE: SpriteRef = { src: `${SPR}/Humanoids0.png`, index: 0x48, scale: 5 };
+const MONSTER_SPRITES: Record<string, SpriteRef> = {
+  史莱姆: { src: `${SPR}/Slimes0.png`, index: 0x20, scale: 5 },
+  骷髅兵: { src: `${SPR}/Undead0.png`, index: 0x10, scale: 5 },
+  僵尸: { src: `${SPR}/Undead0.png`, index: 0x40, scale: 5 },
+  暗影幽魂: { src: `${SPR}/Undead0.png`, index: 0x22, scale: 5 },
+  火焰魔: { src: `${SPR}/Elementals0.png`, index: 0x1a, scale: 5 },
+  恶龙: { src: `${SPR}/Reptiles0.png`, index: 0x1b, scale: 6 },
+};
 
 export const meta: GameMeta = {
   id: 'dragon-quest',
@@ -471,19 +489,19 @@ export default function DragonQuest() {
                 </div>
                 <div className="dq-scene-label">{sceneTheme(floor).label} · 第 {floor} 层</div>
                 <div className={`dq-hero ${heroAnim}`}>
-                  <PixelSprite
-                    pixels={HERO_PIXELS}
-                    palette={HERO_PALETTE}
-                    scale={5}
+                  <SpriteSheet
+                    src={HERO_SPRITE.src}
+                    index={HERO_SPRITE.index}
+                    scale={HERO_SPRITE.scale}
                     className="dq-hero-canvas"
                   />
                   {heroAnim === 'attack' && <span className="dq-slash" aria-hidden />}
                 </div>
                 <div className={`dq-monster ${monsterAnim}`}>
-                  <PixelSprite
-                    pixels={MONSTER_SPRITES[monster.name]?.pixels ?? MONSTER_SPRITES['史莱姆'].pixels}
-                    palette={MONSTER_SPRITES[monster.name]?.palette ?? MONSTER_SPRITES['史莱姆'].palette}
-                    scale={monster.isBoss ? 6 : 5}
+                  <SpriteSheet
+                    src={MONSTER_SPRITES[monster.name]?.src ?? MONSTER_SPRITES['史莱姆'].src}
+                    index={MONSTER_SPRITES[monster.name]?.index ?? MONSTER_SPRITES['史莱姆'].index}
+                    scale={MONSTER_SPRITES[monster.name]?.scale ?? MONSTER_SPRITES['史莱姆'].scale}
                     className="dq-monster-canvas"
                   />
                 </div>
