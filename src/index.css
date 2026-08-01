@@ -286,15 +286,38 @@ code {
   border: 1px dashed var(--border);
 }
 
-.lobby-footer h3 {
+.dev-guide summary {
   font-size: 15px;
-  margin-bottom: 8px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text);
+  transition: color 0.2s;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.lobby-footer p {
+.dev-guide summary::before {
+  content: '▸';
+  color: var(--text-dim);
+  font-size: 13px;
+  transition: transform 0.2s;
+}
+
+.dev-guide[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.dev-guide summary:hover {
+  color: #a78bfa;
+}
+
+.dev-guide p {
   color: var(--text-dim);
   font-size: 13px;
   line-height: 1.8;
+  margin-top: 10px;
 }
 
 /* ============ 游戏外壳 ============ */

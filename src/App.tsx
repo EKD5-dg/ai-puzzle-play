@@ -186,11 +186,13 @@ export default function App() {
           )}
 
           <footer className="lobby-footer">
-            <h3>🛠 开发者指南：如何新增游戏？</h3>
-            <p>
-              在 <code>src/games/</code> 下新建组件文件，导出 <code>meta</code> 与默认组件，
-              再到 <code>src/core/registry.tsx</code> 注册一行即可，大厅、路由、成绩存档自动生效。
-            </p>
+            <details className="dev-guide">
+              <summary>🛠 开发者指南：如何新增游戏？</summary>
+              <p>
+                在 <code>src/games/</code> 下新建组件文件，导出 <code>meta</code> 与默认组件，
+                再到 <code>src/core/registry.tsx</code> 注册一行即可，大厅、路由、成绩存档自动生效。
+              </p>
+            </details>
           </footer>
         </div>
       )}
