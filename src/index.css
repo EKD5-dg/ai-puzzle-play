@@ -1572,7 +1572,7 @@ code {
 
 .dq-scene {
   position: relative;
-  height: 250px;
+  height: 280px;
   border: 1px solid var(--border);
   overflow: hidden;
   isolation: isolate;
@@ -1668,31 +1668,22 @@ code {
 /* 勇者（左） */
 .dq-hero {
   position: absolute;
-  left: 8%;
-  bottom: 30px;
+  left: 6%;
+  bottom: 26px;
   z-index: 2;
   transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.dq-hero::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -7px;
-  width: 78%;
-  height: 10px;
-  transform: translateX(-50%);
-  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.5), transparent);
-  border-radius: 50%;
-  pointer-events: none;
-}
-
 .dq-hero .dq-hero-canvas {
+  height: 215px;
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 26px rgba(0, 0, 0, 0.5));
   animation: dqIdle 2.2s ease-in-out infinite;
 }
 
 .dq-hero.attack {
-  transform: translateX(70px) scale(1.06);
+  transform: translateX(74px) scale(1.06);
 }
 
 .dq-hero.attack .dq-hero-canvas {
@@ -1704,50 +1695,42 @@ code {
   animation: dqHitShake 0.3s ease;
 }
 
-.dq-hero.hurt::after {
-  display: none;
+.dq-hero.hurt .dq-hero-canvas {
+  animation: none;
 }
 
 /* 怪物（右） */
 .dq-monster {
   position: absolute;
-  right: 10%;
-  bottom: 30px;
+  right: 7%;
+  bottom: 26px;
   z-index: 2;
 }
 
-.dq-monster::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -7px;
-  width: 82%;
-  height: 10px;
-  transform: translateX(-50%);
-  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.5), transparent);
-  border-radius: 50%;
-  pointer-events: none;
-}
-
 .dq-monster .dq-monster-canvas {
+  height: 190px;
+  width: auto;
+  max-width: 230px;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 26px rgba(0, 0, 0, 0.5));
   animation: dqIdle 2.4s ease-in-out infinite;
 }
 
-.dq-monster.hit {
-  filter: brightness(2.4);
+.dq-monster.hit .dq-monster-canvas {
+  filter: brightness(2.2);
   animation: dqHitShake 0.3s ease;
 }
 
-.dq-monster.hit .dq-monster-canvas {
-  animation: dqIdle 2.4s ease-in-out infinite, dqHitShake 0.3s ease;
-}
-
-.dq-monster.dead {
+.dq-monster.dead .dq-monster-canvas {
   animation: dqDie 0.6s ease forwards;
 }
 
-.dq-monster.dead::after {
-  display: none;
+.portrait-loading {
+  width: 120px;
+  height: 180px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  animation: dqIdle 2.2s ease-in-out infinite;
 }
 
 @keyframes dqSwing {

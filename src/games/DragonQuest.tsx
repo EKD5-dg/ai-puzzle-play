@@ -3,25 +3,20 @@ import { GameShell } from '../core/GameShell';
 import { useLocalStorage } from '../core/useLocalStorage';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import { SpriteSheet } from './SpriteSheet';
+import { Portrait } from './Portrait';
 import { sceneTheme } from './pixelart';
 import type { GameMeta } from '../core/types';
 
-/** DawnLike 精灵素材映射（CC-BY-SA 3.0，作者 DragonDePlatino） */
-const SPR = '/sprites/dawnlike/Characters';
-interface SpriteRef {
-  src: string;
-  index: number;
-  scale: number;
-}
-const HERO_SPRITE: SpriteRef = { src: `${SPR}/Humanoids0.png`, index: 0x48, scale: 5 };
-const MONSTER_SPRITES: Record<string, SpriteRef> = {
-  史莱姆: { src: `${SPR}/Slimes0.png`, index: 0x20, scale: 5 },
-  骷髅兵: { src: `${SPR}/Undead0.png`, index: 0x10, scale: 5 },
-  僵尸: { src: `${SPR}/Undead0.png`, index: 0x40, scale: 5 },
-  暗影幽魂: { src: `${SPR}/Undead0.png`, index: 0x22, scale: 5 },
-  火焰魔: { src: `${SPR}/Elementals0.png`, index: 0x1a, scale: 5 },
-  恶龙: { src: `${SPR}/Reptiles0.png`, index: 0x1b, scale: 6 },
+/** 角色立绘素材映射（AI 生成，深蓝底自动抠图） */
+const PORTRAITS = '/portraits';
+const HERO_PORTRAIT = `${PORTRAITS}/hero.png`;
+const MONSTER_PORTRAITS: Record<string, string> = {
+  史莱姆: `${PORTRAITS}/slime.png`,
+  骷髅兵: `${PORTRAITS}/skeleton.png`,
+  僵尸: `${PORTRAITS}/zombie.png`,
+  暗影幽魂: `${PORTRAITS}/ghost.png`,
+  火焰魔: `${PORTRAITS}/firedemon.png`,
+  恶龙: `${PORTRAITS}/dragon.png`,
 };
 
 export const meta: GameMeta = {
@@ -489,19 +484,12 @@ export default function DragonQuest() {
                 </div>
                 <div className="dq-scene-label">{sceneTheme(floor).label} · 第 {floor} 层</div>
                 <div className={`dq-hero ${heroAnim}`}>
-                  <SpriteSheet
-                    src={HERO_SPRITE.src}
-                    index={HERO_SPRITE.index}
-                    scale={HERO_SPRITE.scale}
-                    className="dq-hero-canvas"
-                  />
+                  <Portrait src={HERO_PORTRAIT} className="dq-hero-canvas" />
                   {heroAnim === 'attack' && <span className="dq-slash" aria-hidden />}
                 </div>
                 <div className={`dq-monster ${monsterAnim}`}>
-                  <SpriteSheet
-                    src={MONSTER_SPRITES[monster.name]?.src ?? MONSTER_SPRITES['史莱姆'].src}
-                    index={MONSTER_SPRITES[monster.name]?.index ?? MONSTER_SPRITES['史莱姆'].index}
-                    scale={MONSTER_SPRITES[monster.name]?.scale ?? MONSTER_SPRITES['史莱姆'].scale}
+                  <Portrait
+                    src={MONSTER_PORTRAITS[monster.name] ?? MONSTER_PORTRAITS['史莱姆']}
                     className="dq-monster-canvas"
                   />
                 </div>
