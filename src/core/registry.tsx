@@ -15,6 +15,9 @@ import SpaceInvaders, { meta as metaInvaders } from '../games/SpaceInvaders';
 import Frogger, { meta as metaFrogger } from '../games/Frogger';
 import WhackMole, { meta as metaMole } from '../games/WhackMole';
 import Taiko, { meta as metaTaiko } from '../games/Taiko';
+import Simon, { meta as metaSimon } from '../games/Simon';
+import DigitMemory, { meta as metaDigit } from '../games/DigitMemory';
+import ColorSequence, { meta as metaColorSeq } from '../games/ColorSequence';
 
 /**
  * 游戏注册表 —— 新增游戏的唯一入口：
@@ -38,6 +41,9 @@ export const games: GameDefinition[] = [
   { meta: metaFrogger, component: Frogger },
   { meta: metaMole, component: WhackMole },
   { meta: metaTaiko, component: Taiko },
+  { meta: metaSimon, component: Simon },
+  { meta: metaDigit, component: DigitMemory },
+  { meta: metaColorSeq, component: ColorSequence },
 ];
 
 /** 按 id 查找游戏 */

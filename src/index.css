@@ -2021,6 +2021,185 @@ code {
   text-shadow: none;
 }
 
+/* ============ 西蒙说 ============ */
+.simon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.simon-board {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, 150px);
+  gap: 12px;
+  padding: 18px;
+  background: #15101f;
+  border-radius: 50%;
+  border: 6px solid #2a2038;
+  box-shadow: var(--shadow);
+}
+
+.simon-key {
+  width: 150px;
+  height: 150px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: filter 0.1s, box-shadow 0.1s, transform 0.1s;
+}
+
+.simon-key:active {
+  transform: scale(0.94);
+}
+
+.simon-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: #1c1626;
+  border: 4px solid #2a2038;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.simon-center strong {
+  font-size: 26px;
+  color: #a78bfa;
+}
+
+.simon-overlay {
+  border-radius: 50%;
+}
+
+/* ============ 数字记忆 ============ */
+.digit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.digit-screen {
+  position: relative;
+  width: 400px;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+
+.digit-label {
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.digit-num {
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: 10px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #a78bfa;
+  animation: pop 0.3s ease;
+}
+
+.digit-num.ok {
+  color: #34d399;
+}
+
+.digit-num.bad {
+  color: #f87171;
+}
+
+.digit-pad {
+  display: grid;
+  grid-template-columns: repeat(4, 64px);
+  gap: 10px;
+}
+
+.digit-key {
+  width: 64px;
+  height: 56px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.digit-overlay {
+  border-radius: var(--radius);
+}
+
+/* ============ 颜色序列 ============ */
+.cseq {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cseq-board {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 120px);
+  gap: 12px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.cseq-key {
+  width: 120px;
+  height: 88px;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: filter 0.12s, box-shadow 0.12s, transform 0.1s;
+}
+
+.cseq-key:active {
+  transform: scale(0.94);
+}
+
+.cseq-overlay {
+  border-radius: var(--radius);
+}
+
+@media (max-width: 640px) {
+  .simon-board {
+    grid-template-columns: repeat(2, 110px);
+  }
+
+  .simon-key {
+    width: 110px;
+    height: 110px;
+  }
+
+  .digit-screen {
+    width: 92vw;
+  }
+
+  .cseq-board {
+    grid-template-columns: repeat(3, 92px);
+  }
+
+  .cseq-key {
+    width: 92px;
+    height: 70px;
+  }
+}
+
 /* ============ 勇者斗恶龙：像素场景 ============ */
 .dq-scene-wrap {
   width: 100%;
