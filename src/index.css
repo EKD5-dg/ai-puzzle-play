@@ -1509,6 +1509,22 @@ code {
   font-size: 26px;
 }
 
+.dq-town-icon {
+  font-size: 56px;
+  filter: drop-shadow(0 8px 18px rgba(250, 204, 21, 0.4));
+  animation: dqFloat 4s ease-in-out infinite;
+}
+
+@keyframes dqFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
 .dq-overlay p {
   color: var(--text-dim);
   font-size: 14px;

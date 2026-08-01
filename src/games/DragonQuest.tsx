@@ -63,7 +63,7 @@ interface Monster {
   isBoss: boolean;
 }
 
-type Phase = 'menu' | 'battle' | 'idle' | 'dead' | 'victory';
+type Phase = 'menu' | 'battle' | 'idle' | 'town' | 'dead' | 'victory';
 
 const PLAYER_START: PlayerState = {
   level: 1,
@@ -308,21 +308,20 @@ export default function DragonQuest() {
     window.setTimeout(() => monsterAttack(2), 350);
   };
 
-  /** 逃跑（Boss 战不可逃跑） */
+  /** 逃跑（Boss 战不可逃跑；成功则逃回城镇满血重来） */
   const doFlee = () => {
     if (busy || !monster || phase !== 'battle') return;
     if (monster.isBoss) {
       toast('恶龙挡住了去路，无法逃跑！', 'info');
       return;
     }
-    if (Math.random() < 0.55) {
+    if (Math.random() < 0.6) {
       sfx.flip();
-      pushLog('你成功逃跑了！');
-      toast('逃回上一层', 'info');
-      const f = Math.max(1, floor - 1);
-      setFloor(f);
-      saveGame(f, player);
-      window.setTimeout(() => startBattle(f, player), 300);
+      pushLog('你成功逃回了城镇！');
+      toast('逃回城镇，体力完全恢复！', 'success');
+      // 恢复满状态，保留等级/金币/击杀
+      setPlayer((p) => ({ ...p, hp: p.maxHp, mp: p.maxMp }));
+      setPhase('town');
     } else {
       sfx.mismatch();
       pushLog('逃跑失败！');
@@ -560,10 +559,32 @@ export default function DragonQuest() {
                   4 · 防御<span>伤害减半</span>
                 </button>
                 <button className="btn dq-action flee" onClick={doFlee} disabled={busy || monster.isBoss}>
-                  5 · 逃跑<span>{monster.isBoss ? 'Boss 不可逃跑' : '55% 成功率'}</span>
+                  5 · 逃跑<span>{monster.isBoss ? 'Boss 不可逃跑' : '回城恢复 · 60%'}</span>
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {phase === 'town' && (
+          <div className="dq-overlay">
+            <div className="dq-town-icon">⛺</div>
+            <h2>平安回到城镇</h2>
+            <p>你休整了一夜，体力完全恢复 ✨</p>
+            <p>
+              当前 Lv.{player.level} · 金币 🪙 {player.gold} · 击杀 💀 {player.kills}
+            </p>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setFloor(1);
+                setLog([]);
+                pushLog('你再次踏上了冒险之旅！');
+                startBattle(1, player);
+              }}
+            >
+              ⚔️ 再次出发（第 1 层）
+            </button>
           </div>
         )}
 
