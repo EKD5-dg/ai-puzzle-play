@@ -1965,6 +1965,61 @@ code {
   border-radius: 18px;
 }
 
+/* ============ 太鼓达人 ============ */
+.taiko-wrap {
+  background: #151028;
+}
+
+.taiko-songs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.taiko-song {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 220px;
+  padding: 12px 24px;
+}
+
+.taiko-song-name {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.taiko-song-level {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.taiko-hud {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.taiko-song-title {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 2px;
+}
+
+.taiko-grade {
+  font-size: 56px !important;
+  background: linear-gradient(135deg, #ffd54f, #ff8a65);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+}
+
 /* ============ 勇者斗恶龙：像素场景 ============ */
 .dq-scene-wrap {
   width: 100%;

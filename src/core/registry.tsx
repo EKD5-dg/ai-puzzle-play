@@ -14,6 +14,7 @@ import PacMan, { meta as metaPacMan } from '../games/PacMan';
 import SpaceInvaders, { meta as metaInvaders } from '../games/SpaceInvaders';
 import Frogger, { meta as metaFrogger } from '../games/Frogger';
 import WhackMole, { meta as metaMole } from '../games/WhackMole';
+import Taiko, { meta as metaTaiko } from '../games/Taiko';
 
 /**
  * 游戏注册表 —— 新增游戏的唯一入口：
@@ -36,6 +37,7 @@ export const games: GameDefinition[] = [
   { meta: metaInvaders, component: SpaceInvaders },
   { meta: metaFrogger, component: Frogger },
   { meta: metaMole, component: WhackMole },
+  { meta: metaTaiko, component: Taiko },
 ];
 
 /** 按 id 查找游戏 */
