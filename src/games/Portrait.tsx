@@ -68,12 +68,12 @@ export function Portrait({ src, className, tolerance = 4500, pixelSize = 64 }: P
         const bw = maxX - minX + 1;
         const bh = maxY - minY + 1;
 
-        // 4. 按角色宽高比降采样到像素画布（居中放置）
+        // 4. 按角色宽高比降采样到像素画布（水平居中，底部贴齐保证同一水平线）
         const scale = pixelSize / Math.max(bw, bh);
         const pw = Math.max(1, Math.round(bw * scale));
         const ph = Math.max(1, Math.round(bh * scale));
         const px = Math.round((pixelSize - pw) / 2);
-        const py = Math.round((pixelSize - ph) / 2);
+        const py = pixelSize - ph; // 贴底：所有角色脚底对齐
         const p = document.createElement('canvas');
         p.width = pixelSize;
         p.height = pixelSize;

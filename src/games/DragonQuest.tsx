@@ -14,10 +14,12 @@ interface PortraitRef {
   src: string;
   /** 立绘显示高度（px），体现体型差异 */
   height: number;
+  /** 是否水平镜像（让侧身角色面朝勇者） */
+  flip?: boolean;
 }
 const MONSTER_PORTRAITS: Record<string, PortraitRef> = {
   史莱姆: { src: `${PORTRAITS}/slime.png`, height: 120 },
-  骷髅兵: { src: `${PORTRAITS}/skeleton.png`, height: 155 },
+  骷髅兵: { src: `${PORTRAITS}/skeleton.png`, height: 155, flip: true },
   僵尸: { src: `${PORTRAITS}/zombie.png`, height: 160 },
   暗影幽魂: { src: `${PORTRAITS}/ghost.png`, height: 165 },
   火焰魔: { src: `${PORTRAITS}/firedemon.png`, height: 190 },
@@ -515,7 +517,10 @@ export default function DragonQuest() {
                   <Portrait src={HERO_PORTRAIT} className="dq-hero-canvas" />
                   {heroAnim === 'attack' && <span className="dq-slash" aria-hidden />}
                 </div>
-                <div className={`dq-monster ${monsterAnim}`} style={{ ['--mh' as string]: `${MONSTER_PORTRAITS[monster.name]?.height ?? 160}px` }}>
+                <div
+                  className={`dq-monster ${monsterAnim} ${MONSTER_PORTRAITS[monster.name]?.flip ? 'flip' : ''}`}
+                  style={{ ['--mh' as string]: `${MONSTER_PORTRAITS[monster.name]?.height ?? 160}px` }}
+                >
                   <Portrait
                     src={MONSTER_PORTRAITS[monster.name]?.src ?? MONSTER_PORTRAITS['史莱姆'].src}
                     className="dq-monster-canvas"

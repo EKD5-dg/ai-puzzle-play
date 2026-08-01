@@ -1704,6 +1704,31 @@ code {
   animation: dqIdle 2.4s ease-in-out infinite;
 }
 
+/* 镜像翻转（容器层，让侧身怪物面朝勇者；攻击动画在 canvas 上同步镜像） */
+.dq-monster.flip {
+  transform: scaleX(-1);
+}
+
+.dq-monster.flip .dq-monster-canvas {
+  transform: none;
+}
+
+.dq-monster.flip.attack .dq-monster-canvas {
+  animation: dqLungeFlip 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes dqLungeFlip {
+  0% {
+    transform: scaleX(-1);
+  }
+  35% {
+    transform: scaleX(-1) translateX(46px) scale(1.1);
+  }
+  100% {
+    transform: scaleX(-1);
+  }
+}
+
 .dq-monster.hit .dq-monster-canvas {
   filter: brightness(2.2);
   animation: dqHitShake 0.3s ease;
