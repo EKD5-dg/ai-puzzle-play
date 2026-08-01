@@ -3,6 +3,7 @@ import { GameShell } from '../core/GameShell';
 import { useLocalStorage } from '../core/useLocalStorage';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
+import { PixelSprite, HERO_PIXELS, HERO_PALETTE, MONSTER_SPRITES, sceneTheme } from './pixelart';
 import type { GameMeta } from '../core/types';
 
 export const meta: GameMeta = {
@@ -126,6 +127,8 @@ export default function DragonQuest() {
   const [log, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [battleNo, setBattleNo] = useState(0);
+  const [heroAnim, setHeroAnim] = useState<'idle' | 'attack' | 'hurt'>('idle');
+  const [monsterAnim, setMonsterAnim] = useState<'idle' | 'hit' | 'dead'>('idle');
   const [saveExists, setSaveExists] = useState(loadSave() !== null);
   const best = useLocalStorage<number>(`best:${meta.id}`);
   const { toast } = useToast();
@@ -161,6 +164,8 @@ export default function DragonQuest() {
     setBattleNo((n) => n + 1);
     setPhase('battle');
     setBusy(false);
+    setHeroAnim('idle');
+    setMonsterAnim('idle');
     sfx.flip();
   };
 
@@ -185,6 +190,8 @@ export default function DragonQuest() {
     const hp = player.hp - dmg;
     pushLog(`${monster.emoji} ${monster.name} 攻击了你，造成 ${dmg} 点伤害`);
     sfx.move();
+    setHeroAnim('hurt');
+    window.setTimeout(() => setHeroAnim('idle'), 320);
     if (hp <= 0) {
       sfx.lose();
       setPhase('dead');
@@ -203,13 +210,21 @@ export default function DragonQuest() {
     setBusy(true);
     sfx.move();
     pushLog('你挥剑斩向怪物！');
+    setHeroAnim('attack');
     const dmg = Math.max(1, player.atk + rand(3) - monster.def);
     window.setTimeout(() => {
       sfx.merge();
+      setHeroAnim('idle');
       const newHp = monster.hp - dmg;
       setMonster({ ...monster, hp: newHp });
-      if (newHp > 0) monsterAttack(); // 怪物反击
-    }, 350);
+      if (newHp > 0) {
+        setMonsterAnim('hit');
+        window.setTimeout(() => setMonsterAnim('idle'), 300);
+        monsterAttack(); // 怪物反击
+      } else {
+        setMonsterAnim('dead');
+      }
+    }, 380);
   };
 
   /** 魔法（火球术 / 治疗术） */
@@ -228,12 +243,20 @@ export default function DragonQuest() {
     if (kind === 'fire') {
       sfx.merge();
       pushLog('你施放了火球术！🔥');
+      setHeroAnim('attack');
       const dmg = Math.max(1, 10 + player.level * 2 + rand(3) - Math.floor(monster.def / 2));
       window.setTimeout(() => {
+        setHeroAnim('idle');
         const newHp = monster.hp - dmg;
         setMonster({ ...monster, hp: newHp });
-        if (newHp > 0) monsterAttack(); // 怪物反击
-      }, 350);
+        if (newHp > 0) {
+          setMonsterAnim('hit');
+          window.setTimeout(() => setMonsterAnim('idle'), 300);
+          monsterAttack(); // 怪物反击
+        } else {
+          setMonsterAnim('dead');
+        }
+      }, 380);
     } else {
       sfx.flip();
       const before = player.hp;
@@ -439,14 +462,40 @@ export default function DragonQuest() {
 
         {(phase === 'battle' || phase === 'idle') && monster && (
           <div className="dq-battle" key={battleNo}>
-            <div className="dq-monster">
-              <span className="dq-monster-emoji">{monster.emoji}</span>
-              <span className="dq-monster-name">
-                {monster.isBoss ? '👑 ' : ''}{monster.name}
-              </span>
-              <div className="dq-bar mhp">
-                <div style={{ width: `${hpPct}%` }} />
-                <span>HP {Math.max(0, monster.hp)}/{monster.maxHp}</span>
+            <div className="dq-scene-wrap">
+              <div className={`dq-scene ${sceneTheme(floor).cls}`}>
+                <div className="dq-scene-deco" aria-hidden>
+                  {sceneTheme(floor).deco.map((d, i) => (
+                    <span key={i}>{d}</span>
+                  ))}
+                </div>
+                <div className="dq-scene-label">{sceneTheme(floor).label} · 第 {floor} 层</div>
+                <div className={`dq-hero ${heroAnim}`}>
+                  <PixelSprite
+                    pixels={HERO_PIXELS}
+                    palette={HERO_PALETTE}
+                    scale={5}
+                    className="dq-hero-canvas"
+                  />
+                  {heroAnim === 'attack' && <span className="dq-slash" aria-hidden />}
+                </div>
+                <div className={`dq-monster ${monsterAnim}`}>
+                  <PixelSprite
+                    pixels={MONSTER_SPRITES[monster.name]?.pixels ?? MONSTER_SPRITES['史莱姆'].pixels}
+                    palette={MONSTER_SPRITES[monster.name]?.palette ?? MONSTER_SPRITES['史莱姆'].palette}
+                    scale={monster.isBoss ? 6 : 5}
+                    className="dq-monster-canvas"
+                  />
+                </div>
+                <div className="dq-monster-bar">
+                  <span className="dq-monster-name">
+                    {monster.isBoss ? '👑 ' : ''}{monster.name}
+                  </span>
+                  <div className="dq-bar mhp">
+                    <div style={{ width: `${hpPct}%` }} />
+                    <span>HP {Math.max(0, monster.hp)}/{monster.maxHp}</span>
+                  </div>
+                </div>
               </div>
             </div>
 

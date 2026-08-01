@@ -1560,3 +1560,247 @@ code {
     font-size: 56px;
   }
 }
+
+/* ============ 勇者斗恶龙：像素场景 ============ */
+.dq-scene-wrap {
+  width: 100%;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  animation: dqSlam 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dq-scene {
+  position: relative;
+  height: 250px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* 场景主题背景 */
+.scene-forest {
+  background: linear-gradient(180deg, #1b3a2a 0%, #2d5a3c 55%, #1a2e1d 100%);
+}
+
+.scene-cave {
+  background: linear-gradient(180deg, #241d16 0%, #4a3a28 55%, #1c1610 100%);
+}
+
+.scene-grave {
+  background: linear-gradient(180deg, #1c1a2e 0%, #3a3454 55%, #141220 100%);
+}
+
+.scene-shadow {
+  background: linear-gradient(180deg, #0e0e22 0%, #241d4a 55%, #0a0a18 100%);
+}
+
+.scene-volcano {
+  background: linear-gradient(180deg, #2a1208 0%, #6b2d14 55%, #1c0c04 100%);
+}
+
+.scene-throne {
+  background: linear-gradient(180deg, #200a0a 0%, #4a1414 55%, #140404 100%);
+}
+
+/* 地面投影线 */
+.dq-scene::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 26px;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.45);
+  filter: blur(1px);
+  z-index: 1;
+}
+
+.dq-scene-deco {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: space-around;
+  align-items: flex-end;
+  padding-bottom: 34px;
+  font-size: 30px;
+  opacity: 0.22;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.dq-scene-deco span {
+  animation: dqFloat 4s ease-in-out infinite;
+}
+
+.dq-scene-deco span:nth-child(2n) {
+  animation-delay: -2s;
+}
+
+.dq-scene-label {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  z-index: 3;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* 勇者（左） */
+.dq-hero {
+  position: absolute;
+  left: 8%;
+  bottom: 30px;
+  z-index: 2;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: dqIdle 2.2s ease-in-out infinite;
+}
+
+.dq-hero.attack {
+  transform: translateX(70px) scale(1.06);
+}
+
+.dq-hero.hurt {
+  filter: brightness(1.7) sepia(1) hue-rotate(-50deg) saturate(3);
+  animation: dqHitShake 0.3s ease;
+}
+
+/* 怪物（右） */
+.dq-monster {
+  position: absolute;
+  right: 10%;
+  bottom: 30px;
+  z-index: 2;
+  animation: dqIdle 2.4s ease-in-out infinite;
+}
+
+.dq-monster.hit {
+  filter: brightness(2.4);
+  animation: dqHitShake 0.3s ease;
+}
+
+.dq-monster.dead {
+  animation: dqDie 0.6s ease forwards;
+}
+
+/* 挥剑光效 */
+.dq-slash {
+  position: absolute;
+  right: -26px;
+  top: 50%;
+  width: 44px;
+  height: 10px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, transparent, #ffffff, #ffe066);
+  box-shadow: 0 0 14px rgba(255, 224, 102, 0.9);
+  transform: rotate(-18deg);
+  animation: dqSlashAnim 0.3s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes dqSlashAnim {
+  0% {
+    opacity: 0;
+    transform: rotate(-18deg) scaleX(0.2);
+  }
+  40% {
+    opacity: 1;
+    transform: rotate(-18deg) scaleX(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(-18deg) scaleX(1);
+  }
+}
+
+@keyframes dqIdle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes dqHitShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-7px);
+  }
+  50% {
+    transform: translateX(7px);
+  }
+  75% {
+    transform: translateX(-4px);
+  }
+}
+
+@keyframes dqDie {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-8px) scale(1.08);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.4);
+  }
+}
+
+/* 怪物血条栏 */
+.dq-monster-bar {
+  position: absolute;
+  right: 6%;
+  bottom: 6px;
+  left: 6%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 3;
+}
+
+.dq-monster-bar .dq-bar {
+  flex: 1;
+  height: 15px;
+}
+
+.dq-monster-bar .dq-monster-name {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.dq-scene .dq-bar.mhp > div {
+  background: linear-gradient(90deg, #7c2d12, #f97316);
+}
+
+@media (max-width: 640px) {
+  .dq-scene {
+    height: 190px;
+  }
+
+  .dq-hero {
+    left: 4%;
+  }
+
+  .dq-monster {
+    right: 4%;
+  }
+
+  .dq-hero.attack {
+    transform: translateX(46px) scale(1.05);
+  }
+
+  .dq-scene-deco {
+    font-size: 22px;
+  }
+}
