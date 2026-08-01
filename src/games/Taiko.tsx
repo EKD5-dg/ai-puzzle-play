@@ -3,6 +3,7 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
+import { TouchButtons } from '../core/TouchControls';
 import type { GameMeta } from '../core/types';
 
 export const meta: GameMeta = {
@@ -352,6 +353,14 @@ export default function Taiko() {
         <p className="hint">
           🥁 F/J = 咚（红） · D/K = 咔（蓝） · 良 ±0.06s / 可 ±0.15s
         </p>
+        <div className="tc-row">
+          <TouchButtons
+            items={[
+              { label: '🔴 咚', primary: true, onPress: () => hit('red') },
+              { label: '🔵 咔', primary: true, onPress: () => hit('blue') },
+            ]}
+          />
+        </div>
       </div>
     </GameShell>
   );

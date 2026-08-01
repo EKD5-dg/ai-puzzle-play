@@ -3,6 +3,7 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
+import { TouchDpad } from '../core/TouchControls';
 import type { GameMeta } from '../core/types';
 
 export const meta: GameMeta = {
@@ -291,6 +292,9 @@ export default function Sokoban() {
           )}
         </div>
         <p className="hint">方向键 / WASD 移动 · Z 撤销 · R 重开 · 推箱数 {pushes}</p>
+        <div className="tc-row">
+          <TouchDpad onDir={(d) => move(d)} />
+        </div>
       </div>
     </GameShell>
   );

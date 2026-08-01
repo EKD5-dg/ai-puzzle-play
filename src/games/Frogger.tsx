@@ -3,6 +3,7 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
+import { TouchDpad } from '../core/TouchControls';
 import type { GameMeta } from '../core/types';
 
 export const meta: GameMeta = {
@@ -295,29 +296,29 @@ export default function Frogger() {
   }, [status, respawn]);
 
   // 键盘/方向控制
+  const moveFrog = (dx: number, dy: number) => {
+    const f = gameRef.current.frog;
+    f.x = Math.max(2, Math.min(W - 30, f.x + dx));
+    f.y = Math.max(0, Math.min(H - ROW_H + 8, f.y + dy));
+    f.onLog = null;
+    sfx.move();
+  };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const f = gameRef.current.frog;
-      const step = ROW_H;
-      const move = (dx: number, dy: number) => {
-        f.x = Math.max(2, Math.min(W - 30, f.x + dx));
-        f.y = Math.max(0, Math.min(H - ROW_H + 8, f.y + dy));
-        f.onLog = null;
-        sfx.move();
-      };
       if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
         e.preventDefault();
         if (status === 'ready') startGame();
-        else move(0, -step);
+        else moveFrog(0, -ROW_H);
       } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
         e.preventDefault();
-        move(0, step);
+        moveFrog(0, ROW_H);
       } else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
         e.preventDefault();
-        move(-step, 0);
+        moveFrog(-ROW_H, 0);
       } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
         e.preventDefault();
-        move(step, 0);
+        moveFrog(ROW_H, 0);
       }
       if (e.key === ' ' && (status === 'ready' || status === 'over' || status === 'win')) {
         startGame();
@@ -325,7 +326,7 @@ export default function Frogger() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [status, startGame]);
+  }, [status, startGame, moveFrog]);
 
   // 最高分
   useEffect(() => {
@@ -404,6 +405,9 @@ export default function Frogger() {
           )}
         </div>
         <p className="hint">方向键 / WASD 移动 · 空格开始</p>
+        <div className="tc-row">
+          <TouchDpad onDir={(d) => moveFrog(d === 'up' ? 0 : d === 'down' ? 0 : d === 'left' ? -ROW_H : ROW_H, d === 'up' ? -ROW_H : d === 'down' ? ROW_H : 0)} />
+        </div>
       </div>
     </GameShell>
   );

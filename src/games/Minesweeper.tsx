@@ -191,6 +191,26 @@ export default function Minesweeper() {
   const flagsLeft = grid.flat().filter((x) => x.state === 'flagged').length;
   const minesLeft = level.mines - flagsLeft;
 
+  // 触屏长按插旗
+  const longPressRef = useRef<{ timer: number | null; fired: boolean }>({ timer: null, fired: false });
+  const touchStart = (r: number, c: number) => {
+    longPressRef.current.fired = false;
+    longPressRef.current.timer = window.setTimeout(() => {
+      longPressRef.current.fired = true;
+      flag({ preventDefault: () => undefined } as React.MouseEvent, r, c);
+      sfx.flip();
+    }, 420);
+  };
+  const touchEnd = (e: React.TouchEvent, r: number, c: number) => {
+    e.preventDefault(); // 阻止合成 click，避免与 touchEnd 的 reveal 冲突
+    if (longPressRef.current.timer) {
+      window.clearTimeout(longPressRef.current.timer);
+      longPressRef.current.timer = null;
+    }
+    // 短按（未触发长按）则翻开
+    if (!longPressRef.current.fired) reveal(r, c);
+  };
+
   const cellSize = level.cols >= 30 ? 28 : level.cols >= 16 ? 34 : 46;
 
   return (
@@ -249,6 +269,8 @@ export default function Minesweeper() {
                 style={{ width: cellSize, height: cellSize, fontSize: cellSize * 0.5 }}
                 onClick={() => reveal(r, c)}
                 onContextMenu={(e) => flag(e, r, c)}
+                onTouchStart={() => touchStart(r, c)}
+                onTouchEnd={(e) => touchEnd(e, r, c)}
               >
                 {cell.state === 'flagged' && '🚩'}
                 {cell.state === 'revealed' && (cell.mine ? '💥' : cell.adjacent > 0 ? cell.adjacent : '')}
@@ -256,7 +278,7 @@ export default function Minesweeper() {
             )),
           )}
         </div>
-        <p className="hint">左键翻开 · 右键插旗 🚩</p>
+        <p className="hint">左键翻开 · 右键插旗 🚩 · 触屏长按插旗</p>
       </div>
     </GameShell>
   );

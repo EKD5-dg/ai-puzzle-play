@@ -3,6 +3,7 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
+import { TouchDpad } from '../core/TouchControls';
 import type { GameMeta } from '../core/types';
 
 export const meta: GameMeta = {
@@ -386,6 +387,12 @@ export default function PacMan() {
     return () => window.removeEventListener('keydown', onKey);
   }, [status, startGame]);
 
+  // 触屏方向键
+  const setTouchDir = (d: string) => {
+    if (status === 'ready') startGame();
+    gameRef.current.player.nextDir = d;
+  };
+
   // 最高分
   useEffect(() => {
     if (score > 0) {
@@ -455,6 +462,9 @@ export default function PacMan() {
           )}
         </div>
         <p className="hint">方向键 / WASD 转向 · 空格开始</p>
+        <div className="tc-row">
+          <TouchDpad onDir={(d) => setTouchDir(d)} />
+        </div>
       </div>
     </GameShell>
   );

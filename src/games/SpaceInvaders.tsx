@@ -3,6 +3,7 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
+import { TouchButtons } from '../core/TouchControls';
 import type { GameMeta } from '../core/types';
 
 export const meta: GameMeta = {
@@ -342,6 +343,25 @@ export default function SpaceInvaders() {
           )}
         </div>
         <p className="hint">← → 移动 · 空格射击 · 波次递增难度</p>
+        <div className="tc-row">
+          <TouchButtons
+            items={[
+              { label: '◀', onPress: () => { keysRef.current.left = true; }, onRelease: () => { keysRef.current.left = false; } },
+              { label: '▶', onPress: () => { keysRef.current.right = true; }, onRelease: () => { keysRef.current.right = false; } },
+              {
+                label: '🔥 射击',
+                primary: true,
+                onPress: () => {
+                  if (status === 'ready' || status === 'over' || status === 'win') startGame();
+                  else if (gameRef.current.bullets.length < 2) {
+                    gameRef.current.bullets.push({ x: gameRef.current.player.x + 20, y: gameRef.current.player.y - 10, vy: -8 });
+                    sfx.drop();
+                  }
+                },
+              },
+            ]}
+          />
+        </div>
       </div>
     </GameShell>
   );

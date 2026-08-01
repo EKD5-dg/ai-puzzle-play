@@ -1365,6 +1365,68 @@ code {
   }
 }
 
+/* ============ 触屏控件（仅触屏设备显示） ============ */
+.tc-dpad {
+  display: none;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 6px;
+  touch-action: none;
+  user-select: none;
+}
+
+.tc-buttons {
+  display: none;
+  gap: 8px;
+  touch-action: none;
+  user-select: none;
+}
+
+.tc-btn {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+
+.tc-btn:active {
+  background: rgba(124, 92, 255, 0.35);
+}
+
+.tc-action {
+  min-width: 64px;
+  height: 56px;
+  font-size: 14px;
+  padding: 0 16px;
+}
+
+.tc-action.primary {
+  background: linear-gradient(135deg, var(--primary), #9a7bff);
+  border-color: transparent;
+}
+
+@media (pointer: coarse) {
+  .tc-dpad,
+  .tc-buttons {
+    display: grid;
+  }
+
+  .tc-row {
+    margin-top: 14px;
+  }
+}
+
+.tc-row {
+  display: flex;
+  justify-content: center;
+}
+
 /* ============ 勇者斗恶龙 ============ */
 .dq {
   display: flex;
