@@ -11,7 +11,7 @@ export const meta: GameMeta = {
   description: '躲过车流、踏着浮木，把青蛙送回家！',
   icon: '🐸',
   difficulty: '中等',
-  category: '反应',
+  category: '经典',
   tags: ['日系', '躲避'],
   bestScoreLabel: '最高分',
 };

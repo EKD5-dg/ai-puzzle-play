@@ -11,7 +11,7 @@ export const meta: GameMeta = {
   description: '击落外星人军团，保卫地球！',
   icon: '👾',
   difficulty: '中等',
-  category: '反应',
+  category: '经典',
   tags: ['日系', '射击'],
   bestScoreLabel: '最高分',
 };

@@ -11,7 +11,7 @@ export const meta: GameMeta = {
   description: '吃掉所有豆子，躲避幽灵追击！',
   icon: '👻',
   difficulty: '中等',
-  category: '反应',
+  category: '经典',
   tags: ['日系', '街机'],
   bestScoreLabel: '最高分',
 };

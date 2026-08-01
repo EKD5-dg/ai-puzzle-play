@@ -11,7 +11,7 @@ export const meta: GameMeta = {
   description: '吃食物变长，避开墙壁和自己！',
   icon: '🐍',
   difficulty: '简单',
-  category: '反应',
+  category: '经典',
   tags: ['经典', '街机'],
   bestScoreLabel: '最高分',
 };
