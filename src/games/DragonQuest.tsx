@@ -146,10 +146,18 @@ export default function DragonQuest() {
   const [busy, setBusy] = useState(false);
   const [battleNo, setBattleNo] = useState(0);
   const [heroAnim, setHeroAnim] = useState<'idle' | 'attack' | 'hurt'>('idle');
-  const [monsterAnim, setMonsterAnim] = useState<'idle' | 'hit' | 'dead'>('idle');
+  const [monsterAnim, setMonsterAnim] = useState<'idle' | 'attack' | 'hit' | 'dead'>('idle');
+  const [floaters, setFloaters] = useState<Array<{ id: number; text: string; kind: 'hero' | 'monster' }>>([]);
   const [saveExists, setSaveExists] = useState(loadSave() !== null);
   const best = useLocalStorage<number>(`best:${meta.id}`);
   const { toast } = useToast();
+
+  /** 伤害飘字（monster=怪物受击，hero=勇者受击） */
+  const addFloater = useCallback((text: string, kind: 'hero' | 'monster') => {
+    const id = Date.now() + Math.random();
+    setFloaters((prev) => [...prev.slice(-5), { id, text, kind }]);
+    window.setTimeout(() => setFloaters((prev) => prev.filter((f) => f.id !== id)), 950);
+  }, []);
 
   const pushLog = useCallback((msg: string) => {
     setLog((prev) => [...prev.slice(-5), msg]);
@@ -208,8 +216,12 @@ export default function DragonQuest() {
     const hp = player.hp - dmg;
     pushLog(`${monster.emoji} ${monster.name} 攻击了你，造成 ${dmg} 点伤害`);
     sfx.move();
+    // 怪物前冲攻击动画 + 勇者受击
+    setMonsterAnim('attack');
+    window.setTimeout(() => setMonsterAnim('idle'), 430);
     setHeroAnim('hurt');
     window.setTimeout(() => setHeroAnim('idle'), 320);
+    addFloater(`-${dmg}`, 'hero');
     if (hp <= 0) {
       sfx.lose();
       setPhase('dead');
@@ -235,6 +247,7 @@ export default function DragonQuest() {
       setHeroAnim('idle');
       const newHp = monster.hp - dmg;
       setMonster({ ...monster, hp: newHp });
+      addFloater(`-${dmg}`, 'monster');
       if (newHp > 0) {
         setMonsterAnim('hit');
         window.setTimeout(() => setMonsterAnim('idle'), 300);
@@ -267,6 +280,7 @@ export default function DragonQuest() {
         setHeroAnim('idle');
         const newHp = monster.hp - dmg;
         setMonster({ ...monster, hp: newHp });
+        addFloater(`-${dmg}`, 'monster');
         if (newHp > 0) {
           setMonsterAnim('hit');
           window.setTimeout(() => setMonsterAnim('idle'), 300);
@@ -506,6 +520,11 @@ export default function DragonQuest() {
                     className="dq-monster-canvas"
                   />
                 </div>
+                {floaters.map((f) => (
+                  <span key={f.id} className={`dq-floater ${f.kind}`}>
+                    {f.text}
+                  </span>
+                ))}
                 <div className="dq-monster-bar">
                   <span className="dq-monster-name">
                     {monster.isBoss ? '👑 ' : ''}{monster.name}
