@@ -1660,9 +1660,9 @@ code {
 }
 
 .dq-hero .dq-hero-canvas {
-  height: 215px;
+  height: 180px;
   width: auto;
-  max-width: 220px;
+  max-width: 190px;
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(0 12px 26px rgba(0, 0, 0, 0.5));
