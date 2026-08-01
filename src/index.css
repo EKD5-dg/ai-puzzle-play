@@ -1544,6 +1544,280 @@ code {
   }
 }
 
+/* ============ 推箱子 ============ */
+.soko {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.soko-board {
+  display: grid;
+  gap: 2px;
+  background: #1a1e30;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.soko-cell {
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+}
+
+.soko-cell.wall {
+  background: linear-gradient(160deg, #3d4468, #2a2f4e);
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.08);
+}
+
+.soko-cell.floor {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.soko-cell.goal {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.soko-goal {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px dashed rgba(124, 92, 255, 0.7);
+}
+
+.soko-box {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: linear-gradient(160deg, #c9a24b, #9a7430);
+  border: 2px solid #6b4f1d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+  animation: pop 0.2s ease;
+}
+
+.soko-box.on {
+  background: linear-gradient(160deg, #34d399, #1e7a5c);
+  border-color: #14532d;
+}
+
+.soko-player {
+  font-size: 26px;
+  animation: dqBreath 1.6s ease-in-out infinite;
+}
+
+/* ============ 贪吃蛇 ============ */
+.snake {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  touch-action: none;
+}
+
+.snake-board {
+  display: grid;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 8px;
+  border-radius: 12px;
+  position: relative;
+}
+
+.snake-cell {
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.snake-cell.head {
+  background: linear-gradient(160deg, #34d399, #10b981);
+  border-radius: 5px;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+}
+
+.snake-cell.body {
+  background: linear-gradient(160deg, #2f9e77, #1e7a5c);
+  border-radius: 4px;
+}
+
+.snake-cell.food {
+  background: radial-gradient(circle, #f87171 30%, #ef4444 70%);
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+}
+
+.snake-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(15, 18, 34, 0.86);
+  border-radius: 12px;
+  z-index: 5;
+  text-align: center;
+}
+
+.snake-overlay h2 {
+  font-size: 24px;
+}
+
+.snake-overlay p {
+  color: var(--text-dim);
+}
+
+/* ============ 五子棋 & 黑白棋 ============ */
+.gomoku,
+.othello {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.gomoku-status {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  transition: all 0.3s;
+}
+
+.gomoku-status.thinking {
+  color: #a78bfa;
+  border-color: rgba(124, 92, 255, 0.5);
+  animation: dqBreath 1s ease-in-out infinite;
+}
+
+.gomoku-board {
+  display: grid;
+  gap: 0;
+  background: linear-gradient(160deg, #c8a45c, #b08d4a);
+  padding: 6px;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 0 0 0 2px #8a6d33;
+}
+
+.gomoku-cell {
+  border: none;
+  background: transparent;
+  padding: 0;
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gomoku-cell::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background-image:
+    linear-gradient(rgba(90, 60, 20, 0.4) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 60, 20, 0.4) 1px, transparent 1px);
+  background-size: 30px 30px;
+  pointer-events: none;
+}
+
+.gomoku-cell:hover:not(:disabled)::before {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.gomoku-stone {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  z-index: 1;
+  animation: pop 0.2s ease;
+}
+
+.gomoku-cell.black .gomoku-stone {
+  background: radial-gradient(circle at 35% 30%, #555, #111 70%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.gomoku-cell.white .gomoku-stone {
+  background: radial-gradient(circle at 35% 30%, #fff, #ccc 70%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* 黑白棋 */
+.othello-board {
+  display: grid;
+  gap: 2px;
+  background: linear-gradient(160deg, #1e7a5c, #14532d);
+  padding: 8px;
+  border-radius: 12px;
+  border: 2px solid #0d3a22;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.othello-cell {
+  border: none;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+}
+
+.othello-cell.legal:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.othello-cell.legal:disabled {
+  cursor: default;
+}
+
+.othello-stone {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  animation: pop 0.25s ease;
+}
+
+.othello-stone.black {
+  background: radial-gradient(circle at 35% 30%, #555, #111 70%);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5);
+}
+
+.othello-stone.white {
+  background: radial-gradient(circle at 35% 30%, #fff, #d5d5d5 70%);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+}
+
+.othello-hint {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+@media (max-width: 640px) {
+  .gomoku-board {
+    transform: scale(0.92);
+    transform-origin: top center;
+  }
+
+  .othello-board {
+    transform: scale(0.9);
+    transform-origin: top center;
+  }
+}
+
 /* ============ 勇者斗恶龙：像素场景 ============ */
 .dq-scene-wrap {
   width: 100%;

@@ -6,6 +6,10 @@ import SlidingPuzzle, { meta as metaSliding } from '../games/SlidingPuzzle';
 import Sudoku, { meta as metaSudoku } from '../games/Sudoku';
 import Tetris, { meta as metaTetris } from '../games/Tetris';
 import DragonQuest, { meta as metaDragon } from '../games/DragonQuest';
+import Sokoban, { meta as metaSokoban } from '../games/Sokoban';
+import Snake, { meta as metaSnake } from '../games/Snake';
+import Gomoku, { meta as metaGomoku } from '../games/Gomoku';
+import Othello, { meta as metaOthello } from '../games/Othello';
 
 /**
  * 游戏注册表 —— 新增游戏的唯一入口：
@@ -20,6 +24,10 @@ export const games: GameDefinition[] = [
   { meta: metaSudoku, component: Sudoku },
   { meta: metaTetris, component: Tetris },
   { meta: metaDragon, component: DragonQuest },
+  { meta: metaSokoban, component: Sokoban },
+  { meta: metaSnake, component: Snake },
+  { meta: metaGomoku, component: Gomoku },
+  { meta: metaOthello, component: Othello },
 ];
 
 /** 按 id 查找游戏 */
