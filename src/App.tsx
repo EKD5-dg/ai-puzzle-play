@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { games, findGame } from './core/registry';
 import { useLocalStorage } from './core/useLocalStorage';
 import { isMuted, setMuted, sfx } from './core/sound';
-import { getSyncCode, setSyncCode, generateSyncCode } from './core/sync';
+import { getSyncCode, setSyncCode, generateSyncCode, createPair, joinPair } from './core/sync';
 import type { GameMeta } from './core/types';
 
 /** 读取当前 hash 路由（如 #/game/game-2048） */
@@ -111,6 +111,20 @@ export default function App() {
       setSyncMsg('请输入 6 位同步码（大写字母/数字）');
       return;
     }
+    // 校验配对码有效性（5 分钟有效期）
+    const pair = await joinPair(code);
+    if (pair === 'expired') {
+      setSyncMsg('⚠️ 同步码已过期（生成后 5 分钟内有效），请让对方重新生成');
+      return;
+    }
+    if (pair === 'invalid') {
+      setSyncMsg('⚠️ 同步码不存在，请确认对方已生成同步码');
+      return;
+    }
+    if (pair === 'error') {
+      setSyncMsg('连接云端失败（离线？），请稍后重试');
+      return;
+    }
     setSyncCode(code);
     setSyncCodeState(code);
     setSyncInput('');
@@ -137,11 +151,17 @@ export default function App() {
     }
   };
 
-  const newSyncCode = () => {
+  const newSyncCode = async () => {
     const code = generateSyncCode();
+    // 云端登记配对（5 分钟有效）
+    const created = await createPair(code);
+    if (!created) {
+      setSyncMsg('⚠️ 需要联网生成同步码，请检查网络后重试');
+      return;
+    }
     setSyncCode(code);
     setSyncCodeState(code);
-    setSyncMsg(`已生成同步码 ${code}，在另一台设备输入即可同步`);
+    setSyncMsg(`已生成同步码 ${code}（5 分钟内有效），在另一台设备输入即可同步`);
     sfx.record();
   };
 

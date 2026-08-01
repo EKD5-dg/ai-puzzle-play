@@ -6,6 +6,7 @@ import { useLocalStorage } from './useLocalStorage';
  * 用法：const best = useBestScore(meta.id) → { value, updateBest }（与 useLocalStorage 兼容）
  */
 const API = 'https://puzzle-play.pages.dev/api/sync';
+const PAIR_API = 'https://puzzle-play.pages.dev/api/pair';
 const CODE_KEY = 'pp:sync-code';
 
 export function getSyncCode(): string | null {
@@ -46,6 +47,36 @@ async function pushCloud(code: string, scores: Record<string, number>): Promise<
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code, scores }),
   });
+}
+
+/** 创建配对码（云端记录创建时间，5 分钟有效） */
+export async function createPair(code: string): Promise<boolean> {
+  try {
+    const res = await fetch(PAIR_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** 加入配对（校验 5 分钟有效期） */
+export async function joinPair(code: string): Promise<'ok' | 'expired' | 'invalid' | 'error'> {
+  try {
+    const res = await fetch(PAIR_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, join: true }),
+    });
+    if (res.status === 410) return 'expired';
+    if (res.status === 404) return 'invalid';
+    return res.ok ? 'ok' : 'error';
+  } catch {
+    return 'error';
+  }
 }
 
 /** 成绩 hook：本地优先 + 云端合并（拉取取最大，写入双写） */
