@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GameShell } from '../core/GameShell';
-import { useLocalStorage } from '../core/useLocalStorage';
+import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
@@ -154,7 +154,7 @@ export default function Sudoku() {
   const [showMistakes, setShowMistakes] = useState(true);
   const [time, setTime] = useState(0);
   const [won, setWon] = useState(false);
-  const best = useLocalStorage<number>(`best:${meta.id}`);
+  const best = useBestScore(meta.id);
   const { toast } = useToast();
 
   const startNew = (idx: number) => {

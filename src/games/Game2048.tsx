@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
-import { useLocalStorage } from '../core/useLocalStorage';
+import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
@@ -150,7 +150,7 @@ export default function Game2048() {
   const [over, setOver] = useState(false);
   const [won, setWon] = useState(false);
   const [scorePop, setScorePop] = useState(0); // 触发分数动画
-  const best = useLocalStorage<number>(`best:${meta.id}`);
+  const best = useBestScore(meta.id);
   const touchRef = useRef<{ x: number; y: number } | null>(null);
   const { toast } = useToast();
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { GameShell } from '../core/GameShell';
-import { useLocalStorage } from '../core/useLocalStorage';
+import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
@@ -28,7 +28,7 @@ export default function DigitMemory() {
   const [answer, setAnswer] = useState('');
   const [input, setInput] = useState('');
   const [len, setLen] = useState(3);
-  const best = useLocalStorage<number>(`best:${meta.id}`);
+  const best = useBestScore(meta.id);
   const { toast } = useToast();
 
   const startGame = useCallback(() => {

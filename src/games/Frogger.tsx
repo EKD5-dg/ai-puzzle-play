@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
-import { useLocalStorage } from '../core/useLocalStorage';
+import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
@@ -67,7 +67,7 @@ export default function Frogger() {
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [level, setLevel] = useState(1);
-  const best = useLocalStorage<number>(`best:${meta.id}`);
+  const best = useBestScore(meta.id);
   const { toast } = useToast();
 
   const gameRef = useRef({

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
-import { useLocalStorage } from '../core/useLocalStorage';
+import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
@@ -70,7 +70,7 @@ export default function Taiko() {
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
   const [result, setResult] = useState<{ good: number; ok: number; miss: number }>({ good: 0, ok: 0, miss: 0 });
-  const best = useLocalStorage<number>(`best:${meta.id}`);
+  const best = useBestScore(meta.id);
   const { toast } = useToast();
 
   const gameRef = useRef({

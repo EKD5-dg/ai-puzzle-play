@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
-import { useLocalStorage } from '../core/useLocalStorage';
+import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
@@ -114,7 +114,7 @@ export default function Tetris() {
   const bagRef = useRef<string[]>(makeBag());
   const boardRef = useRef(board);
   const activeRef = useRef(active);
-  const best = useLocalStorage<number>(`best:${meta.id}`);
+  const best = useBestScore(meta.id);
   const { toast } = useToast();
   const gameOverRef = useRef(false);
 

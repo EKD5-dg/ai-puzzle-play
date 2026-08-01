@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { GameShell } from '../core/GameShell';
-import { useLocalStorage } from '../core/useLocalStorage';
+import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { Portrait } from './Portrait';
@@ -151,7 +151,7 @@ export default function DragonQuest() {
   const [monsterAnim, setMonsterAnim] = useState<'idle' | 'attack' | 'hit' | 'dead'>('idle');
   const [floaters, setFloaters] = useState<Array<{ id: number; text: string; kind: 'hero' | 'monster' }>>([]);
   const [saveExists, setSaveExists] = useState(loadSave() !== null);
-  const best = useLocalStorage<number>(`best:${meta.id}`);
+  const best = useBestScore(meta.id);
   const { toast } = useToast();
 
   /** 伤害飘字（monster=怪物受击，hero=勇者受击） */

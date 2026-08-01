@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
-import { useLocalStorage } from '../core/useLocalStorage';
+import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
@@ -32,7 +32,7 @@ export default function Simon() {
   const [litIdx, setLitIdx] = useState(-1); // 当前高亮的键
   const [round, setRound] = useState(1);
   const [bestRound, setBestRound] = useState(0);
-  const best = useLocalStorage<number>(`best:${meta.id}`);
+  const best = useBestScore(meta.id);
   const { toast } = useToast();
   const timers = useRef<number[]>([]);
 

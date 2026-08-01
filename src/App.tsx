@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { games, findGame } from './core/registry';
 import { useLocalStorage } from './core/useLocalStorage';
 import { isMuted, setMuted, sfx } from './core/sound';
+import { getSyncCode, setSyncCode, generateSyncCode } from './core/sync';
 import type { GameMeta } from './core/types';
 
 /** 读取当前 hash 路由（如 #/game/game-2048） */
@@ -51,6 +52,10 @@ export default function App() {
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('全部');
   const [difficulty, setDifficulty] = useState<(typeof DIFFICULTIES)[number]>('全部');
   const [soundOn, setSoundOn] = useState(!isMuted());
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncCode, setSyncCodeState] = useState(getSyncCode());
+  const [syncInput, setSyncInput] = useState('');
+  const [syncMsg, setSyncMsg] = useState('');
 
   useEffect(() => {
     const onHash = () => {
@@ -100,6 +105,52 @@ export default function App() {
     if (next) sfx.click();
   };
 
+  const joinSync = async () => {
+    const code = syncInput.trim().toUpperCase();
+    if (!/^[A-Z0-9]{6}$/.test(code)) {
+      setSyncMsg('请输入 6 位同步码（大写字母/数字）');
+      return;
+    }
+    setSyncCode(code);
+    setSyncCodeState(code);
+    setSyncInput('');
+    setSyncMsg(`已加入同步码 ${code}，正在拉取云端成绩…`);
+    sfx.merge();
+    // 拉取并合并全部游戏成绩到本地
+    try {
+      const res = await fetch(`https://puzzle-play.pages.dev/api/sync?code=${encodeURIComponent(code)}`);
+      const data = (await res.json()) as { scores?: Record<string, number> };
+      const cloud = data.scores ?? {};
+      let merged = 0;
+      for (const g of games) {
+        const cv = cloud[g.meta.id];
+        if (cv == null) continue;
+        const lv = Number(localStorage.getItem(`pp:best:${g.meta.id}`));
+        if (Number.isNaN(lv) || cv > lv) {
+          localStorage.setItem(`pp:best:${g.meta.id}`, String(cv));
+          merged++;
+        }
+      }
+      setSyncMsg(merged > 0 ? `同步完成！合并了 ${merged} 条云端成绩` : '已连接，云端与本地一致');
+    } catch {
+      setSyncMsg('连接云端失败（离线？），稍后自动重试');
+    }
+  };
+
+  const newSyncCode = () => {
+    const code = generateSyncCode();
+    setSyncCode(code);
+    setSyncCodeState(code);
+    setSyncMsg(`已生成同步码 ${code}，在另一台设备输入即可同步`);
+    sfx.record();
+  };
+
+  const disconnectSync = () => {
+    setSyncCode(null);
+    setSyncCodeState(null);
+    setSyncMsg('已断开云同步');
+  };
+
   return (
     <div className="app">
       <div className="bg-decor" aria-hidden>
@@ -125,6 +176,18 @@ export default function App() {
               <span className="chip chip-lg">
                 🎮 {games.length} 款游戏 · 已玩 {stats.played} · 通关 {stats.cleared}
               </span>
+              <button
+                className={`btn sound-toggle ${syncCode ? 'on' : ''}`}
+                onClick={() => setSyncOpen(true)}
+                title={syncCode ? `云同步中（${syncCode}）` : '云同步'}
+                aria-label="云同步设置"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.5 1.5A4 4 0 0 0 6 19h11.5z" />
+                  <path d="M12 12v4" />
+                  <path d="m9 14 3-3 3 3" />
+                </svg>
+              </button>
               <button
                 className={`btn sound-toggle ${soundOn ? 'on' : ''}`}
                 onClick={toggleSound}
@@ -198,6 +261,42 @@ export default function App() {
               {filtered.map((g) => (
                 <GameCard key={g.meta.id} meta={g.meta} />
               ))}
+            </div>
+          )}
+
+          {syncOpen && (
+            <div className="sync-modal-mask" onClick={() => setSyncOpen(false)}>
+              <div className="sync-modal" onClick={(e) => e.stopPropagation()}>
+                <h3>☁ 成绩云同步</h3>
+                <p className="sync-desc">同步码连接您的所有设备，成绩自动合并（取最高）。</p>
+                {syncCode ? (
+                  <div className="sync-current">
+                    <span>当前同步码</span>
+                    <strong>{syncCode}</strong>
+                    <button className="btn btn-ghost" onClick={disconnectSync}>
+                      断开同步
+                    </button>
+                  </div>
+                ) : (
+                  <div className="sync-join">
+                    <input
+                      value={syncInput}
+                      onChange={(e) => setSyncInput(e.target.value.toUpperCase())}
+                      placeholder="输入 6 位同步码"
+                      maxLength={6}
+                    />
+                    <button className="btn btn-primary" onClick={joinSync}>
+                      加入同步
+                    </button>
+                  </div>
+                )}
+                {!syncCode && (
+                  <button className="btn btn-ghost sync-new" onClick={newSyncCode}>
+                    ✨ 生成新同步码（在另一台设备输入）
+                  </button>
+                )}
+                {syncMsg && <p className="sync-msg">{syncMsg}</p>}
+              </div>
             </div>
           )}
 

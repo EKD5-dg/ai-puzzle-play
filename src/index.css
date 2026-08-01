@@ -1065,6 +1065,95 @@ code {
   border-color: rgba(124, 92, 255, 0.5);
 }
 
+/* 云同步弹窗 */
+.sync-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 24, 0.7);
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: pageIn 0.2s ease;
+}
+
+.sync-modal {
+  width: min(380px, 94vw);
+  background: #1a1e33;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sync-modal h3 {
+  font-size: 18px;
+}
+
+.sync-desc {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.sync-current {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(124, 92, 255, 0.12);
+  border: 1px solid rgba(124, 92, 255, 0.4);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+.sync-current span {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.sync-current strong {
+  font-size: 24px;
+  letter-spacing: 3px;
+  color: #a78bfa;
+  flex: 1;
+}
+
+.sync-join {
+  display: flex;
+  gap: 8px;
+}
+
+.sync-join input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text);
+  font: inherit;
+  font-size: 18px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  outline: none;
+}
+
+.sync-join input:focus {
+  border-color: rgba(124, 92, 255, 0.6);
+}
+
+.sync-new {
+  align-self: flex-start;
+}
+
+.sync-msg {
+  font-size: 13px;
+  color: #6ee7b7;
+}
+
 .played-dot {
   font-size: 12px;
   color: var(--success);
