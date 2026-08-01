@@ -213,7 +213,7 @@ export default function DragonQuest() {
     if (!monster) return;
     let dmg = Math.max(1, monster.atk + rand(2) - player.def);
     if (dmgReduction > 1) dmg = Math.max(1, Math.floor(dmg / dmgReduction));
-    const hp = player.hp - dmg;
+    const newHp = player.hp - dmg;
     pushLog(`${monster.emoji} ${monster.name} 攻击了你，造成 ${dmg} 点伤害`);
     sfx.move();
     // 怪物前冲攻击动画 + 勇者受击
@@ -222,14 +222,15 @@ export default function DragonQuest() {
     setHeroAnim('hurt');
     window.setTimeout(() => setHeroAnim('idle'), 320);
     addFloater(`-${dmg}`, 'hero');
-    if (hp <= 0) {
+    if (newHp <= 0) {
       sfx.lose();
       setPhase('dead');
       clearSave();
       setSaveExists(false);
-      setPlayer({ ...player, hp: 0 });
+      setPlayer((prev) => ({ ...prev, hp: 0 }));
     } else {
-      setPlayer({ ...player, hp });
+      // 函数式更新，避免覆盖同帧内 MP/HP 的其他变更
+      setPlayer((prev) => ({ ...prev, hp: prev.hp - dmg }));
     }
     setBusy(false);
   };
@@ -270,7 +271,8 @@ export default function DragonQuest() {
       return;
     }
     setBusy(true);
-    setPlayer({ ...player, mp: player.mp - (kind === 'fire' ? 5 : 4) });
+    // 函数式扣减 MP，避免与其他状态更新互相覆盖
+    setPlayer((prev) => ({ ...prev, mp: prev.mp - (kind === 'fire' ? 5 : 4) }));
     if (kind === 'fire') {
       sfx.merge();
       pushLog('你施放了火球术！🔥');
@@ -292,9 +294,9 @@ export default function DragonQuest() {
     } else {
       sfx.flip();
       const before = player.hp;
-      const heal = Math.min(player.maxHp, before + 12 + player.level * 2);
-      pushLog(`你施放了治疗术，恢复了 ${heal - before} 点生命 ✨`);
-      setPlayer({ ...player, hp: heal });
+      pushLog(`你施放了治疗术，恢复了 ${Math.min(player.maxHp, before + 12 + player.level * 2) - before} 点生命 ✨`);
+      // 函数式恢复 HP（不覆盖 MP 扣减）
+      setPlayer((prev) => ({ ...prev, hp: Math.min(prev.maxHp, prev.hp + 12 + prev.level * 2) }));
       window.setTimeout(() => monsterAttack(), 350);
     }
   };
