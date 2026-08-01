@@ -433,7 +433,7 @@ export default function DragonQuest() {
   const monH = monster ? (MONSTER_PORTRAITS[monster.name]?.height ?? 160) : 160;
   const sceneW = 640;
   const sidePad = sceneW * 0.12;
-  const heroW = 180;
+  const heroW = 155;
   const gap = Math.max(20, sceneW - sidePad * 2 - heroW - monH);
   const reach = Math.min(150, gap + 14);
 
