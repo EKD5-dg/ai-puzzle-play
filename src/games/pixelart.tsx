@@ -3,6 +3,10 @@ import { useEffect, useRef } from 'react';
 /**
  * 像素精灵引擎：将字符像素矩阵渲染为 Canvas（关闭平滑，纯像素风格）。
  * 所有角色/怪物均为代码手绘，无任何外部图片资源。
+ *
+ * 绘画规范（保证观感）：
+ * - k 统一为深色描边，勾勒轮廓
+ * - 每个角色使用 3 档色阶（亮色高光 / 基色 / 暗色阴影）
  */
 
 export interface PixelPalette {
@@ -52,92 +56,106 @@ export function PixelSprite({ pixels, palette, scale = 5, className }: PixelSpri
   );
 }
 
-/* ============ 勇者：金发蓝甲剑士 ============ */
+/* 通用描边色 */
+const OUTLINE = '#26263c';
+
+/* ============ 勇者：红头巾 · 金发 · 蓝甲 ============ */
 export const HERO_PIXELS = [
   '................',
+  '.....kkkkk......',
+  '....kRRRRRk.....',
+  '....kRRRRRRk....',
+  '....kRRRRRRk....',
+  '....kRRkkRRk....',
+  '.....kRRRRk.....',
   '......GGGG......',
-  '.....GGGGGG.....',
-  '.....GyyyyG.....',
-  '.....yywwyy.....',
-  '......yyyy......',
-  '.....BBBBBB.....',
-  '....BBBBBBBB....',
-  '....BBBBBBBB....',
-  '....BBkBBkBB....',
-  '.....BBBBBB.....',
-  '....ssssssss....',
-  '...ssssssssss...',
-  '...sBs....sBs...',
-  '...sss....sss...',
+  '.....GssssG.....',
+  '.....GsWWsG.....',
+  '.....GsWWsG.....',
+  '......GssG......',
+  '.....kkkkkk.....',
+  '....kBbBBbBk....',
+  '..kkBBBBBBBBkk..',
+  '..kBbBBBBBBbBk..',
+  '...kkBBBBBBkk...',
+  '....kSSSSSSk....',
+  '....kSkkkkSk....',
   '................',
 ];
 
 export const HERO_PALETTE: PixelPalette = {
+  k: OUTLINE,
+  R: '#d64545',
   G: '#e8b34b',
-  y: '#f5d76e',
-  w: '#ffffff',
-  B: '#3b6fb0',
-  k: '#1e1e2e',
   s: '#f2c9a0',
+  W: '#ffffff',
+  B: '#4a7fc4',
+  b: '#33609a',
+  S: '#8a5a3a',
 };
 
 /* ============ 史莱姆：果冻团子 ============ */
 const SLIME_PIXELS = [
   '................',
   '................',
-  '................',
   '......gggg......',
-  '....gggggggg....',
-  '...gggggggggg...',
+  '....gghhgggg....',
+  '...gghhhhgggg...',
+  '..gggggggggggg..',
   '..ggwwggggwwgg..',
   '..gggggggggggg..',
   '.gggggggggggggg.',
   '.gggggggggggggg.',
   '.gggggggggggggg.',
-  '.gggggggggggggg.',
-  '.gggggggggggggg.',
-  '..gggggggggggg..',
-  '...gggggggggg...',
+  '.GGggggggggggGG.',
+  '.kGGGGGGGGGGGGk.',
+  '..kkkkkkkkkkkk..',
   '................',
 ];
 
 /* ============ 骷髅兵 ============ */
 const SKELETON_PIXELS = [
   '................',
+  '.....kkkkkk.....',
+  '....kwwwwwwk....',
+  '....kwwwwwwk....',
+  '....kwwwwwwk....',
+  '....wkkwwkkw....',
+  '....wwwwwwww....',
+  '.....wkkkkw.....',
   '.....wwwwww.....',
-  '....wwwwwwww....',
-  '....wwwwwwww....',
-  '....kkwwwwkk....',
-  '....wwwwwwww....',
-  '....wwwwwwww....',
-  '.....ww..ww.....',
-  '.....ww..ww.....',
-  '.....wwwwww.....',
-  '....wwwwwwww....',
-  '...ww.wwww.ww...',
+  '.....kkkkkk.....',
+  '....kkkkkkkk....',
+  '..wwkkwwwwkkww..',
+  '..wwwwwwwwwwww..',
+  '..wwkwwwwwwkww..',
   '..wwwwwwwwwwww..',
   '..wwwwwwwwwwww..',
-  '..www......www..',
+  '..kkkkkkkkkkkk..',
   '................',
 ];
 
 /* ============ 僵尸 ============ */
 const ZOMBIE_PIXELS = [
   '................',
-  '.....gggggg.....',
-  '....gggggggg....',
-  '....gwwggwwg....',
-  '....gggggggg....',
-  '.....gggggg.....',
-  '....dddddddd....',
-  '...dddddddddd...',
-  '...ddrdddrdd....',
-  '...dddddddddd...',
-  '....dddddddd....',
-  '...gggggggggg...',
-  '..gggggggggggg..',
-  '..gggg....gggg..',
-  '..ggg......ggg..',
+  '.....kkkkkk.....',
+  '....kggggggk....',
+  '....kggggggk....',
+  '....kggggggk....',
+  '.....kggggk.....',
+  '....ksWWWWsk....',
+  '....ksWWWWsk....',
+  '.....kssssk.....',
+  '....kkkkkkkk....',
+  '...kddddddddk...',
+  '..kddkddddkddk..',
+  '..kddddddddddk..',
+  '..kddkddddkddk..',
+  '...kddddddddk...',
+  '....kggggggk....',
+  '...kggggggggk...',
+  '..kggkggggkggk..',
+  '..kkkkkkkkkkkk..',
   '................',
 ];
 
@@ -151,54 +169,57 @@ const GHOST_PIXELS = [
   '....pppppppp....',
   '.....pppppp.....',
   '.....pppppp.....',
-  '.....pppppp.....',
-  '.....pppppp.....',
-  '.....pppppp.....',
-  '....pppppppp....',
-  '...pppp..pppp...',
-  '..pppp....pppp..',
-  '.pppp......pppp.',
+  '....PPPPPPPP....',
+  '....PPPPPPPP....',
+  '.....PPPPPP.....',
+  '....PPPPPPPP....',
+  '...PPPP..PPPP...',
+  '..PPPP....PPPP..',
+  '.PPPPP......PPPP',
   '................',
 ];
 
 /* ============ 火焰魔 ============ */
 const FIRE_DEMON_PIXELS = [
   '................',
-  '..kkkkkkkkkk....',
-  '.krrrrrrrrrrk...',
-  '.krrrrrrrrrrk...',
-  '.rrwwrrrrwwrr...',
-  '.rrrrrrrrrrrr...',
-  '.rrrrrrrrrrrr...',
-  '..rrrrrrrrrr....',
-  '...oooooooo.....',
-  '..oooooooooo....',
-  '.oooooorroooo...',
-  '.oooorrrrrroo...',
-  '.ooorrrrrrrro...',
-  '..oorrrrrrrro...',
-  '...oorrrrrroo...',
+  '..kkk.....kkk...',
+  '..krrk...krrk...',
+  '..krrkkkkkrrk...',
+  '.kkrrrrrrrrrkk..',
+  '.krrrrrrrrrrrk..',
+  '.krrwwrrrwwrrk..',
+  '.krrrrrrrrrrrk..',
+  '..kkrrrrrrrkk...',
+  '....kooooook....',
+  '...koorrrroook..',
+  '..koorrrrrrrook.',
+  '.koorrrrrrrrrook',
+  '.koorrrrrrrrrook',
+  '..koorrrrrrrook.',
+  '...kkkkkkkkkk...',
   '................',
 ];
 
 /* ============ 恶龙：最终 Boss ============ */
 const DRAGON_PIXELS = [
-  '....................',
-  '......PPPP..........',
-  '.....PPPPPP..yyyy...',
-  '....PPPPPPPP..yPPP..',
-  '...PPwwPPPPPPPPP....',
-  '...PPwwPPPPPPPPP....',
-  '....PPPPPPPPPPPPP...',
-  '.....PPPPPPPPPPP....',
-  '....PPPPPPPPPPP.....',
-  '...PPPPyyyPPPPP.....',
-  '..PP.PPPPyPPPP......',
-  '.PPP.PPPPPP.PPP.....',
-  '.PPP.PPPPPP.PPP.....',
-  '..PP..PPPP...PP.....',
-  '......PPPP..........',
-  '....................',
+  '.............................',
+  '......kkkkk..................',
+  '.....kPPPPPk......kkkk.......',
+  '....kPPPPPPPk...kkPPPPk......',
+  '....kPPPPPPPkkkkkPPPPPPk.....',
+  '...kPPkkkPPPPPPPPPPPPPPk.....',
+  '...kPPwwkkkkPPPPPPPPPPk......',
+  '...kPPwwkkkkkPPPPPPPk........',
+  '..kkkkkkkkkkkkPPPPPPk........',
+  '..kPPkkkkkkkkkkkkkPPk........',
+  '.kPPPPyyyyyyyyyyPPPPk........',
+  '.kPPPPkkkkkkkkkkkPPPPk.......',
+  '.kPPPPk.......kPPPPk.........',
+  '.kkkkkk.......kkkkkk.........',
+  '............kkkkkkk..........',
+  '...........kkkkkkkkk.........',
+  '..........kkkkkkkkkkk........',
+  '.............................',
 ];
 
 interface SpriteDef {
@@ -209,27 +230,27 @@ interface SpriteDef {
 export const MONSTER_SPRITES: Record<string, SpriteDef> = {
   史莱姆: {
     pixels: SLIME_PIXELS,
-    palette: { g: '#5ecf4e', w: '#eaffea' },
+    palette: { g: '#4ecf4e', h: '#8df08d', w: '#eaffea', G: '#2f9c38', k: OUTLINE },
   },
   骷髅兵: {
     pixels: SKELETON_PIXELS,
-    palette: { w: '#e8e8f0', k: '#1e1e2e' },
+    palette: { w: '#ececf4', k: OUTLINE },
   },
   僵尸: {
     pixels: ZOMBIE_PIXELS,
-    palette: { g: '#6fbf5a', w: '#ffffff', d: '#8a5a3a', r: '#b03a3a' },
+    palette: { g: '#5fae52', W: '#d8f0d8', s: '#8fd488', d: '#8a5a3a', k: OUTLINE },
   },
   暗影幽魂: {
     pixels: GHOST_PIXELS,
-    palette: { p: '#9a6fd8', w: '#f0eaff' },
+    palette: { p: '#b08cff', P: '#7c4fd8', w: '#f0eaff' },
   },
   火焰魔: {
     pixels: FIRE_DEMON_PIXELS,
-    palette: { k: '#1e1e2e', r: '#e05252', w: '#ffe066', o: '#f08c3a' },
+    palette: { k: OUTLINE, r: '#e05252', w: '#ffe066', o: '#f08c3a' },
   },
   恶龙: {
     pixels: DRAGON_PIXELS,
-    palette: { P: '#7c3aed', w: '#fff3a0', y: '#e8b34b', k: '#1e1e2e' },
+    palette: { k: OUTLINE, P: '#8b5cf6', w: '#ffe066', y: '#e8b34b' },
   },
 };
 
