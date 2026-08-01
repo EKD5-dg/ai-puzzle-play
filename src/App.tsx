@@ -148,6 +148,7 @@ export default function App() {
             </div>
             <div className="filter-row">
               <div className="filter-group">
+                <span className="filter-label">分类</span>
                 {CATEGORIES.map((c) => (
                   <button
                     key={c}
@@ -159,6 +160,7 @@ export default function App() {
                 ))}
               </div>
               <div className="filter-group">
+                <span className="filter-label">难度</span>
                 {DIFFICULTIES.map((d) => (
                   <button
                     key={d}
