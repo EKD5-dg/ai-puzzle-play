@@ -412,6 +412,14 @@ export default function DragonQuest() {
   const playerMpPct = Math.max(0, (player.mp / player.maxMp) * 100);
   const xpPct = Math.min(100, (player.xp / xpNeed(player.level)) * 100);
 
+  // 攻击前冲距离：按当前怪物体型自适应（保证砍到又不穿透）
+  const monH = monster ? (MONSTER_PORTRAITS[monster.name]?.height ?? 160) : 160;
+  const sceneW = 640;
+  const sidePad = sceneW * 0.12;
+  const heroW = 215;
+  const gap = Math.max(20, sceneW - sidePad * 2 - heroW - monH);
+  const reach = Math.min(150, gap + 14);
+
   return (
     <GameShell
       meta={meta}
@@ -488,7 +496,7 @@ export default function DragonQuest() {
                   ))}
                 </div>
                 <div className="dq-scene-label">{sceneTheme(floor).label} · 第 {floor} 层</div>
-                <div className={`dq-hero ${heroAnim}`}>
+                <div className={`dq-hero ${heroAnim}`} style={{ ['--reach' as string]: `${reach}px` }}>
                   <Portrait src={HERO_PORTRAIT} className="dq-hero-canvas" />
                   {heroAnim === 'attack' && <span className="dq-slash" aria-hidden />}
                 </div>
