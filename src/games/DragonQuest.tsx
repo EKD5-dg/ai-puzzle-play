@@ -220,9 +220,9 @@ export default function DragonQuest() {
     sfx.move();
     // 怪物前冲攻击动画 + 勇者受击
     setMonsterAnim('attack');
-    window.setTimeout(() => setMonsterAnim('idle'), 430);
+    window.setTimeout(() => setMonsterAnim('idle'), 560);
     setHeroAnim('hurt');
-    window.setTimeout(() => setHeroAnim('idle'), 320);
+    window.setTimeout(() => setHeroAnim('idle'), 380);
     addFloater(`-${dmg}`, 'hero');
     if (newHp <= 0) {
       sfx.lose();
@@ -252,11 +252,11 @@ export default function DragonQuest() {
       setMonster({ ...monster, hp: newHp });
       addFloater(`-${dmg}`, 'monster');
       if (newHp > 0) {
-        // 阶段 2：怪物受击动画结束后，才进入阶段 3 反击
+        // 阶段 2：怪物受击动画结束后，短暂僵直停顿再进入阶段 3 反击
         setMonsterAnim('hit');
         window.setTimeout(() => {
           setMonsterAnim('idle');
-          monsterAttack(); // 怪物反击
+          window.setTimeout(() => monsterAttack(), 280); // 受击僵直
         }, 320);
       } else {
         setMonsterAnim('dead');
@@ -289,11 +289,11 @@ export default function DragonQuest() {
         setMonster({ ...monster, hp: newHp });
         addFloater(`-${dmg}`, 'monster');
         if (newHp > 0) {
-          // 阶段 2：受击动画结束后再反击
+          // 阶段 2：受击动画结束后短暂僵直再反击
           setMonsterAnim('hit');
           window.setTimeout(() => {
             setMonsterAnim('idle');
-            monsterAttack(); // 怪物反击
+            window.setTimeout(() => monsterAttack(), 280); // 受击僵直
           }, 320);
         } else {
           setMonsterAnim('dead');

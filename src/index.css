@@ -2162,7 +2162,7 @@ code {
 }
 
 .dq-monster.flip.attack .dq-monster-canvas {
-  animation: dqLungeFlip 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: dqLungeFlip 0.56s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes dqLungeFlip {
@@ -2183,7 +2183,7 @@ code {
 }
 
 .dq-monster.attack .dq-monster-canvas {
-  animation: dqLunge 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: dqLunge 0.56s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes dqLunge {
