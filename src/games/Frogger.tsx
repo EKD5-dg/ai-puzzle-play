@@ -77,6 +77,46 @@ export default function Frogger() {
     deathTimer: 0,
   });
 
+  // 静态背景层（车道/河流底色+线+目标洞），每帧直接贴图
+  const bgRef = useRef<HTMLCanvasElement | null>(null);
+  if (!bgRef.current) {
+    const bg = document.createElement('canvas');
+    bg.width = W;
+    bg.height = H;
+    const bctx = bg.getContext('2d');
+    if (bctx) {
+      buildLanes(1).forEach((lane, ri) => {
+        const y = ri * ROW_H;
+        if (lane.kind === 'safe') {
+          bctx.fillStyle = ri === 11 ? '#1b3a2a' : '#1a2417';
+          bctx.fillRect(0, y, W, ROW_H);
+        } else if (lane.kind === 'road') {
+          bctx.fillStyle = '#241d16';
+          bctx.fillRect(0, y, W, ROW_H);
+          bctx.fillStyle = 'rgba(255,255,255,0.15)';
+          bctx.fillRect(0, y + ROW_H - 2, W, 2);
+        } else {
+          bctx.fillStyle = '#12294a';
+          bctx.fillRect(0, y, W, ROW_H);
+          bctx.fillStyle = 'rgba(255,255,255,0.08)';
+          for (let x = 0; x < W; x += 24) bctx.fillRect(x + ((ri * 13) % 24), y + ROW_H - 2, 10, 2);
+        }
+      });
+      // 目标洞（空状态，激活态动态绘制）
+      for (let i = 0; i < 5; i++) {
+        const gx = i * (W / 5) + W / 10 - 20;
+        bctx.fillStyle = '#3a2a10';
+        bctx.beginPath();
+        bctx.arc(gx + 20, ROW_H / 2, 16, 0, Math.PI * 2);
+        bctx.fill();
+        bctx.strokeStyle = '#6b4f1d';
+        bctx.lineWidth = 3;
+        bctx.stroke();
+      }
+    }
+    bgRef.current = bg;
+  }
+
   const startGame = useCallback(() => {
     gameRef.current.frog = { x: W / 2 - 14, y: H - ROW_H + 8, onLog: null };
     gameRef.current.lanes = buildLanes(1);
@@ -186,38 +226,24 @@ export default function Frogger() {
         }
       }
 
-      // 渲染
-      ctx.fillStyle = '#0c1220';
-      ctx.fillRect(0, 0, W, H);
-      g.lanes.forEach((lane, ri) => {
-        const y = ri * ROW_H;
-        if (lane.kind === 'safe') {
-          ctx.fillStyle = ri === 11 ? '#1b3a2a' : '#1a2417';
-          ctx.fillRect(0, y, W, ROW_H);
-        } else if (lane.kind === 'road') {
-          ctx.fillStyle = '#241d16';
-          ctx.fillRect(0, y, W, ROW_H);
-          // 车道线
-          ctx.fillStyle = 'rgba(255,255,255,0.15)';
-          ctx.fillRect(0, y + ROW_H - 2, W, 2);
-        } else {
-          ctx.fillStyle = '#12294a';
-          ctx.fillRect(0, y, W, ROW_H);
-          ctx.fillStyle = 'rgba(255,255,255,0.08)';
-          for (let x = 0; x < W; x += 24) ctx.fillRect(x + ((ri * 13) % 24), y + ROW_H - 2, 10, 2);
-        }
-      });
-      // 目标洞
-      for (let i = 0; i < 5; i++) {
+      // 渲染（静态背景 + 动态元素）
+      if (bgRef.current) ctx.drawImage(bgRef.current, 0, 0);
+      else {
+        ctx.fillStyle = '#0c1220';
+        ctx.fillRect(0, 0, W, H);
+      }
+      // 已激活目标洞（覆盖静态层的空洞）
+      g.goals.forEach((done, i) => {
+        if (!done) return;
         const gx = i * (W / 5) + W / 10 - 20;
-        ctx.fillStyle = g.goals[i] ? '#34d399' : '#3a2a10';
+        ctx.fillStyle = '#34d399';
         ctx.beginPath();
         ctx.arc(gx + 20, ROW_H / 2, 16, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = g.goals[i] ? '#6ee7b7' : '#6b4f1d';
+        ctx.strokeStyle = '#6ee7b7';
         ctx.lineWidth = 3;
         ctx.stroke();
-      }
+      });
       // 车
       g.lanes.forEach((lane, ri) => {
         if (lane.kind !== 'road') return;

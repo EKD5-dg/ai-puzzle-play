@@ -24,8 +24,8 @@ const MAP = [
   '#.................#',
   '#.##.#.#####.#.##.#',
   '#....#...#...#....#',
-  '####.### # ###.####',
-  '    #.#   P #.#    ',
+  '####.# ##### #.####',
+  '    #.  P  .#    ',
   '####.# ##=## #.####',
   '    .  #   #  .    ',
   '####.# ##### #.####',
@@ -55,13 +55,14 @@ export default function PacMan() {
 
   // 游戏状态（ref 供游戏循环读写）
   const gameRef = useRef({
-    player: { x: 9 * TILE + TILE / 2, y: 7.5 * TILE, dir: 'left' as string, nextDir: 'left' as string, speed: 2.6 },
-    ghosts: [] as Array<{ x: number; y: number; dir: string; color: string; mode: 'chase' | 'fright' | 'eyes'; timer: number }>,
+    player: { x: 9 * TILE + TILE / 2, y: 7.5 * TILE, dir: 'left' as string, nextDir: 'left' as string, speed: 2.6, invincible: 0 },
+    ghosts: [] as Array<{ x: number; y: number; dir: string; color: string; mode: 'chase' | 'fright' | 'eyes'; timer: number; delay: number }>,
     dots: 0,
     totalDots: 0,
     maze: [] as string[][],
     frightTimer: 0,
   });
+  const staticRef = useRef<HTMLCanvasElement | null>(null);
 
   const initMaze = useCallback((): string[][] => {
     const maze = MAP.map((row) => row.split(''));
@@ -73,18 +74,48 @@ export default function PacMan() {
     );
     gameRef.current.totalDots = total;
     gameRef.current.dots = total;
+    // 构建静态迷宫层（离屏 Canvas，每帧直接贴图免重绘）
+    const cv = document.createElement('canvas');
+    cv.width = COLS * TILE;
+    cv.height = ROWS * TILE;
+    const ctx = cv.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#0d0f1e';
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++) {
+          const ch = maze[r][c];
+          if (ch === '#') {
+            ctx.fillStyle = '#2a3f9e';
+            ctx.fillRect(c * TILE + 1, r * TILE + 1, TILE - 2, TILE - 2);
+            ctx.fillStyle = '#3f5cd0';
+            ctx.fillRect(c * TILE + 2, r * TILE + 2, TILE - 4, TILE - 4);
+          } else if (ch === '.') {
+            ctx.fillStyle = '#ffd54f';
+            ctx.beginPath();
+            ctx.arc(c * TILE + TILE / 2, r * TILE + TILE / 2, 3, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (ch === 'o') {
+            ctx.fillStyle = '#ffd54f';
+            ctx.beginPath();
+            ctx.arc(c * TILE + TILE / 2, r * TILE + TILE / 2, 7, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+    }
+    staticRef.current = cv;
     return maze;
   }, []);
 
   const startGame = useCallback(() => {
     const maze = initMaze();
     gameRef.current.maze = maze;
-    gameRef.current.player = { x: 9 * TILE + TILE / 2, y: 7.5 * TILE, dir: 'left', nextDir: 'left', speed: 2.6 };
+    gameRef.current.player = { x: 9 * TILE + TILE / 2, y: 7.5 * TILE, dir: 'left', nextDir: 'left', speed: 2.6, invincible: 150 };
     gameRef.current.ghosts = [
-      { x: 9 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[0], mode: 'chase', timer: 0 },
-      { x: 8 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[1], mode: 'chase', timer: 0 },
-      { x: 10 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[2], mode: 'chase', timer: 0 },
-      { x: 9 * TILE + TILE / 2, y: 9.5 * TILE, dir: 'up', color: GHOST_COLORS[3], mode: 'chase', timer: 0 },
+      { x: 9 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[0], mode: 'chase', timer: 0, delay: 90 },
+      { x: 8 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[1], mode: 'chase', timer: 0, delay: 180 },
+      { x: 10 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[2], mode: 'chase', timer: 0, delay: 270 },
+      { x: 9 * TILE + TILE / 2, y: 9.5 * TILE, dir: 'up', color: GHOST_COLORS[3], mode: 'chase', timer: 0, delay: 360 },
     ];
     gameRef.current.frightTimer = 0;
     setScore(0);
@@ -98,12 +129,9 @@ export default function PacMan() {
     const col = Math.floor(x / TILE);
     const row = Math.floor(y / TILE);
     if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return true;
-    if (maze[row][col] === '#') return true;
-    // 隧道（地图空白列）允许通行
-    if (maze[row][col] === ' ') {
-      return col !== 0 && col !== COLS - 1;
-    }
-    return false;
+    const ch = maze[row][col];
+    // '#' 墙、'=' 幽灵房墙体（玩家不可入）；其余（空格/豆子/能量豆/P）均可通行
+    return ch === '#' || ch === '=';
   }, []);
 
   // 主循环
@@ -144,6 +172,12 @@ export default function PacMan() {
       const cell = g.maze[row]?.[col];
       if (cell === '.' || cell === 'o') {
         g.maze[row][col] = ' ';
+        // 同步擦除静态层上的豆子
+        const sctx = staticRef.current?.getContext('2d');
+        if (sctx) {
+          sctx.fillStyle = '#0d0f1e';
+          sctx.fillRect(col * TILE, row * TILE, TILE, TILE);
+        }
         g.dots--;
         if (cell === '.') {
           setScore((s) => s + 10);
@@ -164,6 +198,11 @@ export default function PacMan() {
 
       // 幽灵移动（简单追逐：趋向玩家 + 随机扰动；恐惧时远离）
       g.ghosts.forEach((gh) => {
+        // 出房延迟：分批放出，避免开局围杀
+        if (gh.delay > 0) {
+          gh.delay--;
+          return;
+        }
         if (gh.mode === 'fright') {
           gh.timer++;
           if (gh.timer > g.frightTimer) {
@@ -212,7 +251,8 @@ export default function PacMan() {
         gh.y += vy * 2 * dt * 0.06;
       });
 
-      // 碰撞检测
+      // 碰撞检测（开局短暂无敌，幽灵可穿过）
+      if (p.invincible > 0) p.invincible--;
       for (const gh of g.ghosts) {
         const dist = Math.hypot(gh.x - p.x, gh.y - p.y);
         if (dist < TILE * 0.7) {
@@ -225,7 +265,7 @@ export default function PacMan() {
               gh.y = 9.5 * TILE;
               gh.mode = 'chase';
             }, 1200);
-          } else if (gh.mode !== 'eyes') {
+          } else if (gh.mode !== 'eyes' && p.invincible <= 0) {
             setLives((l) => {
               const nl = l - 1;
               if (nl <= 0) {
@@ -236,6 +276,7 @@ export default function PacMan() {
                 p.y = 7.5 * TILE;
                 p.dir = 'left';
                 p.nextDir = 'left';
+                p.invincible = 120;
                 g.ghosts.forEach((gg) => {
                   gg.x = 9 * TILE + TILE / 2;
                   gg.y = 8.5 * TILE;
@@ -249,33 +290,15 @@ export default function PacMan() {
         }
       }
 
-      // 渲染
+      // 渲染（静态层贴图 + 动态层）
       const cv = canvasRef.current;
       const ctx = cv?.getContext('2d');
       if (cv && ctx) {
-        ctx.fillStyle = '#0d0f1e';
-        ctx.fillRect(0, 0, cv.width, cv.height);
-        // 迷宫
-        for (let r = 0; r < ROWS; r++)
-          for (let c = 0; c < COLS; c++) {
-            const ch = g.maze[r][c];
-            if (ch === '#') {
-              ctx.fillStyle = '#2a3f9e';
-              ctx.fillRect(c * TILE + 1, r * TILE + 1, TILE - 2, TILE - 2);
-              ctx.fillStyle = '#3f5cd0';
-              ctx.fillRect(c * TILE + 2, r * TILE + 2, TILE - 4, TILE - 4);
-            } else if (ch === '.') {
-              ctx.fillStyle = '#ffd54f';
-              ctx.beginPath();
-              ctx.arc(c * TILE + TILE / 2, r * TILE + TILE / 2, 3, 0, Math.PI * 2);
-              ctx.fill();
-            } else if (ch === 'o') {
-              ctx.fillStyle = '#ffd54f';
-              ctx.beginPath();
-              ctx.arc(c * TILE + TILE / 2, r * TILE + TILE / 2, 7, 0, Math.PI * 2);
-              ctx.fill();
-            }
-          }
+        if (staticRef.current) ctx.drawImage(staticRef.current, 0, 0);
+        else {
+          ctx.fillStyle = '#0d0f1e';
+          ctx.fillRect(0, 0, cv.width, cv.height);
+        }
         // 幽灵
         g.ghosts.forEach((gh) => {
           if (gh.mode === 'eyes') {

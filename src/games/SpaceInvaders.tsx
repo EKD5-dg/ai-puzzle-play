@@ -46,6 +46,30 @@ export default function SpaceInvaders() {
     moveTimer: 0,
   });
 
+  // 静态背景层（黑底 + 预生成星星），每帧直接贴图
+  const bgRef = useRef<HTMLCanvasElement | null>(null);
+  if (!bgRef.current) {
+    const bg = document.createElement('canvas');
+    bg.width = W;
+    bg.height = H;
+    const bctx = bg.getContext('2d');
+    if (bctx) {
+      bctx.fillStyle = '#0a0c1c';
+      bctx.fillRect(0, 0, W, H);
+      // 预生成固定星星（种子随机一次）
+      let seed = 12345;
+      const rand = () => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed / 2147483648;
+      };
+      for (let i = 0; i < 40; i++) {
+        bctx.fillStyle = `rgba(255,255,255,${0.2 + rand() * 0.5})`;
+        bctx.fillRect(Math.floor(rand() * W), Math.floor(rand() * H), 2, 2);
+      }
+    }
+    bgRef.current = bg;
+  }
+
   const initLevel = useCallback((lv: number) => {
     const inv: Array<{ x: number; y: number; alive: boolean; type: number }> = [];
     for (let r = 0; r < 5; r++)
@@ -169,13 +193,11 @@ export default function SpaceInvaders() {
         return;
       }
 
-      // 渲染
-      ctx.fillStyle = '#0a0c1c';
-      ctx.fillRect(0, 0, W, H);
-      // 星星
-      for (let i = 0; i < 40; i++) {
-        ctx.fillStyle = `rgba(255,255,255,${0.2 + Math.random() * 0.5})`;
-        ctx.fillRect(((i * 97) % W), ((i * 53) % H), 2, 2);
+      // 渲染（背景静态层 + 动态元素）
+      if (bgRef.current) ctx.drawImage(bgRef.current, 0, 0);
+      else {
+        ctx.fillStyle = '#0a0c1c';
+        ctx.fillRect(0, 0, W, H);
       }
       // 外星人
       g.invaders.forEach((inv) => {
