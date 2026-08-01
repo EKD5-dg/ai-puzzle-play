@@ -1666,7 +1666,8 @@ code {
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(0 12px 26px rgba(0, 0, 0, 0.5));
-  animation: dqIdle 2.2s ease-in-out infinite;
+  transform-origin: bottom center;
+  animation: dqBreath 2.2s ease-in-out infinite;
 }
 
 .dq-hero.attack {
@@ -1701,7 +1702,19 @@ code {
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(0 12px 26px rgba(0, 0, 0, 0.5));
-  animation: dqIdle 2.4s ease-in-out infinite;
+  transform-origin: bottom center;
+  animation: dqBreath 2.4s ease-in-out infinite;
+}
+
+/* 待机呼吸：脚底固定，仅轻微缩放，保持同一水平线 */
+@keyframes dqBreath {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.025);
+  }
 }
 
 /* 镜像翻转（容器层，让侧身怪物面朝勇者；攻击动画在 canvas 上同步镜像） */
