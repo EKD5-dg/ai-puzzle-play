@@ -513,7 +513,7 @@ export default function DragonQuest() {
                   ))}
                 </div>
                 <div className="dq-scene-label">{sceneTheme(floor).label} · 第 {floor} 层</div>
-                <div className={`dq-hero ${heroAnim}`} style={{ ['--reach' as string]: `${reach}px` }}>
+                <div className={`dq-hero ${heroAnim} flip`} style={{ ['--reach' as string]: `${reach}px` }}>
                   <Portrait src={HERO_PORTRAIT} className="dq-hero-canvas" />
                   {heroAnim === 'attack' && <span className="dq-slash" aria-hidden />}
                 </div>

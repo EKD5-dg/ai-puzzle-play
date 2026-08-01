@@ -2099,6 +2099,20 @@ code {
   animation: dqSwing 0.38s ease;
 }
 
+/* 勇者镜像（立绘面朝右），攻击位移在镜像坐标系内反向 */
+.dq-hero.flip {
+  transform: scaleX(-1);
+}
+
+.dq-hero.flip.attack {
+  transform: scaleX(-1) translateX(calc(var(--reach, 96px) * -1)) scale(1.06);
+}
+
+.dq-hero.flip .dq-slash {
+  right: auto;
+  left: -26px;
+}
+
 .dq-hero.hurt {
   filter: brightness(1.7) sepia(1) hue-rotate(-50deg) saturate(3);
   animation: dqHitShake 0.3s ease;
