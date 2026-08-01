@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useLocalStorage } from '../core/useLocalStorage';
+import { useToast } from '../core/Toast';
+import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
 
 export const meta: GameMeta = {
@@ -147,8 +149,10 @@ export default function Game2048() {
   const [score, setScore] = useState(0);
   const [over, setOver] = useState(false);
   const [won, setWon] = useState(false);
+  const [scorePop, setScorePop] = useState(0); // 触发分数动画
   const best = useLocalStorage<number>(`best:${meta.id}`);
   const touchRef = useRef<{ x: number; y: number } | null>(null);
+  const { toast } = useToast();
 
   const doMove = useCallback(
     (dir: Dir) => {
@@ -156,13 +160,25 @@ export default function Game2048() {
         const { board: next, score: gained, moved } = moveBoard(prev, dir);
         if (!moved) return prev;
         const spawned = spawn(next);
-        setScore((s) => s + gained);
-        if (spawned.some((v) => v >= 2048)) setWon(true);
-        if (!canMove(spawned)) setOver(true);
+        if (gained > 0) {
+          sfx.merge();
+          setScore((s) => s + gained);
+          setScorePop((p) => p + 1);
+        }
+        if (spawned.some((v) => v >= 2048)) {
+          setWon(true);
+          sfx.win();
+          toast('达成 2048！继续冲击更高分吧', 'success');
+        }
+        if (!canMove(spawned)) {
+          setOver(true);
+          sfx.lose();
+          toast('没有可移动的格子了', 'info');
+        }
         return spawned;
       });
     },
-    [],
+    [toast],
   );
 
   useEffect(() => {
@@ -170,6 +186,7 @@ export default function Game2048() {
       const dir = DIR_KEYS[e.key];
       if (dir) {
         e.preventDefault();
+        sfx.move();
         doMove(dir);
       }
     };
@@ -178,8 +195,14 @@ export default function Game2048() {
   }, [doMove]);
 
   useEffect(() => {
-    if (score > 0) best.updateBest(score, (a, b) => a > b);
-  }, [score, best]);
+    if (score > 0) {
+      const isNew = best.updateBest(score, (a, b) => a > b);
+      if (isNew && score > 0) {
+        sfx.record();
+        toast(`新纪录！最高分 ${score}`, 'record');
+      }
+    }
+  }, [score, best, toast]);
 
   const restart = () => {
     setBoard(newBoard());
@@ -208,7 +231,7 @@ export default function Game2048() {
         <>
           <div className="stat-box">
             <span>分数</span>
-            <strong>{score}</strong>
+            <strong key={scorePop} className={scorePop > 0 ? 'score-pop' : ''}>{score}</strong>
           </div>
           <div className="stat-box">
             <span>{meta.bestScoreLabel}</span>

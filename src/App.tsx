@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { games, findGame } from './core/registry';
 import { useLocalStorage } from './core/useLocalStorage';
+import { isMuted, setMuted, sfx } from './core/sound';
 import type { GameMeta } from './core/types';
 
 /** 读取当前 hash 路由（如 #/game/game-2048） */
@@ -9,15 +10,22 @@ function routeFromHash(): string {
   return m ? m[1] : '';
 }
 
+const CATEGORIES = ['全部', '逻辑', '记忆', '策略', '反应', '经典'] as const;
+const DIFFICULTIES = ['全部', '简单', '中等', '困难'] as const;
+
 function GameCard({ meta }: { meta: GameMeta }) {
   const best = useLocalStorage<number>(`best:${meta.id}`);
+  const played = best.value !== null;
   return (
     <a href={`#/game/${meta.id}`} className="game-card">
-      <div className="game-card-icon">{meta.icon}</div>
+      <div className="game-card-icon" aria-hidden>
+        {meta.icon}
+      </div>
       <div className="game-card-info">
         <div className="game-card-title">
           <h3>{meta.title}</h3>
           <span className={`badge badge-${meta.difficulty}`}>{meta.difficulty}</span>
+          {played && <span className="played-dot" title="已游玩">✔</span>}
         </div>
         <p className="game-card-desc">{meta.description}</p>
         <div className="game-card-meta">
@@ -32,13 +40,17 @@ function GameCard({ meta }: { meta: GameMeta }) {
           </span>
         </div>
       </div>
-      <span className="game-card-play">开始 ▶</span>
+      <span className="game-card-play">{played ? '继续 ▶' : '开始 ▶'}</span>
     </a>
   );
 }
 
 export default function App() {
   const [currentId, setCurrentId] = useState(routeFromHash);
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('全部');
+  const [difficulty, setDifficulty] = useState<(typeof DIFFICULTIES)[number]>('全部');
+  const [soundOn, setSoundOn] = useState(!isMuted());
 
   useEffect(() => {
     const onHash = () => {
@@ -49,34 +61,129 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
+  // 大厅统计：已游玩 / 已通关（有最佳成绩）
+  const stats = useMemo(() => {
+    let played = 0;
+    let cleared = 0;
+    for (const g of games) {
+      try {
+        const v = localStorage.getItem(`pp:best:${g.meta.id}`);
+        if (v !== null) {
+          played++;
+          cleared++;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return { played, cleared };
+  }, [currentId]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return games.filter((g) => {
+      if (category !== '全部' && g.meta.category !== category) return false;
+      if (difficulty !== '全部' && g.meta.difficulty !== difficulty) return false;
+      if (q && !`${g.meta.title}${g.meta.description}${g.meta.tags.join('')}`.toLowerCase().includes(q))
+        return false;
+      return true;
+    });
+  }, [query, category, difficulty]);
+
   const current = findGame(currentId);
   const CurrentGame = current?.component;
 
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    setMuted(!next);
+    if (next) sfx.click();
+  };
+
   return (
     <div className="app">
+      <div className="bg-decor" aria-hidden>
+        <span className="blob blob-1" />
+        <span className="blob blob-2" />
+        <span className="blob blob-3" />
+      </div>
       {current && CurrentGame ? (
         <CurrentGame />
       ) : (
         <div className="lobby">
           <header className="lobby-header">
             <div className="logo">
-              <span className="logo-icon">🧩</span>
+              <span className="logo-icon" aria-hidden>
+                🧩
+              </span>
               <div>
                 <h1>PuzzlePlay 益智乐园</h1>
                 <p>六款经典益智游戏 · 一触即玩 · 成绩永久保存</p>
               </div>
             </div>
             <div className="lobby-stats">
-              <span className="chip chip-lg">{games.length} 款游戏</span>
-              <span className="chip chip-lg">🎮 全部免费</span>
+              <span className="chip chip-lg">
+                🎮 {games.length} 款游戏 · 已玩 {stats.played} · 通关 {stats.cleared}
+              </span>
+              <button
+                className={`btn sound-toggle ${soundOn ? 'on' : ''}`}
+                onClick={toggleSound}
+                title={soundOn ? '关闭音效' : '开启音效'}
+                aria-label={soundOn ? '关闭音效' : '开启音效'}
+              >
+                {soundOn ? '🔊' : '🔇'}
+              </button>
             </div>
           </header>
 
-          <div className="game-grid">
-            {games.map((g) => (
-              <GameCard key={g.meta.id} meta={g.meta} />
-            ))}
+          <div className="lobby-toolbar">
+            <div className="search-box">
+              <span aria-hidden>🔍</span>
+              <input
+                type="search"
+                placeholder="搜索游戏…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <div className="filter-row">
+              <div className="filter-group">
+                {CATEGORIES.map((c) => (
+                  <button
+                    key={c}
+                    className={`filter-chip ${category === c ? 'active' : ''}`}
+                    onClick={() => setCategory(c)}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+              <div className="filter-group">
+                {DIFFICULTIES.map((d) => (
+                  <button
+                    key={d}
+                    className={`filter-chip ${difficulty === d ? 'active' : ''}`}
+                    onClick={() => setDifficulty(d)}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
+
+          {filtered.length === 0 ? (
+            <div className="empty-state">
+              <span aria-hidden>🔍</span>
+              <p>没有找到匹配的游戏，换个关键词试试？</p>
+            </div>
+          ) : (
+            <div className="game-grid">
+              {filtered.map((g) => (
+                <GameCard key={g.meta.id} meta={g.meta} />
+              ))}
+            </div>
+          )}
 
           <footer className="lobby-footer">
             <h3>🛠 开发者指南：如何新增游戏？</h3>

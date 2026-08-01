@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useLocalStorage } from '../core/useLocalStorage';
+import { useToast } from '../core/Toast';
+import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
 
 export const meta: GameMeta = {
@@ -57,9 +59,11 @@ export default function MemoryMatch() {
   const [moves, setMoves] = useState(0);
   const [time, setTime] = useState(0);
   const [won, setWon] = useState(false);
+  const [mismatchIds, setMismatchIds] = useState<number[]>([]); // 配对失败的卡（抖动）
   const lockRef = useRef(false);
   const timerRef = useRef<number | null>(null);
   const best = useLocalStorage<number>(`best:${meta.id}`);
+  const { toast } = useToast();
   const matchedCount = deck.filter((c) => c.matched).length;
 
   // 计时（仅进行中）
@@ -80,14 +84,18 @@ export default function MemoryMatch() {
     const cardA = deck.find((c) => c.id === a);
     const cardB = deck.find((c) => c.id === b);
     if (cardA && cardB && cardA.emoji === cardB.emoji) {
+      sfx.match();
       setDeck((prev) =>
         prev.map((c) => (c.id === a || c.id === b ? { ...c, matched: true } : c)),
       );
       setFlipped([]);
       lockRef.current = false;
     } else {
+      sfx.mismatch();
+      setMismatchIds([a, b]);
       window.setTimeout(() => {
         setFlipped([]);
+        setMismatchIds([]);
         lockRef.current = false;
       }, 900);
     }
@@ -97,9 +105,14 @@ export default function MemoryMatch() {
   useEffect(() => {
     if (deck.length > 0 && deck.every((c) => c.matched) && !won) {
       setWon(true);
-      best.updateBest(moves, (a, b) => a < b);
+      sfx.win();
+      const isNew = best.updateBest(moves, (a, b) => a < b);
+      if (isNew) {
+        sfx.record();
+        toast(`新纪录！${moves} 步完成`, 'record');
+      }
     }
-  }, [deck, won, moves, best]);
+  }, [deck, won, moves, best, toast]);
 
   const startNew = (idx: number) => {
     setLevelIdx(idx);
@@ -115,6 +128,7 @@ export default function MemoryMatch() {
     if (lockRef.current || won || card.matched) return;
     if (flipped.includes(card.id)) return;
     if (flipped.length >= 2) return;
+    sfx.flip();
     setFlipped((prev) => [...prev, card.id]);
     if (flipped.length === 1) setMoves((m) => m + 1);
   };
@@ -169,7 +183,7 @@ export default function MemoryMatch() {
             return (
               <button
                 key={card.id}
-                className={`memory-card ${isUp ? 'up' : ''}`}
+                className={`memory-card ${isUp ? 'up' : ''} ${card.matched ? 'matched' : ''} ${mismatchIds.includes(card.id) ? 'mismatch' : ''}`}
                 onClick={() => flip(card)}
                 disabled={isUp || lockRef.current || won}
                 aria-label={isUp ? card.emoji : '未翻开的牌'}

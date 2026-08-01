@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useLocalStorage } from '../core/useLocalStorage';
+import { useToast } from '../core/Toast';
+import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
 
 export const meta: GameMeta = {
@@ -106,8 +108,10 @@ export default function Minesweeper() {
   const [status, setStatus] = useState<'playing' | 'won' | 'lost'>('playing');
   const [time, setTime] = useState(0);
   const [firstClick, setFirstClick] = useState(false);
+  const [shake, setShake] = useState(0); // 震屏触发器
   const timerRef = useRef<number | null>(null);
   const best = useLocalStorage<number>(`best:${meta.id}`);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (status === 'playing') {
@@ -120,8 +124,21 @@ export default function Minesweeper() {
 
   // 通关时记录最佳时间
   useEffect(() => {
-    if (status === 'won' && time > 0) best.updateBest(time, (a, b) => a < b);
-  }, [status, time, best]);
+    if (status === 'won') {
+      sfx.win();
+      if (time > 0) {
+        const isNew = best.updateBest(time, (a, b) => a < b);
+        if (isNew) {
+          sfx.record();
+          toast(`新纪录！最快 ${time}s 通关`, 'record');
+        }
+      }
+    }
+    if (status === 'lost') {
+      sfx.lose();
+      toast('踩到地雷了，再来一次！', 'info');
+    }
+  }, [status, time, best, toast]);
 
   const startNew = useCallback(
     (idx: number) => {
@@ -147,11 +164,13 @@ export default function Minesweeper() {
         const exploded = g.map((row) => row.map((x) => ({ ...x })));
         exploded.forEach((row) => row.forEach((x) => { if (x.mine && x.state === 'hidden') x.state = 'revealed'; }));
         setStatus('lost');
+        setShake((s) => s + 1);
         return exploded;
       }
       const revealed = floodReveal(g, r, c);
       const allSafe = revealed.flat().filter((x) => !x.mine).every((x) => x.state === 'revealed');
       if (allSafe) setStatus('won');
+      else if (revealed[r][c].adjacent === 0) sfx.move();
       return revealed;
     });
     if (!firstClick) setFirstClick(true);
@@ -216,7 +235,8 @@ export default function Minesweeper() {
           </div>
         )}
         <div
-          className="mines-grid"
+          key={shake}
+          className={`mines-grid ${shake > 0 ? 'shake' : ''}`}
           style={{
             gridTemplateColumns: `repeat(${level.cols}, ${cellSize}px)`,
           }}

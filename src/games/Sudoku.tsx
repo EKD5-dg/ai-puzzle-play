@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useLocalStorage } from '../core/useLocalStorage';
+import { useToast } from '../core/Toast';
+import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
 
 export const meta: GameMeta = {
@@ -153,6 +155,7 @@ export default function Sudoku() {
   const [time, setTime] = useState(0);
   const [won, setWon] = useState(false);
   const best = useLocalStorage<number>(`best:${meta.id}`);
+  const { toast } = useToast();
 
   const startNew = (idx: number) => {
     const { puzzle: p, solution: s } = generatePuzzle(LEVELS[idx].blanks);
@@ -182,20 +185,54 @@ export default function Sudoku() {
   const inputNumber = (v: number) => {
     if (won || selected === null) return;
     if (puzzle[selected] !== 0) return;
+    if (v !== 0 && v === current[selected]) return;
     const next = [...current];
     next[selected] = v;
     if (v !== 0 && v !== solution[selected]) {
       setMistakes((m) => m + 1);
+      sfx.mismatch();
+    } else if (v !== 0) {
+      sfx.flip();
     }
     setCurrent(next);
     // 完成判定
     if (next.every((x) => x !== 0)) {
       if (next.every((x, i) => x === solution[i])) {
         setWon(true);
-        best.updateBest(time, (a, b) => a < b);
+        sfx.win();
+        const isNew = best.updateBest(time, (a, b) => a < b);
+        if (isNew) {
+          sfx.record();
+          toast(`新纪录！${time}s 完成`, 'record');
+        } else {
+          toast('数独完成，太棒了！', 'success');
+        }
       }
     }
   };
+
+  // 键盘支持：1-9 填入、Delete/Backspace 清除、方向键移动选中
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (won) return;
+      if (e.key >= '1' && e.key <= '9') {
+        inputNumber(Number(e.key));
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        inputNumber(0);
+      } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && selected !== null) {
+        e.preventDefault();
+        const r = Math.floor(selected / 9);
+        const c = selected % 9;
+        const nr =
+          e.key === 'ArrowUp' ? (r - 1 + 9) % 9 : e.key === 'ArrowDown' ? (r + 1) % 9 : r;
+        const nc =
+          e.key === 'ArrowLeft' ? (c - 1 + 9) % 9 : e.key === 'ArrowRight' ? (c + 1) % 9 : c;
+        setSelected(nr * 9 + nc);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }); // 每次渲染都重新绑定，确保闭包内 state 最新
 
   const sameNumberCells = useMemo(() => {
     if (selected === null) return new Set<number>();

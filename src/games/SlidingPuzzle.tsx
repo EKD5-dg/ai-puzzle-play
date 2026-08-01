@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useLocalStorage } from '../core/useLocalStorage';
+import { useToast } from '../core/Toast';
+import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
 
 export const meta: GameMeta = {
@@ -56,6 +58,7 @@ export default function SlidingPuzzle() {
   const [moves, setMoves] = useState(0);
   const [won, setWon] = useState(false);
   const best = useLocalStorage<number>(`best:${meta.id}`);
+  const { toast } = useToast();
 
   const startNew = (idx: number) => {
     setSizeIdx(idx);
@@ -73,19 +76,29 @@ export default function SlidingPuzzle() {
     const c2 = blank % size;
     const adjacent = Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1;
     if (!adjacent) return;
+    sfx.move();
     const next = [...board];
     [next[index], next[blank]] = [next[blank], next[index]];
     setBoard(next);
     setMoves((m) => m + 1);
-    if (isSolved(next)) setWon(true);
+    if (isSolved(next)) {
+      setWon(true);
+      sfx.win();
+      const isNew = best.updateBest(moves + 1, (a, b) => a < b);
+      if (isNew) {
+        sfx.record();
+        toast(`新纪录！${moves + 1} 步完成`, 'record');
+      }
+    }
   };
 
-  // 通关后记录最佳步数
+  // 通关后记录最佳步数（兜底，move 内已处理）
   useEffect(() => {
     if (won && moves > 0) best.updateBest(moves, (a, b) => a < b);
   }, [won, moves, best]);
 
   const tileSize = size === 5 ? 72 : size === 4 ? 92 : 108;
+  const pad = 3; // 内边距偏移
 
   return (
     <GameShell
@@ -124,22 +137,25 @@ export default function SlidingPuzzle() {
         )}
         <div
           className="sliding-board"
-          style={{
-            gridTemplateColumns: `repeat(${size}, ${tileSize}px)`,
-            width: size * tileSize,
-          }}
+          style={{ width: size * tileSize + pad * 2, height: size * tileSize + pad * 2 }}
         >
-          {board.map((v, i) => (
-            <button
-              key={i}
-              className={`sliding-tile ${v === 0 ? 'blank' : ''} ${won ? 'done' : ''}`}
-              style={{ width: tileSize - 6, height: tileSize - 6, fontSize: tileSize * 0.38 }}
-              onClick={() => move(i)}
-              disabled={v === 0}
-            >
-              {v === 0 ? '' : v}
-            </button>
-          ))}
+          {board.map((v, i) =>
+            v !== 0 ? (
+              <button
+                key={v}
+                className={`sliding-tile ${won ? 'done' : ''}`}
+                style={{
+                  width: tileSize - 6,
+                  height: tileSize - 6,
+                  fontSize: tileSize * 0.38,
+                  transform: `translate(${(i % size) * tileSize + pad}px, ${Math.floor(i / size) * tileSize + pad}px)`,
+                }}
+                onClick={() => move(i)}
+              >
+                {v}
+              </button>
+            ) : null,
+          )}
         </div>
         <p className="hint">点击空格旁边的数字方块进行滑动</p>
       </div>

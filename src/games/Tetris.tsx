@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useLocalStorage } from '../core/useLocalStorage';
+import { useToast } from '../core/Toast';
+import { sfx } from '../core/sound';
 import type { GameMeta } from '../core/types';
 
 export const meta: GameMeta = {
@@ -108,10 +110,12 @@ export default function Tetris() {
   const [level, setLevel] = useState(1);
   const [gameOver, setGameOver] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [flash, setFlash] = useState(0); // 消行闪光触发器
   const bagRef = useRef<string[]>(makeBag());
   const boardRef = useRef(board);
   const activeRef = useRef(active);
   const best = useLocalStorage<number>(`best:${meta.id}`);
+  const { toast } = useToast();
   const gameOverRef = useRef(false);
 
   boardRef.current = board;
@@ -144,6 +148,12 @@ export default function Tetris() {
     boardRef.current = cleared;
     setBoard(cleared);
     setLines((l) => l + n);
+    if (n > 0) {
+      sfx.clear();
+      setFlash((f) => f + 1);
+    } else {
+      sfx.drop();
+    }
     setScore((s) => s + LINE_SCORES[n] * level);
     if (n > 0) setLevel((lv) => Math.min(15, lv + Math.floor(n / 2)));
     const nt = pullNext();
@@ -152,10 +162,12 @@ export default function Tetris() {
     if (!next) {
       setGameOver(true);
       gameOverRef.current = true;
+      sfx.lose();
+      toast('游戏结束，再战一局！', 'info');
     } else {
       setActive(next);
     }
-  }, [level, pullNext, spawn]);
+  }, [level, pullNext, spawn, toast]);
 
   // 初始化
   useEffect(() => {
@@ -172,6 +184,7 @@ export default function Tetris() {
       const y = cur.y + dy;
       if (collides(boardRef.current, cur.shape, x, y)) return false;
       setActive({ ...cur, x, y });
+      sfx.move();
       return true;
     },
     [paused],
@@ -185,6 +198,7 @@ export default function Tetris() {
     for (const dx of [0, -1, 1, -2, 2]) {
       if (!collides(boardRef.current, rotated, cur.x + dx, cur.y)) {
         setActive({ ...cur, shape: rotated, x: cur.x + dx });
+        sfx.flip();
         return;
       }
     }
@@ -248,8 +262,14 @@ export default function Tetris() {
 
   // 记录最高分
   useEffect(() => {
-    if (score > 0) best.updateBest(score, (a, b) => a > b);
-  }, [score, best]);
+    if (score > 0) {
+      const isNew = best.updateBest(score, (a, b) => a > b);
+      if (isNew) {
+        sfx.record();
+        toast(`新纪录！最高分 ${score}`, 'record');
+      }
+    }
+  }, [score, best, toast]);
 
   const restart = () => {
     bagRef.current = makeBag();
@@ -305,7 +325,8 @@ export default function Tetris() {
       <div className="tetris">
         <div className="tetris-main">
           <div
-            className="tetris-board"
+            className={`tetris-board ${flash > 0 ? 'flash' : ''}`}
+            key={flash}
             style={{ gridTemplateColumns: `repeat(${COLS}, 30px)` }}
           >
             {display.map((row, r) =>
