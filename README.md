@@ -100,6 +100,19 @@ export const games: GameDefinition[] = [
 
 ## ☁️ 部署（Cloudflare Pages）
 
+### 自动部署（推荐）
+
+推送代码到 `main` 分支后，GitHub Actions 会自动构建并发布，无需任何手动操作。
+
+首次配置：在 GitHub 仓库 **Settings → Secrets and variables → Actions** 添加两个密钥：
+
+| 密钥 | 值 |
+|------|-----|
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token（需 Pages Edit 权限） |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账号 ID（dash 首页 URL 中可查） |
+
+### 手动部署
+
 ```bash
 npm run build
 npx wrangler pages deploy dist --project-name=puzzle-play --branch=main
