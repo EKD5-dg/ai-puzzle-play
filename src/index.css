@@ -1586,7 +1586,7 @@ code {
   background: linear-gradient(180deg, #200a0a 0%, #4a1414 55%, #140404 100%);
 }
 
-/* 顶部光晕 + 地面纹理 */
+/* 顶部光晕 + 地面纹理 + 像素点阵 */
 .dq-scene::before {
   content: '';
   position: absolute;
@@ -1598,7 +1598,9 @@ code {
       0deg,
       rgba(0, 0, 0, 0.16) 0 2px,
       transparent 2px 7px
-    );
+    ),
+    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1.5px);
+  background-size: 100% 100%, 100% 100%, 5px 5px;
   pointer-events: none;
 }
 
@@ -1662,6 +1664,7 @@ code {
   width: auto;
   max-width: 220px;
   object-fit: contain;
+  image-rendering: pixelated;
   filter: drop-shadow(0 12px 26px rgba(0, 0, 0, 0.5));
   animation: dqIdle 2.2s ease-in-out infinite;
 }
@@ -1696,6 +1699,7 @@ code {
   width: auto;
   max-width: 240px;
   object-fit: contain;
+  image-rendering: pixelated;
   filter: drop-shadow(0 12px 26px rgba(0, 0, 0, 0.5));
   animation: dqIdle 2.4s ease-in-out infinite;
 }
