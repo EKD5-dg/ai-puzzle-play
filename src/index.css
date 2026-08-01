@@ -1972,17 +1972,18 @@ code {
 
 .taiko-songs {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 4px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 }
 
 .taiko-song {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  min-width: 220px;
-  padding: 12px 24px;
+  gap: 2px;
+  min-width: 130px;
+  padding: 10px 14px;
 }
 
 .taiko-song-name {

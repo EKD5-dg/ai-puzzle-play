@@ -318,7 +318,7 @@ export default function Taiko() {
           {status === 'select' && (
             <div className="arcade-overlay">
               <h2>🥁 太鼓达人</h2>
-              <p>按 F/J 敲红鼓（咚）· D/K 敲蓝鼓（咔）· 音符到达判定圈时击打</p>
+              <p>F/J 咚（红）· D/K 咔（蓝）· 音符到圈时击打</p>
               <div className="taiko-songs">
                 {SONGS.map((s, i) => (
                   <button key={s.name} className="btn taiko-song" onClick={() => startSong(i)}>
