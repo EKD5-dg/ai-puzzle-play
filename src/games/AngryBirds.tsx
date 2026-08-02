@@ -10,7 +10,7 @@ const W = 480;
 const H = 400;
 const GROUND = 350;
 const GRAVITY = 0.3;
-const PULL_K = 0.14;
+const PULL_K = 0.18;
 const MAX_PULL = 95;
 const SLING_X = 95;
 const SLING_Y = 300;
@@ -531,8 +531,8 @@ export default function AngryBirds() {
     ctx.moveTo(SLING_X - 2, SLING_Y - 46);
     ctx.lineTo(SLING_X - 18, SLING_Y - 58);
     ctx.stroke();
-    // 后皮筋（后叉 → 鸟）
-    if (gg.bird.state !== 'gone') {
+    // 后皮筋（后叉 → 鸟）：仅鸟在弹弓上时绘制，发射后断开
+    if (gg.bird.state === 'idle') {
       ctx.strokeStyle = '#4a1f0d';
       ctx.lineWidth = 4;
       ctx.beginPath();
@@ -544,8 +544,8 @@ export default function AngryBirds() {
 
   function drawSlingFront(ctx: CanvasRenderingContext2D, gg: GameState) {
     ctx.lineCap = 'round';
-    // 前皮筋（鸟 → 前叉）
-    if (gg.bird.state !== 'gone') {
+    // 前皮筋（鸟 → 前叉）：仅鸟在弹弓上时绘制，发射后断开
+    if (gg.bird.state === 'idle') {
       ctx.strokeStyle = '#4a1f0d';
       ctx.lineWidth = 4;
       ctx.beginPath();
@@ -757,9 +757,7 @@ export default function AngryBirds() {
       px = (px / len) * MAX_PULL;
       py = (py / len) * MAX_PULL;
     }
-    // 只能向弹弓后方/下方拉（发射方向始终朝右前上方）
-    if (px > 20) px = 20;
-    if (py < -20) py = -20;
+    // 允许任意方向拖拽（发射方向为拖拽反方向，与真实弹弓一致）
     // 不能拖到地面以下：否则发射瞬间即触发落地分支，竖直速度被清零只剩贴地滚动
     const MAX_PY = GROUND - BIRD_R - (SLING_Y - BIRD_R);
     if (py > MAX_PY) py = MAX_PY;
