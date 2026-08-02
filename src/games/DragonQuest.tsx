@@ -520,7 +520,7 @@ export default function DragonQuest() {
                 </div>
                 <div className="dq-scene-label">{sceneTheme(floor).label} · 第 {floor} 层</div>
                 <div className={`dq-hero ${heroAnim} flip`} style={{ ['--reach' as string]: `${reach}px` }}>
-                  <Portrait src={HERO_PORTRAIT} className="dq-hero-canvas" />
+                  <Portrait src={HERO_PORTRAIT} className="dq-hero-canvas" fallback="⚔️" />
                   {heroAnim === 'attack' && <span className="dq-slash" aria-hidden />}
                 </div>
                 <div
@@ -530,6 +530,7 @@ export default function DragonQuest() {
                   <Portrait
                     src={MONSTER_PORTRAITS[monster.name]?.src ?? MONSTER_PORTRAITS['史莱姆'].src}
                     className="dq-monster-canvas"
+                    fallback={monster.emoji}
                   />
                 </div>
                 {floaters.map((f) => (

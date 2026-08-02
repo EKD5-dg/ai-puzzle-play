@@ -2633,6 +2633,20 @@ code {
   animation: dqIdle 2.2s ease-in-out infinite;
 }
 
+/* 立绘加载失败时的 emoji 占位（避免破图） */
+.portrait-fallback {
+  width: 120px;
+  height: 180px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 46px;
+  line-height: 1;
+  opacity: 0.75;
+}
+
 @keyframes dqSwing {
   0% {
     transform: translateX(0) rotate(0deg);

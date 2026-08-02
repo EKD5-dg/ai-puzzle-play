@@ -5,6 +5,10 @@ import { useEffect, useState } from 'react';
  * 处理流程：抠除背景 → 裁剪角色区域 → 降采样为低分辨率像素 → 输出 dataURL。
  * 显示时配合 image-rendering: pixelated 放大，呈现真实复古像素质感。
  */
+
+/** 模块级内存缓存：同一立绘只下载+处理一次，切换楼层/再次战斗秒开 */
+const dataUrlCache = new Map<string, string>();
+
 interface PortraitProps {
   src: string;
   className?: string;
@@ -12,13 +16,25 @@ interface PortraitProps {
   tolerance?: number;
   /** 降采样后的像素高度（宽按比例，正方形画布） */
   pixelSize?: number;
+  /** 图片加载失败时显示的占位 emoji（避免浏览器破图） */
+  fallback?: string;
 }
 
-export function Portrait({ src, className, tolerance = 4500, pixelSize = 64 }: PortraitProps) {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
+export function Portrait({ src, className, tolerance = 4500, pixelSize = 64, fallback = '❓' }: PortraitProps) {
+  const [dataUrl, setDataUrl] = useState<string | null>(() => dataUrlCache.get(src) ?? null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    // 已有缓存（含初始化命中）：无需重新下载与处理
+    const cached = dataUrlCache.get(src);
+    if (cached) {
+      setDataUrl(cached);
+      return;
+    }
     let cancelled = false;
+    // 清除上一个 src 的立绘，避免切换怪物时旧图残留
+    setDataUrl(null);
+    setFailed(false);
     const img = new Image();
     img.onload = () => {
       try {
@@ -82,13 +98,19 @@ export function Portrait({ src, className, tolerance = 4500, pixelSize = 64 }: P
         pctx.imageSmoothingEnabled = true; // 降采样需要平滑，像素感由显示端放大产生
         pctx.drawImage(c, minX, minY, bw, bh, px, py, pw, ph);
 
-        if (!cancelled) setDataUrl(p.toDataURL('image/png'));
+        if (!cancelled) {
+          const url = p.toDataURL('image/png');
+          dataUrlCache.set(src, url);
+          setDataUrl(url);
+        }
       } catch {
+        // 处理失败：回退原图（至少能看到角色）
         if (!cancelled) setDataUrl(src);
       }
     };
     img.onerror = () => {
-      if (!cancelled) setDataUrl(src);
+      // 加载失败：显示 emoji 占位，避免显示破图
+      if (!cancelled) setFailed(true);
     };
     img.src = src;
     return () => {
@@ -96,6 +118,7 @@ export function Portrait({ src, className, tolerance = 4500, pixelSize = 64 }: P
     };
   }, [src, tolerance, pixelSize]);
 
+  if (failed) return <div className="portrait-fallback" aria-hidden>{fallback}</div>;
   if (!dataUrl) return <div className="portrait-loading" aria-hidden />;
   return <img src={dataUrl} className={className} alt="" draggable={false} />;
 }
