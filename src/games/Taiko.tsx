@@ -4,18 +4,9 @@ import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { TouchButtons } from '../core/TouchControls';
-import type { GameMeta } from '../core/types';
+import { metaTaiko } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'taiko',
-  title: '太鼓达人',
-  description: '跟随鼓点敲击！咚（红）咔（蓝）！',
-  icon: '🥁',
-  difficulty: '中等',
-  category: '反应',
-  tags: ['日系', '节奏'],
-  bestScoreLabel: '最高分',
-};
+
 
 const W = 520;
 const H = 220;
@@ -71,7 +62,7 @@ export default function Taiko() {
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
   const [result, setResult] = useState<{ good: number; ok: number; miss: number }>({ good: 0, ok: 0, miss: 0 });
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaTaiko.id);
   const { toast } = useToast();
 
   const gameRef = useRef({
@@ -290,7 +281,7 @@ export default function Taiko() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaTaiko}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -307,7 +298,7 @@ export default function Taiko() {
             <strong>{result.good}/{result.ok}/{result.miss}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaTaiko.bestScoreLabel}</span>
             <strong>{best.value ?? 0}</strong>
           </div>
         </>

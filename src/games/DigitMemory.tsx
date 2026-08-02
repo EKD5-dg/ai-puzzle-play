@@ -3,18 +3,9 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { metaDigit } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'digit-memory',
-  title: '数字记忆',
-  description: '记住数字序列，按顺序点出来！',
-  icon: '🔢',
-  difficulty: '简单',
-  category: '记忆',
-  tags: ['数字', '训练'],
-  bestScoreLabel: '最高位数',
-};
+
 
 function genNumber(len: number): string {
   // 首位不为 0
@@ -28,7 +19,7 @@ export default function DigitMemory() {
   const [answer, setAnswer] = useState('');
   const [input, setInput] = useState('');
   const [len, setLen] = useState(3);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaDigit.id);
   const { toast } = useToast();
 
   const startGame = useCallback(() => {
@@ -96,7 +87,7 @@ export default function DigitMemory() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaDigit}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -109,7 +100,7 @@ export default function DigitMemory() {
             <strong>{input.length}/{answer.length}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaDigit.bestScoreLabel}</span>
             <strong>{best.value ?? '--'}</strong>
           </div>
         </>

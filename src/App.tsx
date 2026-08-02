@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { games, findGame } from './core/registry';
 import { useLocalStorage } from './core/useLocalStorage';
 import { isMuted, setMuted, sfx } from './core/sound';
@@ -218,7 +218,9 @@ export default function App() {
         <span className="blob blob-3" />
       </div>
       {current && CurrentGame ? (
-        <CurrentGame />
+        <Suspense fallback={<div className="game-loading">⏳ 加载中…</div>}>
+          <CurrentGame />
+        </Suspense>
       ) : (
         <div className="lobby">
           <header className="lobby-header">

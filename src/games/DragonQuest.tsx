@@ -5,7 +5,7 @@ import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { Portrait } from './Portrait';
 import { sceneTheme } from './pixelart';
-import type { GameMeta } from '../core/types';
+import { metaDragon } from '../core/gameMetas';
 
 /** 角色立绘素材映射（AI 生成，深蓝底自动抠图） */
 const PORTRAITS = '/portraits';
@@ -26,16 +26,7 @@ const MONSTER_PORTRAITS: Record<string, PortraitRef> = {
   恶龙: { src: `${PORTRAITS}/dragon.png`, height: 215 },
 };
 
-export const meta: GameMeta = {
-  id: 'dragon-quest',
-  title: '勇者斗恶龙',
-  description: '挑战十层迷宫，升级变强，击败恶龙救出公主！',
-  icon: '🐉',
-  difficulty: '中等',
-  category: '策略',
-  tags: ['RPG', '回合制'],
-  bestScoreLabel: '最高层数',
-};
+
 
 const FLOORS = 10;
 const SAVE_KEY = 'dq:save';
@@ -151,7 +142,7 @@ export default function DragonQuest() {
   const [monsterAnim, setMonsterAnim] = useState<'idle' | 'attack' | 'hit' | 'dead'>('idle');
   const [floaters, setFloaters] = useState<Array<{ id: number; text: string; kind: 'hero' | 'monster' }>>([]);
   const [saveExists, setSaveExists] = useState(loadSave() !== null);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaDragon.id);
   const { toast } = useToast();
 
   /** 伤害飘字（monster=怪物受击，hero=勇者受击） */
@@ -445,7 +436,7 @@ export default function DragonQuest() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaDragon}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -458,7 +449,7 @@ export default function DragonQuest() {
             <strong>Lv.{player.level}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaDragon.bestScoreLabel}</span>
             <strong>{best.value ?? '--'}</strong>
           </div>
         </>

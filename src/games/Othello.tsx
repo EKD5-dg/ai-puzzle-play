@@ -2,18 +2,9 @@ import { useEffect, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { metaOthello } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'othello',
-  title: '黑白棋',
-  description: '翻转棋盘，夹住对方棋子！最后棋子多者胜！',
-  icon: '⚪',
-  difficulty: '困难',
-  category: '策略',
-  tags: ['翻转棋', 'AI'],
-  bestScoreLabel: '最高胜率',
-};
+
 
 const SIZE = 8;
 type Cell = 0 | 1 | 2; // 0 空 1 黑(玩家) 2 白(AI)
@@ -225,7 +216,7 @@ export default function Othello() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaOthello}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>

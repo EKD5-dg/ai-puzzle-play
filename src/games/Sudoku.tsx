@@ -3,18 +3,9 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { metaSudoku } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'sudoku',
-  title: '数独',
-  description: '每行、每列、每宫填入 1-9 不重复！',
-  icon: '🔢',
-  difficulty: '困难',
-  category: '逻辑',
-  tags: ['数字', '推理'],
-  bestScoreLabel: '最快完成',
-};
+
 
 type Cell = number; // 0 = 空
 type Grid = Cell[]; // 81 格
@@ -154,7 +145,7 @@ export default function Sudoku() {
   const [showMistakes, setShowMistakes] = useState(true);
   const [time, setTime] = useState(0);
   const [won, setWon] = useState(false);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaSudoku.id);
   const { toast } = useToast();
 
   const startNew = (idx: number) => {
@@ -264,7 +255,7 @@ export default function Sudoku() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaSudoku}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -277,7 +268,7 @@ export default function Sudoku() {
             <strong>{mistakes}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaSudoku.bestScoreLabel}</span>
             <strong>{best.value ? `${best.value}s` : '--'}</strong>
           </div>
           <button className="btn btn-primary" onClick={() => startNew(levelIdx)}>

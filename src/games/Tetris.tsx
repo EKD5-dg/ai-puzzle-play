@@ -3,18 +3,9 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { metaTetris } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'tetris',
-  title: '俄罗斯方块',
-  description: '旋转、下落、消行，挑战你的极限反应！',
-  icon: '🧱',
-  difficulty: '困难',
-  category: '反应',
-  tags: ['反应', '经典'],
-  bestScoreLabel: '最高分',
-};
+
 
 const COLS = 10;
 const ROWS = 20;
@@ -114,7 +105,7 @@ export default function Tetris() {
   const bagRef = useRef<string[]>(makeBag());
   const boardRef = useRef(board);
   const activeRef = useRef(active);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaTetris.id);
   const { toast } = useToast();
   const gameOverRef = useRef(false);
 
@@ -299,7 +290,7 @@ export default function Tetris() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaTetris}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -316,7 +307,7 @@ export default function Tetris() {
             <strong>{level}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaTetris.bestScoreLabel}</span>
             <strong>{best.value ?? 0}</strong>
           </div>
         </>

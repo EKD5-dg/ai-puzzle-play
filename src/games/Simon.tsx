@@ -3,18 +3,9 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { metaSimon } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'simon',
-  title: '西蒙说',
-  description: '记住四色灯的序列，按顺序复述！',
-  icon: '🎛️',
-  difficulty: '中等',
-  category: '记忆',
-  tags: ['序列', '经典'],
-  bestScoreLabel: '最高轮数',
-};
+
 
 const COLORS = [
   { name: '红', color: '#e53935', glow: '#ff8a80' },
@@ -32,7 +23,7 @@ export default function Simon() {
   const [litIdx, setLitIdx] = useState(-1); // 当前高亮的键
   const [round, setRound] = useState(1);
   const [bestRound, setBestRound] = useState(0);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaSimon.id);
   const { toast } = useToast();
   const timers = useRef<number[]>([]);
 
@@ -111,7 +102,7 @@ export default function Simon() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaSimon}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -124,7 +115,7 @@ export default function Simon() {
             <strong>{phase === 'input' ? `${inputIdx}/${sequence.length}` : phase === 'show' ? '观看中' : '-'}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaSimon.bestScoreLabel}</span>
             <strong>{best.value ?? '--'}</strong>
           </div>
         </>

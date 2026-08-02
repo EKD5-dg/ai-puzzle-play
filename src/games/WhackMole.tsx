@@ -3,18 +3,9 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { metaMole } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'whack-mole',
-  title: '打地鼠',
-  description: '快速敲击冒头的地鼠，30 秒限时挑战！',
-  icon: '🔨',
-  difficulty: '简单',
-  category: '经典',
-  tags: ['日系', '街机'],
-  bestScoreLabel: '最高分',
-};
+
 
 const HOLES = 9;
 
@@ -35,7 +26,7 @@ export default function WhackMole() {
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
   const [moles, setMoles] = useState<MoleState[]>(emptyMoles);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaMole.id);
   const { toast } = useToast();
   const comboRef = useRef(0);
   const maxComboRef = useRef(0);
@@ -143,7 +134,7 @@ export default function WhackMole() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaMole}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -160,7 +151,7 @@ export default function WhackMole() {
             <strong>{combo > 1 ? `${combo}×` : '-'}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaMole.bestScoreLabel}</span>
             <strong>{best.value ?? 0}</strong>
           </div>
           <button className="btn btn-primary" onClick={start}>

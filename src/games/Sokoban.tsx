@@ -4,18 +4,9 @@ import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { TouchDpad } from '../core/TouchControls';
-import type { GameMeta } from '../core/types';
+import { metaSokoban } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'sokoban',
-  title: '推箱子',
-  description: '把箱子推到目标点，规划路线步步为营！',
-  icon: '📦',
-  difficulty: '中等',
-  category: '逻辑',
-  tags: ['推箱', '关卡'],
-  bestScoreLabel: '最少步数',
-};
+
 
 /** 关卡（#墙 $箱子 .目标 @人 *箱子在目标 +人在目标）已用 BFS 求解器验证可解且箱子互不相邻 */
 const LEVELS: string[][] = [
@@ -68,7 +59,7 @@ export default function Sokoban() {
   const [pushes, setPushes] = useState(0);
   const [history, setHistory] = useState<LevelState[]>([]);
   const [won, setWon] = useState(false);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaSokoban.id);
   const { toast } = useToast();
 
   const totalMoves = (lv: LevelState) => {
@@ -223,7 +214,7 @@ export default function Sokoban() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaSokoban}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -240,7 +231,7 @@ export default function Sokoban() {
             <strong>{totalBoxes}/{totalGoals}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaSokoban.bestScoreLabel}</span>
             <strong>{best.value ?? '--'}</strong>
           </div>
           <button className="btn btn-primary" onClick={() => loadLevel(levelIdx)}>

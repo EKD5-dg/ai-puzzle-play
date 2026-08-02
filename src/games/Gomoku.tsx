@@ -2,18 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { metaGomoku } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'gomoku',
-  title: '五子棋',
-  description: '黑白对弈，五子连珠！挑战电脑 AI！',
-  icon: '⚫',
-  difficulty: '中等',
-  category: '策略',
-  tags: ['对战', 'AI'],
-  bestScoreLabel: '最多连胜',
-};
+
 
 const SIZE = 15;
 type Cell = 0 | 1 | 2; // 0 空 1 黑(玩家) 2 白(AI)
@@ -218,7 +209,7 @@ export default function Gomoku() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaGomoku}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>

@@ -4,18 +4,9 @@ import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { TouchDpad } from '../core/TouchControls';
-import type { GameMeta } from '../core/types';
+import { metaPacMan } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'pac-man',
-  title: '吃豆人',
-  description: '吃掉所有豆子，躲避幽灵追击！',
-  icon: '👻',
-  difficulty: '中等',
-  category: '经典',
-  tags: ['日系', '街机'],
-  bestScoreLabel: '最高分',
-};
+
 
 /** 迷宫地图：#墙 .豆 o能量豆 空格 */
 const MAP = [
@@ -51,7 +42,7 @@ export default function PacMan() {
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [level, setLevel] = useState(1);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaPacMan.id);
   const { toast } = useToast();
 
   // 游戏状态（ref 供游戏循环读写）
@@ -406,7 +397,7 @@ export default function PacMan() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaPacMan}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -419,7 +410,7 @@ export default function PacMan() {
             <strong>{'❤'.repeat(Math.max(0, lives)) || '--'}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaPacMan.bestScoreLabel}</span>
             <strong>{best.value ?? 0}</strong>
           </div>
         </>

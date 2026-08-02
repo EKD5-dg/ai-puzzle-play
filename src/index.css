@@ -2633,6 +2633,17 @@ code {
   animation: dqIdle 2.2s ease-in-out infinite;
 }
 
+/* 游戏代码块懒加载时的占位提示 */
+.game-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.75);
+  letter-spacing: 0.1em;
+}
+
 /* 立绘加载失败时的 emoji 占位（避免破图） */
 .portrait-fallback {
   width: 120px;

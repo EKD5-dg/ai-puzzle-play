@@ -3,18 +3,9 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { metaSliding } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'sliding-puzzle',
-  title: '数字华容道',
-  description: '滑动方块，按顺序还原数字！',
-  icon: '🧩',
-  difficulty: '中等',
-  category: '逻辑',
-  tags: ['滑块', '排序'],
-  bestScoreLabel: '最少步数',
-};
+
 
 const LEVELS = [
   { label: '3×3', size: 3 },
@@ -57,7 +48,7 @@ export default function SlidingPuzzle() {
   const [board, setBoard] = useState<Board>(() => shuffleBoard(LEVELS[1].size));
   const [moves, setMoves] = useState(0);
   const [won, setWon] = useState(false);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaSliding.id);
   const { toast } = useToast();
 
   const startNew = (idx: number) => {
@@ -102,7 +93,7 @@ export default function SlidingPuzzle() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaSliding}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -111,7 +102,7 @@ export default function SlidingPuzzle() {
             <strong>{moves}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaSliding.bestScoreLabel}</span>
             <strong>{best.value ?? '--'}</strong>
           </div>
           <button className="btn btn-primary" onClick={() => startNew(sizeIdx)}>

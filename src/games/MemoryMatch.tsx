@@ -3,18 +3,9 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { metaMemory } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'memory-match',
-  title: '记忆翻牌',
-  description: '记住图案的位置，翻出所有配对！',
-  icon: '🃏',
-  difficulty: '简单',
-  category: '记忆',
-  tags: ['配对', '记忆'],
-  bestScoreLabel: '最少步数',
-};
+
 
 const EMOJIS = ['🍎', '🍌', '🍇', '🍉', '🍒', '🍓', '🥝', '🍍', '🥑', '🍑', '🥥', '🍋'];
 
@@ -62,7 +53,7 @@ export default function MemoryMatch() {
   const [mismatchIds, setMismatchIds] = useState<number[]>([]); // 配对失败的卡（抖动）
   const lockRef = useRef(false);
   const timerRef = useRef<number | null>(null);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaMemory.id);
   const { toast } = useToast();
   const matchedCount = deck.filter((c) => c.matched).length;
 
@@ -138,7 +129,7 @@ export default function MemoryMatch() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaMemory}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -151,7 +142,7 @@ export default function MemoryMatch() {
             <strong>{time}s</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaMemory.bestScoreLabel}</span>
             <strong>{best.value ?? '--'}</strong>
           </div>
         </>

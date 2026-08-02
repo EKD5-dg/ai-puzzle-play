@@ -3,18 +3,9 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { metaSnake } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'snake',
-  title: '贪吃蛇',
-  description: '吃食物变长，避开墙壁和自己！',
-  icon: '🐍',
-  difficulty: '简单',
-  category: '经典',
-  tags: ['经典', '街机'],
-  bestScoreLabel: '最高分',
-};
+
 
 const COLS = 20;
 const ROWS = 20;
@@ -60,7 +51,7 @@ export default function Snake() {
   const [score, setScore] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [status, setStatus] = useState<'ready' | 'playing' | 'paused' | 'over'>('ready');
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaSnake.id);
   const { toast } = useToast();
   const dirRef = useRef<Dir>('right');
   const snakeRef = useRef(snake);
@@ -179,7 +170,7 @@ export default function Snake() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaSnake}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -196,7 +187,7 @@ export default function Snake() {
             <strong>{speed}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaSnake.bestScoreLabel}</span>
             <strong>{best.value ?? 0}</strong>
           </div>
         </>

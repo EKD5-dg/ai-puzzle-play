@@ -6,7 +6,7 @@
  * 2. 在 src/core/registry.tsx 中注册一条 GameDefinition；
  * 3. 首页卡片、路由、统计将全部自动生效。
  */
-import type { ComponentType } from 'react';
+import type { ComponentType, LazyExoticComponent } from 'react';
 
 /** 游戏难度分级 */
 export type Difficulty = '简单' | '中等' | '困难';
@@ -37,8 +37,8 @@ export interface GameMeta {
 /** 完整游戏定义 */
 export interface GameDefinition {
   meta: GameMeta;
-  /** 游戏组件（无 props，自行管理状态） */
-  component: ComponentType;
+  /** 游戏组件（无 props，自行管理状态），懒加载以按需分包 */
+  component: LazyExoticComponent<ComponentType>;
 }
 
 /** 游戏状态钩子返回的存储接口 */

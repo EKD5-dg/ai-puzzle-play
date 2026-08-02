@@ -3,18 +3,9 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { meta2048 } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'game-2048',
-  title: '2048',
-  description: '合并相同数字，冲击 2048！',
-  icon: '🔢',
-  difficulty: '中等',
-  category: '逻辑',
-  tags: ['数字', '合并'],
-  bestScoreLabel: '最高分',
-};
+
 
 const SIZE = 4;
 const CELLS = SIZE * SIZE;
@@ -150,7 +141,7 @@ export default function Game2048() {
   const [over, setOver] = useState(false);
   const [won, setWon] = useState(false);
   const [scorePop, setScorePop] = useState(0); // 触发分数动画
-  const best = useBestScore(meta.id);
+  const best = useBestScore(meta2048.id);
   const touchRef = useRef<{ x: number; y: number } | null>(null);
   const { toast } = useToast();
 
@@ -225,7 +216,7 @@ export default function Game2048() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={meta2048}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -234,7 +225,7 @@ export default function Game2048() {
             <strong key={scorePop} className={scorePop > 0 ? 'score-pop' : ''}>{score}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{meta2048.bestScoreLabel}</span>
             <strong>{best.value ?? 0}</strong>
           </div>
           <button className="btn btn-primary" onClick={restart}>

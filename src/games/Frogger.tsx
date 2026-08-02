@@ -4,18 +4,9 @@ import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { TouchDpad } from '../core/TouchControls';
-import type { GameMeta } from '../core/types';
+import { metaFrogger } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'frogger',
-  title: '青蛙过河',
-  description: '躲过车流、踏着浮木，把青蛙送回家！',
-  icon: '🐸',
-  difficulty: '中等',
-  category: '经典',
-  tags: ['日系', '躲避'],
-  bestScoreLabel: '最高分',
-};
+
 
 const W = 480;
 const H = 440;
@@ -68,7 +59,7 @@ export default function Frogger() {
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [level, setLevel] = useState(1);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaFrogger.id);
   const { toast } = useToast();
 
   const gameRef = useRef({
@@ -341,7 +332,7 @@ export default function Frogger() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaFrogger}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -358,7 +349,7 @@ export default function Frogger() {
             <strong>{gameRef.current.goals.filter(Boolean).length}/5</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaFrogger.bestScoreLabel}</span>
             <strong>{best.value ?? 0}</strong>
           </div>
         </>

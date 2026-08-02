@@ -3,18 +3,9 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { metaMines } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'minesweeper',
-  title: '扫雷',
-  description: '推理地雷位置，点击所有安全格！',
-  icon: '💣',
-  difficulty: '中等',
-  category: '逻辑',
-  tags: ['推理', '经典'],
-  bestScoreLabel: '最快通关',
-};
+
 
 type CellState = 'hidden' | 'revealed' | 'flagged';
 
@@ -110,7 +101,7 @@ export default function Minesweeper() {
   const [firstClick, setFirstClick] = useState(false);
   const [shake, setShake] = useState(0); // 震屏触发器
   const timerRef = useRef<number | null>(null);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaMines.id);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -215,7 +206,7 @@ export default function Minesweeper() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaMines}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -228,7 +219,7 @@ export default function Minesweeper() {
             <strong>{time}s</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaMines.bestScoreLabel}</span>
             <strong>{best.value ? `${best.value}s` : '--'}</strong>
           </div>
         </>

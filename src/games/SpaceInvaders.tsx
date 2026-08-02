@@ -4,18 +4,9 @@ import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { TouchButtons } from '../core/TouchControls';
-import type { GameMeta } from '../core/types';
+import { metaInvaders } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'space-invaders',
-  title: '太空侵略者',
-  description: '击落外星人军团，保卫地球！',
-  icon: '👾',
-  difficulty: '中等',
-  category: '经典',
-  tags: ['日系', '射击'],
-  bestScoreLabel: '最高分',
-};
+
 
 const W = 480;
 const H = 420;
@@ -32,7 +23,7 @@ export default function SpaceInvaders() {
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
   const [lives, setLives] = useState(3);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaInvaders.id);
   const { toast } = useToast();
   const keysRef = useRef({ left: false, right: false });
 
@@ -285,7 +276,7 @@ export default function SpaceInvaders() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaInvaders}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -298,7 +289,7 @@ export default function SpaceInvaders() {
             <strong>{'❤'.repeat(Math.max(0, lives)) || '--'}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaInvaders.bestScoreLabel}</span>
             <strong>{best.value ?? 0}</strong>
           </div>
         </>

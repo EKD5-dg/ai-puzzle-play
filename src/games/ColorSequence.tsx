@@ -3,18 +3,9 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import type { GameMeta } from '../core/types';
+import { metaColorSeq } from '../core/gameMetas';
 
-export const meta: GameMeta = {
-  id: 'color-sequence',
-  title: '颜色序列',
-  description: '记住颜色块的闪烁顺序！',
-  icon: '🎨',
-  difficulty: '简单',
-  category: '记忆',
-  tags: ['序列', '颜色'],
-  bestScoreLabel: '最高轮数',
-};
+
 
 const COLORS = [
   { name: '红', color: '#e53935' },
@@ -33,7 +24,7 @@ export default function ColorSequence() {
   const [inputIdx, setInputIdx] = useState(0);
   const [litIdx, setLitIdx] = useState(-1);
   const [round, setRound] = useState(1);
-  const best = useBestScore(meta.id);
+  const best = useBestScore(metaColorSeq.id);
   const { toast } = useToast();
   const timers = useRef<number[]>([]);
 
@@ -103,7 +94,7 @@ export default function ColorSequence() {
 
   return (
     <GameShell
-      meta={meta}
+      meta={metaColorSeq}
       onBack={() => (window.location.hash = '#/')}
       stats={
         <>
@@ -116,7 +107,7 @@ export default function ColorSequence() {
             <strong>{phase === 'input' ? `${inputIdx}/${sequence.length}` : phase === 'show' ? '观看中' : '-'}</strong>
           </div>
           <div className="stat-box">
-            <span>{meta.bestScoreLabel}</span>
+            <span>{metaColorSeq.bestScoreLabel}</span>
             <strong>{best.value ?? '--'}</strong>
           </div>
         </>
