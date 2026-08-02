@@ -21,7 +21,7 @@ const MONSTER_PORTRAITS: Record<string, PortraitRef> = {
   史莱姆: { src: `${PORTRAITS}/slime.png`, height: 120 },
   骷髅兵: { src: `${PORTRAITS}/skeleton.png`, height: 155, flip: true },
   僵尸: { src: `${PORTRAITS}/zombie.png`, height: 160, flip: true },
-  暗影幽魂: { src: `${PORTRAITS}/ghost.png`, height: 135 },
+  暗影幽魂: { src: `${PORTRAITS}/ghost.png`, height: 150 },
   火焰魔: { src: `${PORTRAITS}/firedemon.png`, height: 190 },
   恶龙: { src: `${PORTRAITS}/dragon.png`, height: 215 },
 };
