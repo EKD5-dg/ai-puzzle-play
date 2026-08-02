@@ -213,3 +213,14 @@ export const metaColorSeq: GameMeta = {
   bestScoreLabel: '最高轮数',
 };
 
+export const metaBirds: GameMeta = {
+  id: 'angry-birds',
+  title: '愤怒的小鸟',
+  description: '拉弹弓发射小鸟，砸毁猪猪的堡垒！',
+  icon: '🐦',
+  difficulty: '中等',
+  category: '经典',
+  tags: ['物理', '弹射'],
+  bestScoreLabel: '最高关卡',
+};
+

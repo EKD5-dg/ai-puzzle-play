@@ -2788,3 +2788,5 @@ code {
     font-size: 22px;
   }
 }
+
+/* ============ 愤怒的小鸟 ============ */.ab { display: flex; flex-direction: column; align-items: center; gap: 10px; }.ab-canvas { display: block; width: 100%; max-width: 560px; height: auto; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }.ab-overlay { border-radius: var(--radius); }

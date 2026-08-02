@@ -20,6 +20,7 @@ import {
   metaSimon,
   metaDigit,
   metaColorSeq,
+  metaBirds,
 } from './gameMetas';
 
 /**
@@ -49,6 +50,7 @@ export const games: GameDefinition[] = [
   { meta: metaSimon, component: lazy(() => import('../games/Simon')) },
   { meta: metaDigit, component: lazy(() => import('../games/DigitMemory')) },
   { meta: metaColorSeq, component: lazy(() => import('../games/ColorSequence')) },
+  { meta: metaBirds, component: lazy(() => import('../games/AngryBirds')) },
 ];
 
 /** 按 id 查找游戏 */
