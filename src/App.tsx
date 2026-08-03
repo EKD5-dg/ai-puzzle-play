@@ -2,7 +2,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { games, findGame } from './core/registry';
 import { useLocalStorage } from './core/useLocalStorage';
 import { isMuted, setMuted, sfx } from './core/sound';
-import { getSyncCode, setSyncCode, generateSyncCode, createPair, joinPair } from './core/sync';
+import { getSyncCode, setSyncCode, generateSyncCode, createPair, joinPair, isBetterScore } from './core/sync';
 import type { GameMeta } from './core/types';
 import { DonateWidget } from './core/DonateWidget';
 import { AdSlot } from './core/AdSlot';
@@ -58,6 +58,13 @@ export default function App() {
   const [syncCode, setSyncCodeState] = useState(getSyncCode());
   const [syncInput, setSyncInput] = useState('');
   const [syncMsg, setSyncMsg] = useState('');
+  const [syncErr, setSyncErr] = useState(false);
+
+  /** 统一设置提示消息（err=true 时红色展示） */
+  const showSyncMsg = (text: string, err = false) => {
+    setSyncMsg(text);
+    setSyncErr(err);
+  };
 
   useEffect(() => {
     const onHash = () => {
@@ -110,27 +117,27 @@ export default function App() {
   const joinSync = async () => {
     const code = syncInput.trim().toUpperCase();
     if (!/^[A-Z0-9]{6}$/.test(code)) {
-      setSyncMsg('请输入 6 位同步码（大写字母/数字）');
+      showSyncMsg('请输入 6 位同步码（大写字母/数字）', true);
       return;
     }
     // 校验配对码有效性（5 分钟有效期）
     const pair = await joinPair(code);
     if (pair === 'expired') {
-      setSyncMsg('⚠️ 同步码已过期（生成后 5 分钟内有效），请让对方重新生成');
+      showSyncMsg('⚠️ 同步码已过期（生成后 5 分钟内有效），请让对方重新生成', true);
       return;
     }
     if (pair === 'invalid') {
-      setSyncMsg('⚠️ 同步码不存在，请确认对方已生成同步码');
+      showSyncMsg('⚠️ 同步码不存在，请确认对方已生成同步码', true);
       return;
     }
     if (pair === 'error') {
-      setSyncMsg('连接云端失败（离线？），请稍后重试');
+      showSyncMsg('连接云端失败（离线？），请稍后重试', true);
       return;
     }
     setSyncCode(code);
     setSyncCodeState(code);
     setSyncInput('');
-    setSyncMsg(`已加入同步码 ${code}，正在拉取云端成绩…`);
+    showSyncMsg(`已加入同步码 ${code}，正在拉取云端成绩…`);
     sfx.merge();
     // 拉取并合并全部游戏成绩到本地
     try {
@@ -141,15 +148,17 @@ export default function App() {
       for (const g of games) {
         const cv = cloud[g.meta.id];
         if (cv == null) continue;
-        const lv = Number(localStorage.getItem(`pp:best:${g.meta.id}`));
-        if (Number.isNaN(lv) || cv > lv) {
-          localStorage.setItem(`pp:best:${g.meta.id}`, String(cv));
+        const raw = localStorage.getItem(`pp:best:${g.meta.id}`);
+        const lv = raw === null ? null : Number(raw);
+        // 按各游戏比较方向合并（步数/时间类取更小值）
+        if (lv === null || Number.isNaN(lv) || isBetterScore(g.meta.id, cv, lv)) {
+          localStorage.setItem(`pp:best:${g.meta.id}`, JSON.stringify(cv));
           merged++;
         }
       }
-      setSyncMsg(merged > 0 ? `同步完成！合并了 ${merged} 条云端成绩` : '已连接，云端与本地一致');
+      showSyncMsg(merged > 0 ? `同步完成！合并了 ${merged} 条云端成绩` : '已连接，云端与本地一致');
     } catch {
-      setSyncMsg('连接云端失败（离线？），稍后自动重试');
+      showSyncMsg('连接云端失败（离线？），稍后自动重试', true);
     }
   };
 
@@ -158,19 +167,19 @@ export default function App() {
     // 云端登记配对（5 分钟有效）
     const created = await createPair(code);
     if (!created) {
-      setSyncMsg('⚠️ 需要联网生成同步码，请检查网络后重试');
+      showSyncMsg('⚠️ 需要联网生成同步码，请检查网络后重试', true);
       return;
     }
     setSyncCode(code);
     setSyncCodeState(code);
-    setSyncMsg(`已生成同步码 ${code}（5 分钟内有效），在另一台设备输入即可同步`);
+    showSyncMsg(`已生成同步码 ${code}（5 分钟内有效），在另一台设备输入即可同步`);
     sfx.record();
   };
 
   const disconnectSync = () => {
     setSyncCode(null);
     setSyncCodeState(null);
-    setSyncMsg('已断开云同步');
+    showSyncMsg('已断开云同步');
   };
 
   /** 重新生成同步码：自动把旧码云端成绩 + 本地成绩迁移到新码 */
@@ -179,7 +188,7 @@ export default function App() {
     const newCode = generateSyncCode();
     const created = await createPair(newCode);
     if (!created) {
-      setSyncMsg('⚠️ 需要联网生成同步码，请检查网络后重试');
+      showSyncMsg('⚠️ 需要联网生成同步码，请检查网络后重试', true);
       return;
     }
     // 1. 拉取旧码云端成绩
@@ -191,24 +200,29 @@ export default function App() {
     } catch {
       /* 旧码云端不可达则跳过 */
     }
-    // 2. 合并本地成绩
+    // 2. 合并本地成绩（按各游戏比较方向取最优）
     for (const g of games) {
-      const lv = Number(localStorage.getItem(`pp:best:${g.meta.id}`));
-      if (!Number.isNaN(lv) && lv > 0) merged[g.meta.id] = Math.max(merged[g.meta.id] ?? 0, lv);
+      const raw = localStorage.getItem(`pp:best:${g.meta.id}`);
+      if (raw === null) continue;
+      const lv = Number(raw);
+      if (Number.isNaN(lv) || lv <= 0) continue;
+      const cur = merged[g.meta.id];
+      if (cur == null || isBetterScore(g.meta.id, lv, cur)) merged[g.meta.id] = lv;
     }
     // 3. 写入新码
+    const lowerBetter = games.filter((g) => !g.meta.higherIsBetter).map((g) => g.meta.id);
     try {
       await fetch('https://puzzle-play.pages.dev/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: newCode, scores: merged }),
+        body: JSON.stringify({ code: newCode, scores: merged, lowerBetter }),
       });
     } catch {
       /* ignore */
     }
     setSyncCode(newCode);
     setSyncCodeState(newCode);
-    setSyncMsg(`已生成新同步码 ${newCode}（5 分钟内有效），旧码成绩已迁移`);
+    showSyncMsg(`已生成新同步码 ${newCode}（5 分钟内有效），旧码成绩已迁移`);
     sfx.record();
   };
 
@@ -334,6 +348,9 @@ export default function App() {
           {syncOpen && (
             <div className="sync-modal-mask" onClick={() => setSyncOpen(false)}>
               <div className="sync-modal" onClick={(e) => e.stopPropagation()}>
+                <button className="sync-close" onClick={() => setSyncOpen(false)} aria-label="关闭">
+                  ✕
+                </button>
                 <h3>☁ 成绩云同步</h3>
                 <p className="sync-desc">同步码连接您的所有设备，成绩自动合并（取最高）。</p>
                 {syncCode ? (
@@ -352,6 +369,7 @@ export default function App() {
                     <input
                       value={syncInput}
                       onChange={(e) => setSyncInput(e.target.value.toUpperCase())}
+                      onKeyDown={(e) => e.key === 'Enter' && joinSync()}
                       placeholder="输入 6 位同步码"
                       maxLength={6}
                     />
@@ -365,7 +383,7 @@ export default function App() {
                     ✨ 生成新同步码（在另一台设备输入）
                   </button>
                 )}
-                {syncMsg && <p className="sync-msg">{syncMsg}</p>}
+                {syncMsg && <p className={`sync-msg ${syncErr ? 'err' : ''}`}>{syncMsg}</p>}
               </div>
             </div>
           )}

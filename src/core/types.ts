@@ -32,6 +32,8 @@ export interface GameMeta {
   tags: string[];
   /** 最佳成绩的展示文案，如 "最佳分数" / "最快时间"，用于首页与游戏页统计 */
   bestScoreLabel: string;
+  /** 成绩比较方向：true=越大越好（分数/轮数），false=越小越好（步数/时间） */
+  higherIsBetter: boolean;
 }
 
 /** 完整游戏定义 */

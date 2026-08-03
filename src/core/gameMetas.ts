@@ -13,6 +13,7 @@ export const meta2048: GameMeta = {
   category: '逻辑',
   tags: ['数字', '合并'],
   bestScoreLabel: '最高分',
+  higherIsBetter: true,
 };
 
 export const metaMines: GameMeta = {
@@ -24,6 +25,7 @@ export const metaMines: GameMeta = {
   category: '逻辑',
   tags: ['推理', '经典'],
   bestScoreLabel: '最快通关',
+  higherIsBetter: false,
 };
 
 export const metaMemory: GameMeta = {
@@ -35,6 +37,7 @@ export const metaMemory: GameMeta = {
   category: '记忆',
   tags: ['配对', '记忆'],
   bestScoreLabel: '最少步数',
+  higherIsBetter: false,
 };
 
 export const metaSliding: GameMeta = {
@@ -46,6 +49,7 @@ export const metaSliding: GameMeta = {
   category: '逻辑',
   tags: ['滑块', '排序'],
   bestScoreLabel: '最少步数',
+  higherIsBetter: false,
 };
 
 export const metaSudoku: GameMeta = {
@@ -57,6 +61,7 @@ export const metaSudoku: GameMeta = {
   category: '逻辑',
   tags: ['数字', '推理'],
   bestScoreLabel: '最快完成',
+  higherIsBetter: false,
 };
 
 export const metaTetris: GameMeta = {
@@ -68,6 +73,7 @@ export const metaTetris: GameMeta = {
   category: '反应',
   tags: ['反应', '经典'],
   bestScoreLabel: '最高分',
+  higherIsBetter: true,
 };
 
 export const metaDragon: GameMeta = {
@@ -79,6 +85,7 @@ export const metaDragon: GameMeta = {
   category: '策略',
   tags: ['RPG', '回合制'],
   bestScoreLabel: '最高层数',
+  higherIsBetter: true,
 };
 
 export const metaSokoban: GameMeta = {
@@ -90,6 +97,7 @@ export const metaSokoban: GameMeta = {
   category: '逻辑',
   tags: ['推箱', '关卡'],
   bestScoreLabel: '最少步数',
+  higherIsBetter: false,
 };
 
 export const metaSnake: GameMeta = {
@@ -101,6 +109,7 @@ export const metaSnake: GameMeta = {
   category: '经典',
   tags: ['经典', '街机'],
   bestScoreLabel: '最高分',
+  higherIsBetter: true,
 };
 
 export const metaGomoku: GameMeta = {
@@ -112,6 +121,7 @@ export const metaGomoku: GameMeta = {
   category: '策略',
   tags: ['对战', 'AI'],
   bestScoreLabel: '最多连胜',
+  higherIsBetter: true,
 };
 
 export const metaOthello: GameMeta = {
@@ -123,6 +133,7 @@ export const metaOthello: GameMeta = {
   category: '策略',
   tags: ['翻转棋', 'AI'],
   bestScoreLabel: '最高胜率',
+  higherIsBetter: true,
 };
 
 export const metaPacMan: GameMeta = {
@@ -134,6 +145,7 @@ export const metaPacMan: GameMeta = {
   category: '经典',
   tags: ['日系', '街机'],
   bestScoreLabel: '最高分',
+  higherIsBetter: true,
 };
 
 export const metaInvaders: GameMeta = {
@@ -145,6 +157,7 @@ export const metaInvaders: GameMeta = {
   category: '经典',
   tags: ['日系', '射击'],
   bestScoreLabel: '最高分',
+  higherIsBetter: true,
 };
 
 export const metaFrogger: GameMeta = {
@@ -156,6 +169,7 @@ export const metaFrogger: GameMeta = {
   category: '经典',
   tags: ['日系', '躲避'],
   bestScoreLabel: '最高分',
+  higherIsBetter: true,
 };
 
 export const metaMole: GameMeta = {
@@ -167,6 +181,7 @@ export const metaMole: GameMeta = {
   category: '经典',
   tags: ['日系', '街机'],
   bestScoreLabel: '最高分',
+  higherIsBetter: true,
 };
 
 export const metaTaiko: GameMeta = {
@@ -178,6 +193,7 @@ export const metaTaiko: GameMeta = {
   category: '反应',
   tags: ['日系', '节奏'],
   bestScoreLabel: '最高分',
+  higherIsBetter: true,
 };
 
 export const metaSimon: GameMeta = {
@@ -189,6 +205,7 @@ export const metaSimon: GameMeta = {
   category: '记忆',
   tags: ['序列', '经典'],
   bestScoreLabel: '最高轮数',
+  higherIsBetter: true,
 };
 
 export const metaDigit: GameMeta = {
@@ -200,6 +217,7 @@ export const metaDigit: GameMeta = {
   category: '记忆',
   tags: ['数字', '训练'],
   bestScoreLabel: '最高位数',
+  higherIsBetter: true,
 };
 
 export const metaColorSeq: GameMeta = {
@@ -211,6 +229,7 @@ export const metaColorSeq: GameMeta = {
   category: '记忆',
   tags: ['序列', '颜色'],
   bestScoreLabel: '最高轮数',
+  higherIsBetter: true,
 };
 
 export const metaBirds: GameMeta = {
@@ -222,5 +241,6 @@ export const metaBirds: GameMeta = {
   category: '经典',
   tags: ['物理', '弹射'],
   bestScoreLabel: '最高关卡',
+  higherIsBetter: true,
 };
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { useLocalStorage } from './useLocalStorage';
+import { games } from './registry';
 
 /**
  * 跨设备成绩云同步（Cloudflare Pages Functions + KV）
@@ -8,6 +9,16 @@ import { useLocalStorage } from './useLocalStorage';
 const API = 'https://puzzle-play.pages.dev/api/sync';
 const PAIR_API = 'https://puzzle-play.pages.dev/api/pair';
 const CODE_KEY = 'pp:sync-code';
+
+/** gameId → 成绩比较方向（部分游戏成绩越小越好，如步数/时间） */
+const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
+  games.map((g) => [g.meta.id, g.meta.higherIsBetter]),
+);
+
+/** 按游戏比较方向判断 next 是否优于 prev */
+export function isBetterScore(gameId: string, next: number, prev: number): boolean {
+  return HIGHER_IS_BETTER[gameId] === false ? next < prev : next > prev;
+}
 
 export function getSyncCode(): string | null {
   try {
@@ -41,11 +52,11 @@ async function fetchCloud(code: string): Promise<Record<string, number>> {
   return data.scores ?? {};
 }
 
-async function pushCloud(code: string, scores: Record<string, number>): Promise<void> {
+async function pushCloud(code: string, scores: Record<string, number>, lowerBetter: string[] = []): Promise<void> {
   await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, scores }),
+    body: JSON.stringify({ code, scores, lowerBetter }),
   });
 }
 
@@ -87,7 +98,7 @@ export function useBestScore(gameId: string) {
     local.set(v);
   };
 
-  // 挂载时从云端拉取并合并（云端更大则覆盖本地）
+  // 挂载时从云端拉取并合并（云端更优才覆盖本地）
   useEffect(() => {
     const code = getSyncCode();
     if (!code) return;
@@ -97,7 +108,10 @@ export function useBestScore(gameId: string) {
         if (cancelled) return;
         const cloudBest = cloud[gameId];
         if (cloudBest == null) return;
-        setLocal(cloudBest);
+        const localBest = local.value;
+        if (localBest == null || isBetterScore(gameId, cloudBest, localBest)) {
+          setLocal(cloudBest);
+        }
       })
       .catch(() => {
         /* 离线时静默 */
@@ -114,7 +128,8 @@ export function useBestScore(gameId: string) {
       if (isNew) {
         const code = getSyncCode();
         if (code) {
-          pushCloud(code, { [gameId]: next }).catch(() => {
+          const lower = HIGHER_IS_BETTER[gameId] === false ? [gameId] : [];
+          pushCloud(code, { [gameId]: next }, lower).catch(() => {
             /* 云端失败不影响本地 */
           });
         }

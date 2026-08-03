@@ -1,6 +1,6 @@
 // PuzzlePlay 成绩云同步 API（Pages Functions + KV）
 // GET  /api/sync?code=XXXXXX  → 拉取该码下全部成绩
-// POST /api/sync { code, scores: { gameId: number } } → 合并写入（取最大值）
+// POST /api/sync { code, scores: { gameId: number }, lowerBetter?: string[] } → 合并写入（取最优值）
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -44,12 +44,21 @@ export async function onRequestPost({ request, env }) {
   if (!codeValid(code) || !scores || typeof scores !== 'object') {
     return new Response(JSON.stringify({ error: 'invalid payload' }), { status: 400, headers: CORS_HEADERS });
   }
+  // 部分游戏（步数/时间类）成绩越小越好，由客户端声明
+  const lowerBetter = new Set(Array.isArray(body.lowerBetter) ? body.lowerBetter : []);
   const writes = [];
   for (const [gameId, value] of Object.entries(scores)) {
     if (typeof value !== 'number' || value <= 0) continue;
     const key = `score:${code}:${gameId}`;
     const existing = await env.SYNC_KV.get(key);
-    const merged = Math.max(Number(existing || 0), value);
+    let merged;
+    if (existing === null) {
+      merged = value;
+    } else if (lowerBetter.has(gameId)) {
+      merged = Math.min(Number(existing), value);
+    } else {
+      merged = Math.max(Number(existing), value);
+    }
     writes.push(env.SYNC_KV.put(key, String(merged)));
   }
   await Promise.all(writes);
