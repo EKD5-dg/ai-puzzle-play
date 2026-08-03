@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { games, findGame } from './core/registry';
-import { useLocalStorage } from './core/useLocalStorage';
+import { useLocalStorage, notifyScoresUpdated } from './core/useLocalStorage';
 import { isMuted, setMuted, sfx } from './core/sound';
 import { getSyncCode, setSyncCode, generateSyncCode, createPair, joinPair, isBetterScore } from './core/sync';
 import type { GameMeta } from './core/types';
@@ -93,7 +93,7 @@ export default function App() {
       }
     }
     return { played, cleared };
-  }, [currentId]);
+  }, [currentId, syncVersion]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -159,7 +159,8 @@ export default function App() {
         }
       }
       showSyncMsg(merged > 0 ? `同步完成！合并了 ${merged} 条云端成绩` : '已连接，云端与本地一致');
-      // 刷新首页卡片，展示同步后的成绩
+      // 广播成绩变更：首页卡片、大厅统计等自动刷新
+      notifyScoresUpdated();
       setSyncVersion((v) => v + 1);
     } catch {
       showSyncMsg('连接云端失败（离线？），稍后自动重试', true);
@@ -375,7 +376,7 @@ export default function App() {
           ) : (
             <div className="game-grid">
               {filtered.map((g) => (
-                <GameCard key={`${g.meta.id}:${syncVersion}`} meta={g.meta} />
+                <GameCard key={g.meta.id} meta={g.meta} />
               ))}
             </div>
           )}

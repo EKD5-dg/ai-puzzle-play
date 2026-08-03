@@ -1,4 +1,16 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+
+/** 同页签内成绩变更广播事件（云同步合并写入后触发，驱动各组件自动刷新） */
+export const SCORES_UPDATED_EVENT = 'pp:scores-updated';
+
+/** 广播成绩已变更 */
+export function notifyScoresUpdated(): void {
+  try {
+    window.dispatchEvent(new Event(SCORES_UPDATED_EVENT));
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * localStorage 封装：统一的成绩持久化。
@@ -15,6 +27,17 @@ export function useLocalStorage<T extends number>(key: string, initial: T | null
   }, [key, initial]);
 
   const [value, setValue] = useState<T | null>(read);
+
+  // 监听同页签广播与跨页签 storage 事件，外部写入后自动刷新
+  useEffect(() => {
+    const refresh = () => setValue(read());
+    window.addEventListener(SCORES_UPDATED_EVENT, refresh);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener(SCORES_UPDATED_EVENT, refresh);
+      window.removeEventListener('storage', refresh);
+    };
+  }, [read]);
 
   const set = useCallback(
     (next: T) => {
