@@ -59,6 +59,8 @@ export default function App() {
   const [syncInput, setSyncInput] = useState('');
   const [syncMsg, setSyncMsg] = useState('');
   const [syncErr, setSyncErr] = useState(false);
+  /** 同步完成后递增，强制游戏卡片重新读取 localStorage 中的成绩 */
+  const [syncVersion, setSyncVersion] = useState(0);
 
   /** 统一设置提示消息（err=true 时红色展示） */
   const showSyncMsg = (text: string, err = false) => {
@@ -157,9 +159,32 @@ export default function App() {
         }
       }
       showSyncMsg(merged > 0 ? `同步完成！合并了 ${merged} 条云端成绩` : '已连接，云端与本地一致');
+      // 刷新首页卡片，展示同步后的成绩
+      setSyncVersion((v) => v + 1);
     } catch {
       showSyncMsg('连接云端失败（离线？），稍后自动重试', true);
     }
+  };
+
+  /** 收集本机全部成绩并上传云端（服务端按比较方向合并），返回上传条数 */
+  const pushLocalScores = async (code: string): Promise<number> => {
+    const scores: Record<string, number> = {};
+    for (const g of games) {
+      const raw = localStorage.getItem(`pp:best:${g.meta.id}`);
+      if (raw === null) continue;
+      const lv = Number(raw);
+      if (Number.isNaN(lv) || lv <= 0) continue;
+      scores[g.meta.id] = lv;
+    }
+    const count = Object.keys(scores).length;
+    if (count === 0) return 0;
+    const lowerBetter = games.filter((g) => !g.meta.higherIsBetter).map((g) => g.meta.id);
+    await fetch('https://puzzle-play.pages.dev/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, scores, lowerBetter }),
+    });
+    return count;
   };
 
   const newSyncCode = async () => {
@@ -172,8 +197,18 @@ export default function App() {
     }
     setSyncCode(code);
     setSyncCodeState(code);
-    showSyncMsg(`已生成同步码 ${code}（5 分钟内有效），在另一台设备输入即可同步`);
     sfx.record();
+    // 生码后立即上传本机存量成绩，否则另一台设备拉不到任何数据
+    try {
+      const n = await pushLocalScores(code);
+      showSyncMsg(
+        n > 0
+          ? `已生成同步码 ${code}（5 分钟内有效），本机 ${n} 条成绩已上传，在另一台设备输入即可同步`
+          : `已生成同步码 ${code}（5 分钟内有效），本机暂无成绩，新纪录会自动上传`,
+      );
+    } catch {
+      showSyncMsg(`已生成同步码 ${code}，但本机成绩上传失败（离线？），新纪录将自动补传`, true);
+    }
   };
 
   const disconnectSync = () => {
@@ -340,7 +375,7 @@ export default function App() {
           ) : (
             <div className="game-grid">
               {filtered.map((g) => (
-                <GameCard key={g.meta.id} meta={g.meta} />
+                <GameCard key={`${g.meta.id}:${syncVersion}`} meta={g.meta} />
               ))}
             </div>
           )}
