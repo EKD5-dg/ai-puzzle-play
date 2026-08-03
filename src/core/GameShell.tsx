@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { GameMeta } from './types';
+import { AdSlot } from './AdSlot';
 
 interface GameShellProps {
   meta: GameMeta;
@@ -33,6 +34,8 @@ export function GameShell({ meta, stats, onBack, children }: GameShellProps) {
         {stats && <div className="game-stats">{stats}</div>}
       </header>
       <main className="game-body">{children}</main>
+      {/* 游戏区下方广告位（AdSense 开通后填入 slot） */}
+      <AdSlot slot="0000000002" variant="rectangle" />
     </div>
   );
 }

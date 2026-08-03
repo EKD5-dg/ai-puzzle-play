@@ -117,13 +117,15 @@ export const sfx = {
     slideDown(440, 80, 0.5);
     tone({ freq: 90, dur: 0.4, type: 'sawtooth', delay: 0.1, vol: 0.12 });
   },
-  /** 胜利 */
+  /** 胜利（同时广播成就事件，供全局打赏浮层监听） */
   win(): void {
     arpeggio(523.25, [1, 1.25, 1.5, 2, 2.5], 0.09);
+    window.dispatchEvent(new CustomEvent('pp:achievement', { detail: { type: 'win' } }));
   },
-  /** 新纪录 */
+  /** 新纪录（同样广播成就事件） */
   record(): void {
     arpeggio(660, [1, 1.2, 1.5], 0.08, 'square');
     tone({ freq: 1320, dur: 0.25, type: 'triangle', delay: 0.26, vol: 0.12 });
+    window.dispatchEvent(new CustomEvent('pp:achievement', { detail: { type: 'record' } }));
   },
 };

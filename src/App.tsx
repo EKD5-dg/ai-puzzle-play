@@ -4,6 +4,8 @@ import { useLocalStorage } from './core/useLocalStorage';
 import { isMuted, setMuted, sfx } from './core/sound';
 import { getSyncCode, setSyncCode, generateSyncCode, createPair, joinPair } from './core/sync';
 import type { GameMeta } from './core/types';
+import { DonateWidget } from './core/DonateWidget';
+import { AdSlot } from './core/AdSlot';
 
 /** 读取当前 hash 路由（如 #/game/game-2048） */
 function routeFromHash(): string {
@@ -217,6 +219,7 @@ export default function App() {
         <span className="blob blob-2" />
         <span className="blob blob-3" />
       </div>
+      <DonateWidget />
       {current && CurrentGame ? (
         <Suspense fallback={<div className="game-loading">⏳ 加载中…</div>}>
           <CurrentGame />
@@ -273,6 +276,9 @@ export default function App() {
               </button>
             </div>
           </header>
+
+          {/* 首页顶部横幅广告位（AdSense 开通后填入 slot） */}
+          <AdSlot slot="0000000001" variant="leaderboard" />
 
           <div className="lobby-toolbar">
             <div className="search-box">
@@ -365,6 +371,12 @@ export default function App() {
           )}
 
           <footer className="lobby-footer">
+            <button
+              className="btn donate-footer-btn"
+              onClick={() => window.dispatchEvent(new CustomEvent('pp:donate-open'))}
+            >
+              ☕ 请作者喝杯咖啡
+            </button>
             <details className="dev-guide">
               <summary>🛠 开发者指南：如何新增游戏？</summary>
               <p>
