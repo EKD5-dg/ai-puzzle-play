@@ -41,9 +41,9 @@ function GameCard({ meta }: { meta: GameMeta }) {
           <span className="best">
             {meta.bestScoreLabel}：{best.value ?? '--'}
           </span>
+          <span className="game-card-play">{played ? '继续 ▶' : '开始 ▶'}</span>
         </div>
       </div>
-      <span className="game-card-play">{played ? '继续 ▶' : '开始 ▶'}</span>
     </a>
   );
 }
