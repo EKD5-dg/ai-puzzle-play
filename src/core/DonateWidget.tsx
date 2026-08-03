@@ -5,8 +5,8 @@ import { useEffect, useRef, useState } from 'react';
  * 图片不存在时面板内显示文字占位框，不会破版。
  */
 const PAY_CODES: { label: string; img: string }[] = [
-  { label: '微信', img: '/images/pay-wechat.png' },
-  { label: '支付宝', img: '/images/pay-alipay.png' },
+  { label: '微信', img: '/images/pay-wechat.jpg' },
+  { label: '支付宝', img: '/images/pay-alipay.jpg' },
 ];
 
 /**
