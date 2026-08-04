@@ -2,7 +2,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { games, findGame } from './core/registry';
 import { useLocalStorage, notifyScoresUpdated } from './core/useLocalStorage';
 import { isMuted, setMuted, sfx } from './core/sound';
-import { getSyncCode, setSyncCode, generateSyncCode, createPair, joinPair, isBetterScore } from './core/sync';
+import { getSyncCode, setSyncCode, generateSyncCode, createPair, joinPair, isBetterScore, readDqSave, writeDqSave, isBetterDqSave, readSoundMuted, writeSoundMuted } from './core/sync';
 import type { GameMeta } from './core/types';
 import { DonateWidget } from './core/DonateWidget';
 import { AdSlot } from './core/AdSlot';
@@ -139,12 +139,16 @@ export default function App() {
     setSyncCode(code);
     setSyncCodeState(code);
     setSyncInput('');
-    showSyncMsg(`已加入同步码 ${code}，正在拉取云端成绩…`);
+    showSyncMsg(`已加入同步码 ${code}，正在拉取云端数据…`);
     sfx.merge();
-    // 拉取并合并全部游戏成绩到本地
+    // 拉取并合并云端成绩 + 进度 + 偏好到本地
     try {
       const res = await fetch(`https://puzzle-play.pages.dev/api/sync?code=${encodeURIComponent(code)}`);
-      const data = (await res.json()) as { scores?: Record<string, number> };
+      const data = (await res.json()) as {
+        scores?: Record<string, number>;
+        progress?: { dqSave?: ReturnType<typeof readDqSave> };
+        prefs?: { soundMuted?: boolean };
+      };
       const cloud = data.scores ?? {};
       let merged = 0;
       for (const g of games) {
@@ -158,7 +162,24 @@ export default function App() {
           merged++;
         }
       }
-      showSyncMsg(merged > 0 ? `同步完成！合并了 ${merged} 条云端成绩` : '已连接，云端与本地一致');
+      // 进度合并：勇者斗恶龙存档取更优
+      let progressMsg = '';
+      const cloudSave = data.progress?.dqSave ?? null;
+      const localSave = readDqSave();
+      if (cloudSave && (!localSave || isBetterDqSave(cloudSave, localSave))) {
+        writeDqSave(cloudSave);
+        progressMsg = `，勇者斗恶龙进度已同步（第 ${cloudSave.floor} 层）`;
+      }
+      // 偏好合并：音效开关跟随云端
+      if (typeof data.prefs?.soundMuted === 'boolean') {
+        writeSoundMuted(data.prefs.soundMuted);
+        setSoundOn(!data.prefs.soundMuted);
+      }
+      showSyncMsg(
+        merged > 0 || progressMsg
+          ? `同步完成！合并了 ${merged} 条云端成绩${progressMsg}`
+          : '已连接，云端与本地一致',
+      );
       // 广播成绩变更：首页卡片、大厅统计等自动刷新
       notifyScoresUpdated();
       setSyncVersion((v) => v + 1);
@@ -178,12 +199,17 @@ export default function App() {
       scores[g.meta.id] = lv;
     }
     const count = Object.keys(scores).length;
-    if (count === 0) return 0;
     const lowerBetter = games.filter((g) => !g.meta.higherIsBetter).map((g) => g.meta.id);
     await fetch('https://puzzle-play.pages.dev/api/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, scores, lowerBetter }),
+      body: JSON.stringify({
+        code,
+        scores: count > 0 ? scores : undefined,
+        lowerBetter,
+        progress: { dqSave: readDqSave() },
+        prefs: { soundMuted: readSoundMuted() },
+      }),
     });
     return count;
   };
@@ -227,12 +253,17 @@ export default function App() {
       showSyncMsg('⚠️ 需要联网生成同步码，请检查网络后重试', true);
       return;
     }
-    // 1. 拉取旧码云端成绩
+    // 1. 拉取旧码云端数据
     const merged: Record<string, number> = {};
+    let cloudSave: ReturnType<typeof readDqSave> = null;
     try {
       const res = await fetch(`https://puzzle-play.pages.dev/api/sync?code=${encodeURIComponent(oldCode ?? '')}`);
-      const data = (await res.json()) as { scores?: Record<string, number> };
+      const data = (await res.json()) as {
+        scores?: Record<string, number>;
+        progress?: { dqSave?: ReturnType<typeof readDqSave> };
+      };
       Object.assign(merged, data.scores ?? {});
+      cloudSave = data.progress?.dqSave ?? null;
     } catch {
       /* 旧码云端不可达则跳过 */
     }
@@ -245,13 +276,23 @@ export default function App() {
       const cur = merged[g.meta.id];
       if (cur == null || isBetterScore(g.meta.id, lv, cur)) merged[g.meta.id] = lv;
     }
-    // 3. 写入新码
+    // 3. 存档取更优（本地 vs 旧码云端）
+    const localSave = readDqSave();
+    const bestSave =
+      localSave && cloudSave ? (isBetterDqSave(localSave, cloudSave) ? localSave : cloudSave) : (localSave ?? cloudSave);
+    // 4. 写入新码
     const lowerBetter = games.filter((g) => !g.meta.higherIsBetter).map((g) => g.meta.id);
     try {
       await fetch('https://puzzle-play.pages.dev/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: newCode, scores: merged, lowerBetter }),
+        body: JSON.stringify({
+          code: newCode,
+          scores: merged,
+          lowerBetter,
+          progress: { dqSave: bestSave },
+          prefs: { soundMuted: readSoundMuted() },
+        }),
       });
     } catch {
       /* ignore */

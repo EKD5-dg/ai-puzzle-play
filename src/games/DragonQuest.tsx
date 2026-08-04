@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { GameShell } from '../core/GameShell';
-import { useBestScore } from '../core/sync';
+import { useBestScore, getSyncCode, pushProgress } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { Portrait } from './Portrait';
@@ -118,6 +118,9 @@ function saveGame(floor: number, player: PlayerState): void {
   } catch {
     /* ignore */
   }
+  // 已连接云同步时自动上传存档（服务端按优劣合并）
+  const code = getSyncCode();
+  if (code) pushProgress(code).catch(() => { /* 离线静默 */ });
 }
 
 function clearSave(): void {
@@ -126,6 +129,9 @@ function clearSave(): void {
   } catch {
     /* ignore */
   }
+  // 通关/死亡/新开局时同步清除云端存档
+  const code = getSyncCode();
+  if (code) pushProgress(code).catch(() => { /* 离线静默 */ });
 }
 
 const rand = (n: number) => Math.floor(Math.random() * (n + 1));

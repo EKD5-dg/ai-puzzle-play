@@ -20,6 +20,77 @@ export function isBetterScore(gameId: string, next: number, prev: number): boole
   return HIGHER_IS_BETTER[gameId] === false ? next < prev : next > prev;
 }
 
+/** 勇者斗恶龙存档（楼层 + 勇者状态），跨设备同步用 */
+export interface DqSave {
+  floor: number;
+  player: {
+    level: number;
+    xp: number;
+    hp: number;
+    maxHp: number;
+    mp: number;
+    maxMp: number;
+    atk: number;
+    def: number;
+    gold: number;
+    kills: number;
+  };
+}
+
+/** 云同步负载：成绩 + 进度 + 偏好 */
+export interface SyncPayload {
+  scores?: Record<string, number>;
+  progress?: { dqSave?: DqSave | null };
+  prefs?: { soundMuted?: boolean };
+}
+
+const DQ_SAVE_KEY = 'pp:dq:save';
+const SOUND_MUTE_KEY = 'pp:sound-muted';
+
+/** 读取本机勇者斗恶龙存档 */
+export function readDqSave(): DqSave | null {
+  try {
+    const raw = localStorage.getItem(DQ_SAVE_KEY);
+    return raw ? (JSON.parse(raw) as DqSave) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 写入本机勇者斗恶龙存档 */
+export function writeDqSave(save: DqSave | null): void {
+  try {
+    if (save) localStorage.setItem(DQ_SAVE_KEY, JSON.stringify(save));
+    else localStorage.removeItem(DQ_SAVE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 读取本机音效开关 */
+export function readSoundMuted(): boolean {
+  try {
+    return localStorage.getItem(SOUND_MUTE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** 写入本机音效开关 */
+export function writeSoundMuted(muted: boolean): void {
+  try {
+    localStorage.setItem(SOUND_MUTE_KEY, muted ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 比较两份存档优劣：楼层高者优；同层则勇者等级高者优 */
+export function isBetterDqSave(a: DqSave, b: DqSave): boolean {
+  if (a.floor !== b.floor) return a.floor > b.floor;
+  return a.player.level > b.player.level;
+}
+
 export function getSyncCode(): string | null {
   try {
     return localStorage.getItem(CODE_KEY);
@@ -45,19 +116,28 @@ export function generateSyncCode(): string {
   return code;
 }
 
-async function fetchCloud(code: string): Promise<Record<string, number>> {
+async function fetchCloud(code: string): Promise<SyncPayload> {
   const res = await fetch(`${API}?code=${encodeURIComponent(code)}`);
   if (!res.ok) throw new Error('fetch failed');
-  const data = (await res.json()) as { scores?: Record<string, number> };
-  return data.scores ?? {};
+  const data = (await res.json()) as SyncPayload;
+  return data;
 }
 
-async function pushCloud(code: string, scores: Record<string, number>, lowerBetter: string[] = []): Promise<void> {
+async function pushCloud(code: string, payload: SyncPayload, lowerBetter: string[] = []): Promise<void> {
   await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, scores, lowerBetter }),
+    body: JSON.stringify({ code, ...payload, lowerBetter }),
   });
+}
+
+/** 上传本机进度与偏好到云端（存档按优劣合并，偏好直接覆盖） */
+export async function pushProgress(code: string): Promise<void> {
+  const payload: SyncPayload = {
+    progress: { dqSave: readDqSave() },
+    prefs: { soundMuted: readSoundMuted() },
+  };
+  await pushCloud(code, payload);
 }
 
 /** 创建配对码（云端记录创建时间，5 分钟有效） */
@@ -106,7 +186,7 @@ export function useBestScore(gameId: string) {
     fetchCloud(code)
       .then((cloud) => {
         if (cancelled) return;
-        const cloudBest = cloud[gameId];
+        const cloudBest = cloud.scores?.[gameId];
         if (cloudBest == null) return;
         const localBest = local.value;
         if (localBest == null || isBetterScore(gameId, cloudBest, localBest)) {
@@ -129,7 +209,7 @@ export function useBestScore(gameId: string) {
         const code = getSyncCode();
         if (code) {
           const lower = HIGHER_IS_BETTER[gameId] === false ? [gameId] : [];
-          pushCloud(code, { [gameId]: next }, lower).catch(() => {
+          pushCloud(code, { scores: { [gameId]: next } }, lower).catch(() => {
             /* 云端失败不影响本地 */
           });
         }
