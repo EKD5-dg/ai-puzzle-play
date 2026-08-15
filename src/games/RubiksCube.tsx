@@ -63,6 +63,28 @@ function roundMat(m: Mat3): Mat3 {
   return m.map((r) => r.map((x) => Math.round(x)) as Vec3) as Mat3;
 }
 
+/** 由面法线构造正交切线基：静态（整数朝向）时退化为世界轴，动画中保持面片为垂直于法线的正方形 */
+function faceFrame(nw: Vec3): { t1: Vec3; t2: Vec3 } {
+  const ax =
+    Math.abs(nw[0]) <= Math.abs(nw[1]) && Math.abs(nw[0]) <= Math.abs(nw[2])
+      ? 0
+      : Math.abs(nw[1]) <= Math.abs(nw[2])
+        ? 1
+        : 2;
+  const ref: Vec3 = ax === 0 ? [1, 0, 0] : ax === 1 ? [0, 1, 0] : [0, 0, 1];
+  const t1: Vec3 = [
+    ref[1] * nw[2] - ref[2] * nw[1],
+    ref[2] * nw[0] - ref[0] * nw[2],
+    ref[0] * nw[1] - ref[1] * nw[0],
+  ];
+  const t2: Vec3 = [
+    nw[1] * t1[2] - nw[2] * t1[1],
+    nw[2] * t1[0] - nw[0] * t1[2],
+    nw[0] * t1[1] - nw[1] * t1[0],
+  ];
+  return { t1, t2 };
+}
+
 // ============ 魔方数据 ============
 
 /** 六个面方向：右、左、上、下、前、后 */
@@ -86,13 +108,13 @@ const FACE_RGB: number[][] = [
 ];
 
 /** 六个面转动定义（顺时针，从面外侧观察；' 为反向） */
-const FACES: Array<{ label: string; axis: 0 | 1 | 2; layer: -1 | 0 | 1 }> = [
-  { label: 'U', axis: 1, layer: 1 },
-  { label: 'D', axis: 1, layer: -1 },
-  { label: 'L', axis: 0, layer: -1 },
-  { label: 'R', axis: 0, layer: 1 },
-  { label: 'F', axis: 2, layer: 1 },
-  { label: 'B', axis: 2, layer: -1 },
+const FACES: Array<{ label: string; cn: string; axis: 0 | 1 | 2; layer: -1 | 0 | 1 }> = [
+  { label: 'U', cn: '上', axis: 1, layer: 1 },
+  { label: 'D', cn: '下', axis: 1, layer: -1 },
+  { label: 'L', cn: '左', axis: 0, layer: -1 },
+  { label: 'R', cn: '右', axis: 0, layer: 1 },
+  { label: 'F', cn: '前', axis: 2, layer: 1 },
+  { label: 'B', cn: '后', axis: 2, layer: -1 },
 ];
 
 interface Cubie {
@@ -192,7 +214,7 @@ function genScramble(n: number): ScrambleMove[] {
 const W = 420;
 const H = 420;
 const FOCAL = 6; // 焦距：越大透视越弱
-const SCALE = 84; // 投影缩放（魔方占画布主体）
+const SCALE = 68; // 投影缩放（魔方占画布主体）
 const CX = W / 2;
 const CY = H / 2;
 const LIGHT: Vec3 = [0.387, 0.732, 0.56]; // 视空间中的固定光源方向（已归一化）
@@ -217,6 +239,7 @@ interface FaceDraw {
 interface BaseDraw {
   pts: [number, number][];
   light: number;
+  depth: number;
 }
 
 function fmt(ms: number): string {
@@ -264,7 +287,7 @@ export default function RubiksCube() {
   const doMove = useCallback((faceIdx: number, dir: 1 | -1) => {
     if (animRef.current) return;
     const face = FACES[faceIdx];
-    animRef.current = { axis: face.axis, layer: face.layer, dir, start: performance.now(), dur: 220 };
+    animRef.current = { axis: face.axis, layer: face.layer, dir, start: performance.now(), dur: 260 };
     sfx.move();
     if (statusRef.current === 'scrambled') {
       startRef.current = performance.now();
@@ -310,13 +333,15 @@ export default function RubiksCube() {
       const now = performance.now();
 
       // 动画进度：先提交落定，再统一绘制，避免最后 1 帧视觉跳变
-      let animState: { R: Mat3; axis: 0 | 1 | 2; layer: -1 | 0 | 1 } | null = null;
+      let animState: { R: Mat3; axis: 0 | 1 | 2; layer: -1 | 0 | 1; bulge: number } | null = null;
       const anim = animRef.current;
       if (anim) {
         const t = Math.min(1, (now - anim.start) / anim.dur);
         const eased = t * t * (3 - 2 * t);
         const R = rotMat(anim.axis, (anim.dir * eased * Math.PI) / 2);
-        animState = { R, axis: anim.axis, layer: anim.layer };
+        // 旋转层沿垂直旋转轴方向整体轻微膨胀（sin 曲线，起止为 0），旋转过程中不露缝隙
+        const bulge = 1 + 0.03 * Math.sin(Math.PI * eased);
+        animState = { R, axis: anim.axis, layer: anim.layer, bulge };
         if (t >= 1) {
           const cube = cubeRef.current;
           for (const c of cube) {
@@ -347,51 +372,61 @@ export default function RubiksCube() {
       for (const c of cubeRef.current) {
         let pos = c.pos;
         let rot = c.rot;
+        // 圆柱外扩：旋转层 cubie 仅沿垂直旋转轴方向膨胀，动画中与静止层保持密接
+        let exp = (p: Vec3): Vec3 => p;
         if (animState && Math.round(c.pos[animState.axis]) === animState.layer) {
           pos = matVec(animState.R, c.pos);
           rot = matMul(animState.R, c.rot);
+          const b = animState.bulge;
+          const ax = animState.axis;
+          exp = (p) =>
+            ax === 0
+              ? ([p[0], p[1] * b, p[2] * b] as Vec3)
+              : ax === 1
+                ? ([p[0] * b, p[1], p[2] * b] as Vec3)
+                : ([p[0] * b, p[1] * b, p[2]] as Vec3);
         }
         // 1) 底座：cubie 的全部 6 个面（内部面会被相邻 cubie 的贴纸覆盖，表面无贴纸处露出塑料）
         for (let i = 0; i < 6; i++) {
-          const n = matVec(V, matVec(rot, DIRS[i]));
+          const nw = matVec(rot, DIRS[i]);
+          const n = matVec(V, nw);
           if (n[2] >= 0.001) continue; // 背对相机的底座面不画
-          const axis = DIRS[i][0] !== 0 ? 0 : DIRS[i][1] !== 0 ? 1 : 2;
-          const t1: Vec3 = axis === 0 ? [0, 1, 0] : [1, 0, 0];
-          const t2: Vec3 = axis === 2 ? [0, 1, 0] : [0, 0, 1];
-          const center: Vec3 = [pos[0] + DIRS[i][0] * 0.5, pos[1] + DIRS[i][1] * 0.5, pos[2] + DIRS[i][2] * 0.5];
+          const { t1, t2 } = faceFrame(nw);
+          const center: Vec3 = [pos[0] + nw[0] * 0.5, pos[1] + nw[1] * 0.5, pos[2] + nw[2] * 0.5];
           const cornersV = (ins: number): Vec3[] =>
             [
               [center[0] + (t1[0] + t2[0]) * ins, center[1] + (t1[1] + t2[1]) * ins, center[2] + (t1[2] + t2[2]) * ins],
               [center[0] + (t1[0] - t2[0]) * ins, center[1] + (t1[1] - t2[1]) * ins, center[2] + (t1[2] - t2[2]) * ins],
               [center[0] - (t1[0] + t2[0]) * ins, center[1] - (t1[1] + t2[1]) * ins, center[2] - (t1[2] + t2[2]) * ins],
               [center[0] - (t1[0] - t2[0]) * ins, center[1] - (t1[1] - t2[1]) * ins, center[2] - (t1[2] - t2[2]) * ins],
-            ].map((p) => matVec(V, p as Vec3));
+            ].map((p) => matVec(V, exp(p as Vec3)));
           const project = (vs: Vec3[]): [number, number][] =>
             vs.map((v) => {
               const s = FOCAL / (FOCAL + v[2]);
               return [CX + v[0] * SCALE * s, CY - v[1] * SCALE * s];
             }) as [number, number][];
           const light = Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
-          bases.push({ pts: project(cornersV(0.5)), light });
+          const baseV = cornersV(0.5);
+          const depth = (baseV[0][2] + baseV[1][2] + baseV[2][2] + baseV[3][2]) / 4;
+          bases.push({ pts: project(baseV), light, depth });
         }
         // 2) 贴纸：按"朝向相机程度"排序，画所有朝向相机的面；
         //    若某 cubie 最朝相机的面恰好没有贴纸（打乱后的合法状态），
         //    用该 cubie 的其他贴纸颜色填充（伪贴纸），保证表面任何位置都有颜色
         const firstColorIdx = [0, 1, 2, 3, 4, 5].find((i) => c.colors[i] != null) ?? 2;
-        const allFaces: Array<{ i: number; n: Vec3 }> = [];
+        const allFaces: Array<{ i: number; nw: Vec3; n: Vec3 }> = [];
         for (let i = 0; i < 6; i++) {
-          allFaces.push({ i, n: matVec(V, matVec(rot, DIRS[i])) });
+          const nw = matVec(rot, DIRS[i]);
+          allFaces.push({ i, nw, n: matVec(V, nw) });
         }
         allFaces.sort((a, b) => a.n[2] - b.n[2]);
         let drawnAny = false;
-        for (const { i, n } of allFaces) {
+        for (const { i, nw, n } of allFaces) {
           if (n[2] >= 0.001 && drawnAny) continue;
           drawnAny = true;
           const rgbIdx = c.colors[i] != null ? i : firstColorIdx;
-          const axis = DIRS[i][0] !== 0 ? 0 : DIRS[i][1] !== 0 ? 1 : 2;
-          const t1: Vec3 = axis === 0 ? [0, 1, 0] : [1, 0, 0];
-          const t2: Vec3 = axis === 2 ? [0, 1, 0] : [0, 0, 1];
-          const center: Vec3 = [pos[0] + DIRS[i][0] * 0.5, pos[1] + DIRS[i][1] * 0.5, pos[2] + DIRS[i][2] * 0.5];
+          const { t1, t2 } = faceFrame(nw);
+          const center: Vec3 = [pos[0] + nw[0] * 0.5, pos[1] + nw[1] * 0.5, pos[2] + nw[2] * 0.5];
           // 面片四角（世界坐标 → 视空间），再投影到屏幕
           const cornersV = (ins: number): Vec3[] =>
             [
@@ -399,7 +434,7 @@ export default function RubiksCube() {
               [center[0] + (t1[0] - t2[0]) * ins, center[1] + (t1[1] - t2[1]) * ins, center[2] + (t1[2] - t2[2]) * ins],
               [center[0] - (t1[0] + t2[0]) * ins, center[1] - (t1[1] + t2[1]) * ins, center[2] - (t1[2] + t2[2]) * ins],
               [center[0] - (t1[0] - t2[0]) * ins, center[1] - (t1[1] - t2[1]) * ins, center[2] - (t1[2] - t2[2]) * ins],
-            ].map((p) => matVec(V, p as Vec3));
+            ].map((p) => matVec(V, exp(p as Vec3)));
           const project = (vs: Vec3[]): [number, number][] =>
             vs.map((v) => {
               const s = FOCAL / (FOCAL + v[2]);
@@ -418,28 +453,33 @@ export default function RubiksCube() {
           });
         }
       }
-      faces.sort((a, b) => b.depth - a.depth);
+      // 统一按深度从远到近绘制（底座与贴纸混排，同面的贴纸微调更近，保证盖在底座上）
+      // 解决旋转动画中层与层穿插时底座/贴纸遮挡错误导致的闪烁
+      const items: Array<{ depth: number; base?: BaseDraw; face?: FaceDraw }> = [
+        ...bases.map((b) => ({ depth: b.depth, base: b })),
+        ...faces.map((f) => ({ depth: f.depth - 0.002, face: f })),
+      ];
+      items.sort((a, b) => b.depth - a.depth);
 
       ctx.setTransform(canvas.width / W, 0, 0, canvas.width / W, 0, 0);
       ctx.clearRect(0, 0, W, H);
-      // 第一遍：全部塑料底座（深色，与背景融合，贴纸之间只留细缝）
-      for (const b of bases) {
-        const k = 0.85 + 0.55 * b.light;
-        ctx.fillStyle = `rgb(${Math.round(16 * k)},${Math.round(19 * k)},${Math.round(36 * k)})`;
-        quadPath(ctx, b.pts, 0);
-        ctx.fill();
-      }
-      // 第二遍：按深度从远到近绘制贴纸（边缘深色描边 + 纯色贴纸，避免渐变兼容性问题）
-      faces.sort((a, b) => b.depth - a.depth);
-      for (const f of faces) {
-        const edge = f.rgb.map((v) => Math.round(v * 0.52));
-        ctx.fillStyle = `rgb(${edge[0]},${edge[1]},${edge[2]})`;
-        quadPath(ctx, f.edge, 4);
-        ctx.fill();
-        const lit = f.rgb.map((v) => Math.min(255, Math.round(v * f.shade)));
-        ctx.fillStyle = `rgb(${lit[0]},${lit[1]},${lit[2]})`;
-        quadPath(ctx, f.sticker, 3);
-        ctx.fill();
+      for (const it of items) {
+        if (it.base) {
+          const k = 0.85 + 0.55 * it.base.light;
+          ctx.fillStyle = `rgb(${Math.round(16 * k)},${Math.round(19 * k)},${Math.round(36 * k)})`;
+          quadPath(ctx, it.base.pts, 0);
+          ctx.fill();
+        } else if (it.face) {
+          const f = it.face;
+          const edge = f.rgb.map((v) => Math.round(v * 0.52));
+          ctx.fillStyle = `rgb(${edge[0]},${edge[1]},${edge[2]})`;
+          quadPath(ctx, f.edge, 4);
+          ctx.fill();
+          const lit = f.rgb.map((v) => Math.min(255, Math.round(v * f.shade)));
+          ctx.fillStyle = `rgb(${lit[0]},${lit[1]},${lit[2]})`;
+          quadPath(ctx, f.sticker, 3);
+          ctx.fill();
+        }
       }
       raf = requestAnimationFrame(loop);
     };
@@ -557,7 +597,9 @@ export default function RubiksCube() {
             <div className="cube-overlay">
               <h2>🧊 3D 魔方</h2>
               <p>
-                拖动旋转视角，点击按钮转动各层
+                拖动旋转视角 · 点击下方按钮转动对应层
+                <br />
+                上/下/左/右/前/后 = 六个面，⟳ 顺时针 · ⟲ 逆时针
                 <br />
                 打乱后开始计时，还原六面颜色！
               </p>
@@ -580,13 +622,20 @@ export default function RubiksCube() {
         </div>
         <div className="cube-controls">
           {FACES.map((f, i) => (
-            <button key={f.label} className="cube-btn" onClick={() => doMove(i, 1)}>
-              {f.label}
+            <button key={f.label} className="cube-btn" title={`${f.cn}层顺时针旋转`} onClick={() => doMove(i, 1)}>
+              <span className="cube-btn-key">{f.label}</span>
+              <span className="cube-btn-cn">{f.cn} ⟳</span>
             </button>
           ))}
           {FACES.map((f, i) => (
-            <button key={`${f.label}'`} className="cube-btn cube-btn-prime" onClick={() => doMove(i, -1)}>
-              {f.label}′
+            <button
+              key={`${f.label}'`}
+              className="cube-btn cube-btn-prime"
+              title={`${f.cn}层逆时针旋转`}
+              onClick={() => doMove(i, -1)}
+            >
+              <span className="cube-btn-key">{f.label}′</span>
+              <span className="cube-btn-cn">{f.cn} ⟲</span>
             </button>
           ))}
         </div>
@@ -598,7 +647,7 @@ export default function RubiksCube() {
             ↺ 重置
           </button>
         </div>
-        <p className="hint">拖动旋转视角 · 键盘 U/D/L/R/F/B 转动（Shift 反向）· S 打乱 · 方向键旋转视角</p>
+        <p className="hint">拖动旋转视角 · 按钮 ⟳ 顺时针 / ⟲ 逆时针 · 键盘 U/D/L/R/F/B 转动（Shift 反向）· S 打乱 · 方向键旋转视角</p>
       </div>
     </GameShell>
   );
