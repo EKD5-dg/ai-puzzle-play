@@ -244,3 +244,15 @@ export const metaBirds: GameMeta = {
   higherIsBetter: true,
 };
 
+export const metaCube: GameMeta = {
+  id: 'rubiks-cube',
+  title: '3D 魔方',
+  description: '旋转魔方各层，还原六面颜色！',
+  icon: '🧊',
+  difficulty: '困难',
+  category: '逻辑',
+  tags: ['3D', '空间', '经典'],
+  bestScoreLabel: '最快还原',
+  higherIsBetter: false,
+};
+
