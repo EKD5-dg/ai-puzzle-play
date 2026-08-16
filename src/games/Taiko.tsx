@@ -33,10 +33,10 @@ interface SongDef {
 const SONGS: SongDef[] = [
   { name: '风之鼓动', level: '简单', bpm: 92, seconds: 26, spacing: 2, blueChance: 0.12 },
   { name: '武士之舞', level: '中等', bpm: 132, seconds: 30, spacing: 1, blueChance: 0.28 },
-  { name: '鬼之太鼓', level: '困难', bpm: 172, seconds: 32, spacing: 0.5, blueChance: 0.42 },
+  { name: '鬼之太鼓', level: '困难', bpm: 172, seconds: 32, spacing: 0.75, blueChance: 0.42 },
 ];
 
-/** 固定种子谱面生成（同一曲目每次一致） */
+/** 固定种子谱面生成（同一曲目每次一致；音符严格落在拍点上，便于跟随节奏击打） */
 function makeChart(song: SongDef): Note[] {
   const beat = 60 / song.bpm;
   const notes: Note[] = [];
@@ -49,7 +49,7 @@ function makeChart(song: SongDef): Note[] {
   while (t < song.seconds - 0.5) {
     const type: NoteType = rand() < song.blueChance ? 'blue' : 'red';
     notes.push({ type, time: t, judged: 0 });
-    t += beat * song.spacing * (0.9 + rand() * 0.25);
+    t += beat * song.spacing; // 固定间隔（无随机抖动），音符在拍点网格上
   }
   return notes;
 }
@@ -125,7 +125,7 @@ export default function Taiko() {
         bestNote = n;
       }
     }
-    if (!bestNote || bestDist > 0.15) {
+    if (!bestNote || bestDist > 0.12) {
       // 空打（没有音符却击鼓）：不算 miss，但打断连击？太鼓达人不扣。提示
       sfx.mismatch();
       return;
@@ -164,7 +164,7 @@ export default function Taiko() {
 
       // Miss 检测
       for (const n of g.notes) {
-        if (n.judged === 0 && !n.missed && n.time < elapsed - 0.15) {
+        if (n.judged === 0 && !n.missed && n.time < elapsed - 0.12) {
           n.missed = true;
           comboRef.current = 0;
           setCombo(0);

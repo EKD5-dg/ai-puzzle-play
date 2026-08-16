@@ -119,9 +119,9 @@ export default function PacMan() {
     return maze;
   }, []);
 
-  /** 开始/重开一局；lv 为关卡（胜利后进入下一关，幽灵速度随关卡提升） */
+  /** 开始/重开一局；lv 为关卡（胜利后进入下一关，幽灵速度随关卡提升但封顶）；keepProgress=true 保留分数与命数（跨关累积） */
   const startGame = useCallback(
-    (lv = 1) => {
+    (lv = 1, keepProgress = false) => {
       clearGameTimers();
       const maze = initMaze();
       gameRef.current.maze = maze;
@@ -133,10 +133,13 @@ export default function PacMan() {
         { x: 9 * TILE + TILE / 2, y: 9.5 * TILE, dir: 'up', color: GHOST_COLORS[3], mode: 'chase', timer: 0, delay: 360 },
       ];
       gameRef.current.frightTimer = 0;
-      gameRef.current.ghostSpeed = 2 + (lv - 1) * 0.25;
-      livesRef.current = 3;
-      setScore(0);
-      setLives(3);
+      // 幽灵速度随关卡提升但封顶 2.85（玩家 2.6），保证高关卡仍可玩
+      gameRef.current.ghostSpeed = Math.min(2.85, 2 + (lv - 1) * 0.25);
+      if (!keepProgress) {
+        livesRef.current = 3;
+        setScore(0);
+        setLives(3);
+      }
       setLevel(lv);
       setStatus('playing');
     },
@@ -272,8 +275,10 @@ export default function PacMan() {
         }
         const vx = gh.dir === 'left' ? -1 : gh.dir === 'right' ? 1 : 0;
         const vy = gh.dir === 'up' ? -1 : gh.dir === 'down' ? 1 : 0;
-        gh.x += vx * g.ghostSpeed * dt * 0.06;
-        gh.y += vy * g.ghostSpeed * dt * 0.06;
+        // 恐惧模式幽灵减速一半（经典规则），否则高关卡恐惧幽灵比玩家快，吃鬼机制失效
+        const speed = gh.mode === 'fright' ? g.ghostSpeed * 0.5 : g.ghostSpeed;
+        gh.x += vx * speed * dt * 0.06;
+        gh.y += vy * speed * dt * 0.06;
         // 幽灵与玩家相同的隧道坐标回绕（否则出屏后永久丢失）
         if (gh.x < -TILE / 2) gh.x = COLS * TILE + TILE / 2 - 1;
         if (gh.x > COLS * TILE + TILE / 2) gh.x = -TILE / 2 + 1;
@@ -482,7 +487,7 @@ export default function PacMan() {
             <div className="arcade-overlay">
               <h2>🎉 通关！</h2>
               <p>得分 {score}</p>
-              <button className="btn btn-primary" onClick={() => startGame(level + 1)}>
+              <button className="btn btn-primary" onClick={() => startGame(level + 1, true)}>
                 下一关（第 {level + 1} 关）
               </button>            </div>
           )}

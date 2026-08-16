@@ -85,18 +85,19 @@ const MONSTERS = [
 /** 按楼层生成怪物（第 10 层为恶龙 Boss） */
 function makeMonster(floor: number): Monster {
   if (floor >= FLOORS) {
-    return { name: '恶龙', emoji: '🐉', hp: 130, maxHp: 130, atk: 15, def: 7, xp: 180, gold: 300, isBoss: true };
+    return { name: '恶龙', emoji: '🐉', hp: 130, maxHp: 130, atk: 15, def: 7, xp: 200, gold: 300, isBoss: true };
   }
   const base = MONSTERS[Math.floor((floor - 1) / 2)] ?? MONSTERS[MONSTERS.length - 1];
-  const scale = 1 + floor * 0.35;
+  // 成长曲线放缓：5-9 层有压力但配合升级/治疗可过（过陡会让第 9 层变成必死墙）
+  const scale = 1 + floor * 0.25;
   return {
     name: base.name,
     emoji: base.emoji,
-    hp: Math.round((16 + floor * 7) * scale),
-    maxHp: Math.round((16 + floor * 7) * scale),
-    atk: 2 + floor * 2,
-    def: 1 + floor,
-    xp: 8 + floor * 7,
+    hp: Math.round((14 + floor * 5) * scale),
+    maxHp: Math.round((14 + floor * 5) * scale),
+    atk: Math.round(2 + floor * 1.6),
+    def: Math.round(1 + floor * 0.7),
+    xp: 10 + floor * 8,
     gold: 10 + floor * 8,
     isBoss: false,
   };
@@ -369,18 +370,20 @@ export default function DragonQuest() {
     const xp = player.xp + gainedXp;
     const gold = player.gold + gainedGold;
     const kills = player.kills + 1;
-    // 升级判定
+    // 升级判定（每级消耗对应经验，避免等级膨胀到全程碾压）
     let { level, maxHp, maxMp, atk, def } = player;
     let hp = player.hp;
     let mp = player.mp;
     let leveled = false;
-    while (xp >= xpNeed(level)) {
+    let remainingXp = xp;
+    while (remainingXp >= xpNeed(level)) {
       leveled = true;
+      remainingXp -= xpNeed(level);
       level++;
-      maxHp += 10;
-      maxMp += 4;
-      atk += 2;
-      def += 1;
+      maxHp += 12;
+      maxMp += 5;
+      atk += 3;
+      def += 2;
       hp = maxHp;
       mp = maxMp;
       pushLog(`⭐ 升级！你现在是 Lv.${level}，状态完全恢复！`);
@@ -391,7 +394,7 @@ export default function DragonQuest() {
     } else {
       sfx.win();
     }
-    const next: PlayerState = { ...player, level, xp, gold, kills, maxHp, maxMp, atk, def, hp, mp };
+    const next: PlayerState = { ...player, level, xp: remainingXp, gold, kills, maxHp, maxMp, atk, def, hp, mp };
     setPlayer(next);
     const nextFloorNum = floor + 1 <= FLOORS ? floor + 1 : FLOORS;
     saveGame(nextFloorNum, next);

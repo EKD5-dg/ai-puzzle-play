@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 /** 同页签内成绩变更广播事件（云同步合并写入后触发，驱动各组件自动刷新） */
 export const SCORES_UPDATED_EVENT = 'pp:scores-updated';
@@ -73,5 +73,6 @@ export function useLocalStorage<T extends number>(key: string, initial: T | null
     [read, set],
   );
 
-  return { value, set, updateBest };
+  // 返回稳定对象：value 不变时引用不变，避免消费方（useBestScore/游戏 effect）每渲染重跑
+  return useMemo(() => ({ value, set, updateBest }), [value, set, updateBest]);
 }

@@ -261,9 +261,9 @@ export default function Minesweeper() {
         )}
         <div
           key={shake}
-          className={`mines-grid ${shake > 0 ? 'shake' : ''}`}
+          className={`mines-grid ${shake > 0 ? 'shake' : ''} ${level.cols >= 30 ? 'wide' : ''}`}
           style={{
-            gridTemplateColumns: `repeat(${level.cols}, ${cellSize}px)`,
+            gridTemplateColumns: `repeat(${level.cols}, var(--ms-cell, ${cellSize}px))`,
           }}
         >
           {grid.map((row, r) =>
@@ -271,7 +271,12 @@ export default function Minesweeper() {
               <button
                 key={`${r}-${c}`}
                 className={`mines-cell ${cell.state} ${cell.state === 'revealed' && cell.adjacent > 0 ? `n${cell.adjacent}` : ''}`}
-                style={{ width: cellSize, height: cellSize, fontSize: cellSize * 0.5 }}
+                style={{
+                  width: `var(--ms-cell, ${cellSize}px)`,
+                  height: `var(--ms-cell, ${cellSize}px)`,
+                  fontSize: `var(--ms-font, ${cellSize * 0.5}px)`,
+                }}
+                aria-label={`第 ${r + 1} 行第 ${c + 1} 列${cell.state === 'flagged' ? '，已插旗' : ''}`}
                 onClick={() => reveal(r, c)}
                 onContextMenu={(e) => {
                   // 长按插旗后 600ms 内派生的 contextmenu 视为长按副产品：跳过 toggle，

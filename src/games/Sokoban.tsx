@@ -283,7 +283,7 @@ export default function Sokoban() {
         <div
           className="soko-board"
           style={{
-            gridTemplateColumns: `repeat(${state.cols}, ${cell}px)`,
+            gridTemplateColumns: `repeat(${state.cols}, var(--soko-cell, ${cell}px))`,
           }}
         >
           {state.grid.map((row, y) =>
@@ -291,7 +291,7 @@ export default function Sokoban() {
               <div
                 key={`${y}-${x}`}
                 className={`soko-cell ${c}`}
-                style={{ width: cell, height: cell }}
+                style={{ width: 'var(--soko-cell, 52px)', height: 'var(--soko-cell, 52px)' }}
               >
                 {c === 'box' && <span className="soko-box">📦</span>}
                 {c === 'boxOnGoal' && <span className="soko-box on">📦</span>}

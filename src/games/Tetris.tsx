@@ -334,7 +334,7 @@ export default function Tetris() {
         <div className="tetris-main">
           <div
             className={`tetris-board ${flashing ? 'flash' : ''}`}
-            style={{ gridTemplateColumns: `repeat(${COLS}, 30px)` }}
+            style={{ gridTemplateColumns: `repeat(${COLS}, var(--tet-cell, 30px))` }}
           >
             {display.map((row, r) =>
               row.map((cell, c) => (

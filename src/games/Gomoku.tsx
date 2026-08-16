@@ -18,9 +18,10 @@ const DIRECTIONS = [
   [1, -1],
 ];
 
-/** 沿方向数 (x,y) 处棋子 p 的连子数与开放端，返回 [连子数, 开放端数] */
+/** 沿方向数 (x,y) 处棋子 p 的连子数与开放端，返回 [连子数, 开放端数]（调用前需保证 (x,y) 是 p） */
 function lineCount(board: Board, x: number, y: number, dx: number, dy: number, p: 1 | 2): [number, number] {
-  let count = 1; // (x,y) 本身是 p（调用前已模拟落子）
+  if (board[y * SIZE + x] !== p) return [0, 0]; // (x,y) 不是 p（如防守评估时该点已被对方占用）
+  let count = 1;
   let openEnds = 0;
   for (const sign of [1, -1]) {
     let n = 0;
@@ -52,14 +53,20 @@ const LINE_WEIGHTS: Record<number, Record<number, number>> = {
 /** 评估在 (x,y) 落 me 一子后的局面价值（进攻 + 0.9 倍防守，双向评分） */
 function evaluate(board: Board, x: number, y: number, me: 1 | 2): number {
   const opp = me === 1 ? 2 : 1;
-  const b = [...board];
-  b[y * SIZE + x] = me;
+  // 进攻：模拟己方在此落子
+  const b1 = [...board];
+  b1[y * SIZE + x] = me;
   let s = 0;
   for (const [dx, dy] of DIRECTIONS) {
-    const [cnt, open] = lineCount(b, x, y, dx, dy, me);
+    const [cnt, open] = lineCount(b1, x, y, dx, dy, me);
     s += LINE_WEIGHTS[cnt]?.[open] ?? 0;
-    const [ocnt, oopen] = lineCount(b, x, y, dx, dy, opp);
-    s += (LINE_WEIGHTS[ocnt]?.[oopen] ?? 0) * 0.9; // 防守：堵对手的威胁
+  }
+  // 防守：模拟对方在此落子（堵住该点的价值，0.45 倍权重——预防性防守低于主动进攻）
+  const b2 = [...board];
+  b2[y * SIZE + x] = opp;
+  for (const [dx, dy] of DIRECTIONS) {
+    const [ocnt, oopen] = lineCount(b2, x, y, dx, dy, opp);
+    s += (LINE_WEIGHTS[ocnt]?.[oopen] ?? 0) * 0.45;
   }
   // 位置偏好：靠近中心更好
   const center = (SIZE - 1) / 2;
@@ -232,7 +239,7 @@ export default function Gomoku() {
         </div>
         <div
           className="gomoku-board"
-          style={{ gridTemplateColumns: `repeat(${SIZE}, 30px)` }}
+          style={{ gridTemplateColumns: `repeat(${SIZE}, var(--g-cell, 30px))` }}
         >
           {board.map((c, i) => (
             <button
@@ -240,7 +247,8 @@ export default function Gomoku() {
               className={`gomoku-cell ${c === 1 ? 'black' : ''} ${c === 2 ? 'white' : ''}`}
               onClick={() => place(i)}
               disabled={c !== 0 || turn !== 'player' || thinking || winner !== 0}
-              style={{ width: 30, height: 30 }}
+              aria-label={`第 ${Math.floor(i / SIZE) + 1} 行第 ${(i % SIZE) + 1} 列`}
+              style={{ width: 'var(--g-cell, 30px)', height: 'var(--g-cell, 30px)' }}
             >
               {c !== 0 && <span className="gomoku-stone" />}
             </button>

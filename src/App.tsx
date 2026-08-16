@@ -39,7 +39,7 @@ const GameCard = memo(function GameCard({ meta }: { meta: GameMeta }) {
         <div className="game-card-title">
           <h3>{meta.title}</h3>
           <span className={`badge badge-${meta.difficulty}`}>{meta.difficulty}</span>
-          {played && <span className="played-dot" title="已游玩">✔</span>}
+          {played && <span className="played-dot" aria-hidden title="已游玩">✔</span>}
         </div>
         <p className="game-card-desc">{meta.description}</p>
         <div className="game-card-meta">
@@ -176,8 +176,12 @@ export default function App() {
           lv = null;
         }
         if (lv === null || Number.isNaN(lv) || isBetterScore(cid, cv, lv)) {
-          localStorage.setItem(`pp:best:${cid}`, JSON.stringify(cv));
-          merged++;
+          try {
+            localStorage.setItem(`pp:best:${cid}`, JSON.stringify(cv));
+            merged++;
+          } catch {
+            /* 配额满等忽略该条 */
+          }
         }
       }
       // 进度合并：勇者斗恶龙存档取更优
@@ -193,6 +197,10 @@ export default function App() {
         writeSoundMuted(data.prefs.soundMuted);
         setSoundOn(!data.prefs.soundMuted);
       }
+      // 回传本机更优成绩到云端（服务端按权威方向表合并，幂等安全），保证第三台设备加入时拿到最新数据
+      pushLocalScores(code).catch(() => {
+        /* 离线静默：新纪录会自动补传 */
+      });
       showSyncMsg(
         merged > 0 || progressMsg
           ? `同步完成！合并了 ${merged} 条云端成绩${progressMsg}`
@@ -411,6 +419,7 @@ export default function App() {
               <input
                 type="search"
                 placeholder="搜索游戏…"
+                aria-label="搜索游戏"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -482,6 +491,7 @@ export default function App() {
                       onChange={(e) => setSyncInput(e.target.value.toUpperCase())}
                       onKeyDown={(e) => e.key === 'Enter' && joinSync()}
                       placeholder="输入 6 位同步码"
+                      aria-label="输入 6 位同步码"
                       maxLength={6}
                     />
                     <button className="btn btn-primary" onClick={joinSync}>

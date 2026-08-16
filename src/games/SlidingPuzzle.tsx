@@ -89,7 +89,9 @@ export default function SlidingPuzzle() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [won]);
 
-  const tileSize = size === 5 ? 72 : size === 4 ? 92 : 108;
+  // 窄屏（≤640px）缩小方块尺寸，避免棋盘溢出 375px 视口
+  const narrow = typeof window !== 'undefined' && window.innerWidth <= 640;
+  const tileSize = size === 5 ? (narrow ? 58 : 72) : size === 4 ? (narrow ? 78 : 92) : narrow ? 94 : 108;
   const pad = 3; // 内边距偏移
 
   return (

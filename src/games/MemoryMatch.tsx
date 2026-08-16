@@ -151,7 +151,6 @@ export default function MemoryMatch() {
   };
 
   const cols = LEVELS[levelIdx].pairs === 12 ? 6 : 4;
-  const gridW = cols * 88;
 
   return (
     <GameShell
@@ -193,7 +192,7 @@ export default function MemoryMatch() {
         )}
         <div
           className="memory-grid"
-          style={{ gridTemplateColumns: `repeat(${cols}, 88px)`, width: gridW }}
+          style={{ gridTemplateColumns: `repeat(${cols}, var(--card, 88px))` }}
         >
           {deck.map((card) => {
             const isUp = card.matched || flipped.includes(card.id);
@@ -203,7 +202,7 @@ export default function MemoryMatch() {
                 className={`memory-card ${isUp ? 'up' : ''} ${card.matched ? 'matched' : ''} ${mismatchIds.includes(card.id) ? 'mismatch' : ''}`}
                 onClick={() => flip(card)}
                 disabled={isUp || lockRef.current || won}
-                aria-label={isUp ? card.emoji : '未翻开的牌'}
+                aria-label={isUp ? `${card.emoji}，已${card.matched ? '配对' : '翻开'}` : '未翻开的牌'}
               >
                 <span className="memory-face memory-back">❓</span>
                 <span className="memory-face memory-front">{card.emoji}</span>

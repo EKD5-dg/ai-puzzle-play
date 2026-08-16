@@ -260,7 +260,7 @@ export default function Othello() {
         </div>
         <div
           className="othello-board"
-          style={{ gridTemplateColumns: `repeat(${SIZE}, 52px)` }}
+          style={{ gridTemplateColumns: `repeat(${SIZE}, var(--o-cell, 52px))` }}
         >
           {board.map((c, i) => {
             const legalCell = !gameOver && turn === 1 && legalSet.has(i);
@@ -270,7 +270,8 @@ export default function Othello() {
                 className={`othello-cell ${legalCell ? 'legal' : ''}`}
                 onClick={() => place(i)}
                 disabled={!legalCell}
-                style={{ width: 52, height: 52 }}
+                aria-label={`第 ${Math.floor(i / SIZE) + 1} 行第 ${(i % SIZE) + 1} 列`}
+                style={{ width: 'var(--o-cell, 52px)', height: 'var(--o-cell, 52px)' }}
               >
                 {c !== 0 && <span className={`othello-stone ${c === 1 ? 'black' : 'white'}`} />}
                 {c === 0 && legalCell && <span className="othello-hint" />}

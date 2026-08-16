@@ -22,6 +22,7 @@ import {
   metaColorSeq,
   metaBirds,
   metaCube,
+  metaMaze3D,
 } from './gameMetas';
 
 /**
@@ -53,6 +54,7 @@ export const games: GameDefinition[] = [
   { meta: metaColorSeq, component: lazy(() => import('../games/ColorSequence')) },
   { meta: metaBirds, component: lazy(() => import('../games/AngryBirds')) },
   { meta: metaCube, component: lazy(() => import('../games/RubiksCube')) },
+  { meta: metaMaze3D, component: lazy(() => import('../games/Maze3D')) },
 ];
 
 /** 按 id 查找游戏 */

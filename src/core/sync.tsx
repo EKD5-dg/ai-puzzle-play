@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLocalStorage } from './useLocalStorage';
 import { HIGHER_IS_BETTER } from './gameMetas';
 import { setMuted as applySoundMuted } from './sound';
@@ -179,9 +179,12 @@ export async function joinPair(code: string): Promise<'ok' | 'expired' | 'invali
 export function useBestScore(gameId: string) {
   const local = useLocalStorage<number>(`best:${gameId}`);
 
-  const setLocal = (v: number) => {
-    local.set(v);
-  };
+  const setLocal = useCallback(
+    (v: number) => {
+      local.set(v);
+    },
+    [local],
+  );
 
   // 最新本地值的 ref 镜像：云端拉取回调里读取，避免切换 key（如扫雷切难度）时闭包过期
   const valueRef = useRef(local.value);
@@ -227,5 +230,6 @@ export function useBestScore(gameId: string) {
     [local, gameId],
   );
 
-  return { value: local.value, set: setLocal, updateBest };
+  // 返回稳定对象：local.value 不变时引用不变，含 best 的 effect 不再每渲染重跑
+  return useMemo(() => ({ value: local.value, set: setLocal, updateBest }), [local.value, setLocal, updateBest]);
 }

@@ -15,7 +15,7 @@ const CORS_HEADERS = {
 };
 
 /** 成绩取小的游戏白名单（步数/时间类，权威方向表；按基础 id 匹配，支持 `id:后缀` 细分键） */
-const LOWER_BETTER = new Set(['minesweeper', 'memory-match', 'sliding-puzzle', 'sudoku', 'sokoban', 'rubiks-cube']);
+const LOWER_BETTER = new Set(['minesweeper', 'memory-match', 'sliding-puzzle', 'sudoku', 'sokoban', 'rubiks-cube', 'maze-3d']);
 
 function isLowerBetter(gameId) {
   return LOWER_BETTER.has(gameId.split(':')[0]);
