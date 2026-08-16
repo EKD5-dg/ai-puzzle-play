@@ -579,10 +579,11 @@ export default function Maze3D() {
           }
         }
 
-        // 抵达传送门
+        // 抵达传送门（立即同步 statusRef：重渲染完成前的帧不再重复结算）
         const pd = Math.hypot(w.portalX - w.px, w.portalY - w.py);
         if (w.open && pd < 0.6) {
           sfx.win();
+          statusRef.current = 'won';
           setStatus('won');
         } else if (!w.open && pd < 1.1 && t - lockHintAtRef.current > 3) {
           lockHintAtRef.current = t;
