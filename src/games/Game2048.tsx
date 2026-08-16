@@ -155,6 +155,7 @@ export default function Game2048() {
       if (!moved) return;
       const spawned = spawn(next);
       setBoard(spawned);
+      sfx.move(); // 有效移动才播放下落音（无效/终局按键不再响）
       if (gained > 0) {
         sfx.merge();
         setScore((s) => s + gained);
@@ -179,7 +180,6 @@ export default function Game2048() {
       const dir = DIR_KEYS[e.key];
       if (dir) {
         e.preventDefault();
-        sfx.move();
         doMove(dir);
       }
     };

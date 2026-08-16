@@ -31,10 +31,8 @@ export default function WhackMole() {
   const { toast } = useToast();
   const comboRef = useRef(0);
   const maxComboRef = useRef(0);
-  const statusRef = useRef(status);
   const timeRef = useRef(30);
 
-  statusRef.current = status;
   timeRef.current = time;
 
   const start = useCallback(() => {

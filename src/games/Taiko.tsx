@@ -68,7 +68,6 @@ export default function Taiko() {
   const gameRef = useRef({
     song: SONGS[0],
     notes: [] as Note[],
-    elapsed: 0,
     startTime: 0,
     running: false,
     fx: [] as Array<{ x: number; text: string; color: string; t: number }>,
@@ -99,7 +98,6 @@ export default function Taiko() {
     setSongIdx(idx);
     gameRef.current.song = song;
     gameRef.current.notes = makeChart(song);
-    gameRef.current.elapsed = 0;
     gameRef.current.startTime = performance.now();
     gameRef.current.running = true;
     gameRef.current.fx = [];
@@ -163,7 +161,6 @@ export default function Taiko() {
       const ctx = cv?.getContext('2d');
       if (!cv || !ctx) return;
       const elapsed = (now - g.startTime) / 1000;
-      g.elapsed = elapsed;
 
       // Miss 检测
       for (const n of g.notes) {

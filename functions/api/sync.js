@@ -105,6 +105,17 @@ export async function onRequestPost({ request, env }) {
       existing = existingRaw ? JSON.parse(existingRaw) : null;
     } catch { /* ignore */ }
     if (incoming !== null) {
+      // 结构校验：缺字段的脏数据/恶意负载直接忽略，避免访问 player.level 崩溃
+      const valid =
+        incoming &&
+        typeof incoming === 'object' &&
+        typeof incoming.floor === 'number' &&
+        incoming.player &&
+        typeof incoming.player === 'object' &&
+        typeof incoming.player.level === 'number';
+      if (!valid) {
+        return new Response(JSON.stringify({ error: 'invalid dqSave' }), { status: 400, headers: CORS_HEADERS });
+      }
       let merged;
       if (!existing || !existing.dqSave) {
         merged = incoming;

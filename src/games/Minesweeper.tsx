@@ -134,6 +134,9 @@ export default function Minesweeper() {
 
   const startNew = useCallback(
     (idx: number) => {
+      // 清理挂起的长按定时器：长按途中切难度会在新棋盘上误插旗甚至越界崩溃
+      clearLongPress();
+      longPressRef.current.firedAt = 0;
       const lv = LEVELS[idx];
       setLevelIdx(idx);
       setGrid(buildGrid(lv.rows, lv.cols, lv.mines, 0, 0));

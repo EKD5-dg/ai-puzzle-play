@@ -120,9 +120,9 @@ export default function DigitMemory() {
         e.preventDefault();
         startGame();
       }
-      if (e.key === ' ' && (phase === 'start' || phase === 'over')) {
-        e.preventDefault(); // 阻止页面滚动
-        startGame();
+      if (e.key === ' ') {
+        e.preventDefault(); // 阻止页面滚动（所有阶段）
+        if (phase === 'start' || phase === 'over') startGame();
       }
     };
     window.addEventListener('keydown', onKey);

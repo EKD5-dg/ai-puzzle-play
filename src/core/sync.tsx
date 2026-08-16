@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useLocalStorage } from './useLocalStorage';
 import { HIGHER_IS_BETTER } from './gameMetas';
 import { setMuted as applySoundMuted } from './sound';
@@ -183,6 +183,10 @@ export function useBestScore(gameId: string) {
     local.set(v);
   };
 
+  // 最新本地值的 ref 镜像：云端拉取回调里读取，避免切换 key（如扫雷切难度）时闭包过期
+  const valueRef = useRef(local.value);
+  valueRef.current = local.value;
+
   // 挂载时从云端拉取并合并（云端更优才覆盖本地）
   useEffect(() => {
     const code = getSyncCode();
@@ -193,7 +197,7 @@ export function useBestScore(gameId: string) {
         if (cancelled) return;
         const cloudBest = cloud.scores?.[gameId];
         if (cloudBest == null) return;
-        const localBest = local.value;
+        const localBest = valueRef.current;
         if (localBest == null || isBetterScore(gameId, cloudBest, localBest)) {
           setLocal(cloudBest);
         }

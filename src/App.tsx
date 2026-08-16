@@ -310,6 +310,7 @@ export default function App() {
     const bestSave =
       localSave && cloudSave ? (isBetterDqSave(localSave, cloudSave) ? localSave : cloudSave) : (localSave ?? cloudSave);
     // 4. 写入新码
+    let migrated = true;
     try {
       const res = await fetch('https://puzzle-play.pages.dev/api/sync', {
         method: 'POST',
@@ -323,11 +324,16 @@ export default function App() {
       });
       if (!res.ok) throw new Error('upload failed');
     } catch {
-      /* ignore */
+      migrated = false;
     }
     setSyncCode(newCode);
     setSyncCodeState(newCode);
-    showSyncMsg(`已生成新同步码 ${newCode}（5 分钟内有效），旧码成绩已迁移`);
+    showSyncMsg(
+      migrated
+        ? `已生成新同步码 ${newCode}，旧码成绩已迁移`
+        : `已生成新同步码 ${newCode}，但旧码成绩迁移失败（离线？），新纪录将自动补传`,
+      !migrated,
+    );
     sfx.record();
   };
 

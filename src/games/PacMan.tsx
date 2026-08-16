@@ -143,7 +143,7 @@ export default function PacMan() {
     [initMaze],
   );
 
-  const isWall = useCallback((x: number, y: number): boolean => {
+  const isWall = useCallback((x: number, y: number, forGhost = false): boolean => {
     const maze = gameRef.current.maze;
     let col = Math.floor(x / TILE);
     const row = Math.floor(y / TILE);
@@ -152,8 +152,10 @@ export default function PacMan() {
     if (row === 9) col = ((col % COLS) + COLS) % COLS;
     else if (col < 0 || col >= COLS) return true;
     const ch = maze[row][col];
-    // '#' 墙、'=' 幽灵房墙体（玩家不可入）；其余（空格/豆子/能量豆/P）均可通行
-    return ch === '#' || ch === '=';
+    if (ch === '#') return true;
+    // '=' 是幽灵房门：拦玩家，但幽灵必须能穿行（否则出生/复活在房内的幽灵永久困死）
+    if (ch === '=') return !forGhost;
+    return false;
   }, []);
 
   // 主循环
@@ -248,7 +250,7 @@ export default function PacMan() {
             if (d === (gh.dir === 'left' ? 'right' : gh.dir === 'right' ? 'left' : gh.dir === 'up' ? 'down' : 'up')) continue;
             const nx = gx + dx * TILE;
             const ny = gy + dy * TILE;
-            if (!isWall(nx, ny)) options.push(d);
+            if (!isWall(nx, ny, true)) options.push(d); // 幽灵视角：可穿 '=' 房门
           }
           if (options.length > 0) {
             // 追逐：选朝玩家的方向（曼哈顿距离最小）

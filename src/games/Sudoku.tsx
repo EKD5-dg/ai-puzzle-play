@@ -219,6 +219,7 @@ export default function Sudoku() {
       if (e.key >= '1' && e.key <= '9') {
         inputNumber(Number(e.key));
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault(); // 阻止 Firefox 页面后退
         inputNumber(0);
       } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && selected !== null) {
         e.preventDefault();

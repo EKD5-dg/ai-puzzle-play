@@ -18,72 +18,57 @@ const DIRECTIONS = [
   [1, -1],
 ];
 
-/** 评分表：五连/活四/冲四/活三/眠三/活二 */
-const SCORES: Record<string, number> = {
-  '11111': 100000,
-  '011110': 50000,
-  '011112': 10000,
-  '211110': 10000,
-  '011010': 5000,
-  '010110': 5000,
-  '001110': 5000,
-  '011100': 5000,
-  '211100': 1000,
-  '001112': 1000,
-  '010112': 1000,
-  '011012': 1000,
-  '001100': 300,
-  '010010': 300,
-  '010100': 300,
-  '100100': 100,
+/** 沿方向数 (x,y) 处棋子 p 的连子数与开放端，返回 [连子数, 开放端数] */
+function lineCount(board: Board, x: number, y: number, dx: number, dy: number, p: 1 | 2): [number, number] {
+  let count = 1; // (x,y) 本身是 p（调用前已模拟落子）
+  let openEnds = 0;
+  for (const sign of [1, -1]) {
+    let n = 0;
+    for (let k = 1; k <= 4; k++) {
+      const nx = x + dx * k * sign;
+      const ny = y + dy * k * sign;
+      if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE) break;
+      const v = board[ny * SIZE + nx];
+      if (v === p) n++;
+      else {
+        if (v === 0) openEnds++;
+        break;
+      }
+    }
+    count += n;
+  }
+  return [Math.min(count, 5), openEnds];
+}
+
+/** 连子数+开放端 → 分值（进攻/防守共用同一张表） */
+const LINE_WEIGHTS: Record<number, Record<number, number>> = {
+  5: { 0: 100000, 1: 100000, 2: 100000 },
+  4: { 2: 50000, 1: 10000 }, // 活四 / 冲四
+  3: { 2: 5000, 1: 500 }, // 活三 / 眠三
+  2: { 2: 300, 1: 50 }, // 活二 / 眠二
+  1: { 2: 10, 1: 2 },
 };
 
-function emptyBoard(): Board {
-  return Array(SIZE * SIZE).fill(0) as Board;
-}
-
-/** 提取经过 (x,y) 的所有方向的线 */
-function linesThrough(board: Board, x: number, y: number): string[] {
-  const lines: string[] = [];
-  for (const [dx, dy] of DIRECTIONS) {
-    let s = '';
-    for (let k = -4; k <= 4; k++) {
-      const nx = x + dx * k;
-      const ny = y + dy * k;
-      if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE) s += 'X';
-      else s += String(board[ny * SIZE + nx]);
-    }
-    lines.push(s);
-  }
-  return lines;
-}
-
-function scoreLine(line: string, me: 1 | 2, opp: 1 | 2): number {
-  let total = 0;
-  for (let i = 0; i <= line.length - 5; i++) {
-    const seg = line.slice(i, i + 5);
-    if (seg.includes(String(opp)) || seg.includes('X')) {
-      // 若是对手的线，计分给对手视角
-      if (seg.includes(String(me))) continue;
-      const oppKey = seg.split(String(me)).join('0').split('X').join('2');
-      total -= (SCORES[oppKey] ?? 0) * 0.9;
-    } else {
-      const myKey = seg.split(String(opp)).join('2').split('X').join('2');
-      total += SCORES[myKey] ?? 0;
-    }
-  }
-  return total;
-}
-
+/** 评估在 (x,y) 落 me 一子后的局面价值（进攻 + 0.9 倍防守，双向评分） */
 function evaluate(board: Board, x: number, y: number, me: 1 | 2): number {
   const opp = me === 1 ? 2 : 1;
-  const lines = linesThrough(board, x, y);
+  const b = [...board];
+  b[y * SIZE + x] = me;
   let s = 0;
-  for (const line of lines) s += scoreLine(line, me, opp);
+  for (const [dx, dy] of DIRECTIONS) {
+    const [cnt, open] = lineCount(b, x, y, dx, dy, me);
+    s += LINE_WEIGHTS[cnt]?.[open] ?? 0;
+    const [ocnt, oopen] = lineCount(b, x, y, dx, dy, opp);
+    s += (LINE_WEIGHTS[ocnt]?.[oopen] ?? 0) * 0.9; // 防守：堵对手的威胁
+  }
   // 位置偏好：靠近中心更好
   const center = (SIZE - 1) / 2;
   s += (12 - Math.abs(x - center) - Math.abs(y - center)) * 5;
   return s;
+}
+
+function emptyBoard(): Board {
+  return Array(SIZE * SIZE).fill(0) as Board;
 }
 
 function findBestMove(board: Board, me: 1 | 2): number {

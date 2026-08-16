@@ -35,7 +35,7 @@ function ensureCtx(): AudioContext | null {
       if (!AC) return null;
       ctx = new AC();
     }
-    if (ctx.state === 'suspended') void ctx.resume();
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => { /* iOS 非手势上下文拒绝恢复时静默 */ });
     return ctx;
   } catch {
     return null;
