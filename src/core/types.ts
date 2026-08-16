@@ -6,7 +6,7 @@
  * 2. 在 src/core/registry.tsx 中注册一条 GameDefinition；
  * 3. 首页卡片、路由、统计将全部自动生效。
  */
-import type { ComponentType, LazyExoticComponent } from 'react';
+import type { ComponentType, LazyExoticComponent, ReactNode } from 'react';
 
 /** 游戏难度分级 */
 export type Difficulty = '简单' | '中等' | '困难';
@@ -22,8 +22,8 @@ export interface GameMeta {
   title: string;
   /** 一句话描述 */
   description: string;
-  /** 展示用图标（emoji） */
-  icon: string;
+  /** 展示用图标（emoji 或自定义 SVG 组件） */
+  icon: ReactNode;
   /** 难度 */
   difficulty: Difficulty;
   /** 分类 */

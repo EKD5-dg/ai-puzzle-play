@@ -4,6 +4,37 @@
  */
 import type { GameMeta } from './types';
 
+/** 愤怒小鸟图标：SVG 绘制，全平台颜色一致（emoji 的鸟在 Android 上是蓝色） */
+export function RedBirdIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 64 64" aria-hidden>
+      {/* 尾部羽毛 */}
+      <path d="M6 26l10 6-10 8z" fill="#2b1510" />
+      <path d="M4 32l12 2-8 10z" fill="#2b1510" />
+      <path d="M9 40l10-2-4 12z" fill="#2b1510" />
+      {/* 身体 */}
+      <circle cx="30" cy="36" r="22" fill="#d93a2b" />
+      {/* 头冠 */}
+      <circle cx="23" cy="11" r="4.5" fill="#d93a2b" />
+      <circle cx="30" cy="7.5" r="5" fill="#d93a2b" />
+      <circle cx="37" cy="11" r="4.5" fill="#d93a2b" />
+      {/* 肚皮 */}
+      <ellipse cx="28" cy="44" rx="13" ry="10" fill="#f6d6a0" />
+      {/* 眼睛 */}
+      <circle cx="24" cy="27" r="5.5" fill="#fff" />
+      <circle cx="38" cy="27" r="5.5" fill="#fff" />
+      <circle cx="26.5" cy="27.5" r="2.6" fill="#2b1510" />
+      <circle cx="40.5" cy="27.5" r="2.6" fill="#2b1510" />
+      {/* 愤怒的眉毛 */}
+      <path d="M16 17l12 5" stroke="#2b1510" strokeWidth="3.6" strokeLinecap="round" />
+      <path d="M46 17l-12 5" stroke="#2b1510" strokeWidth="3.6" strokeLinecap="round" />
+      {/* 嘴 */}
+      <path d="M30 34l15 4-15 4z" fill="#f59e1e" />
+      <path d="M32 42l11 1.5-11 3z" fill="#d97b0a" />
+    </svg>
+  );
+}
+
 export const meta2048: GameMeta = {
   id: 'game-2048',
   title: '2048',
@@ -236,7 +267,7 @@ export const metaBirds: GameMeta = {
   id: 'angry-birds',
   title: '愤怒的小鸟',
   description: '拉弹弓发射小鸟，砸毁猪猪的堡垒！',
-  icon: '🐦',
+  icon: <RedBirdIcon />,
   difficulty: '中等',
   category: '经典',
   tags: ['物理', '弹射'],

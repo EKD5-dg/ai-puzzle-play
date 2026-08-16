@@ -4,7 +4,7 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import { metaBirds } from '../core/gameMetas';
+import { metaBirds, RedBirdIcon } from '../core/gameMetas';
 
 const W = 480;
 const H = 400;
@@ -804,7 +804,7 @@ export default function AngryBirds() {
           </div>
           <div className="stat-box">
             <span>小鸟</span>
-            <strong>🐦×{birdsLeft}</strong>
+            <strong><RedBirdIcon />×{birdsLeft}</strong>
           </div>
           <div className="stat-box">
             <span>{metaBirds.bestScoreLabel}</span>
@@ -829,7 +829,7 @@ export default function AngryBirds() {
         />
         {status === 'ready' && (
           <div className="arcade-overlay ab-overlay">
-            <h2>🐦 愤怒的小鸟</h2>
+            <h2><RedBirdIcon /> 愤怒的小鸟</h2>
             <p>拖住小鸟向后拉，松手发射！<br />砸毁所有猪猪的堡垒过关</p>
             <button className="btn btn-primary" onClick={start}>
               开始游戏
