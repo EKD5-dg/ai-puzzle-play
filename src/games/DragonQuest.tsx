@@ -3,13 +3,13 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore, getSyncCode, pushProgress } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import { Portrait } from './Portrait';
+import { Portrait, preloadPortraits } from './Portrait';
 import { sceneTheme } from './pixelart';
 import { metaDragon } from '../core/gameMetas';
 
-/** 角色立绘素材映射（AI 生成，深蓝底自动抠图） */
+/** 角色立绘素材映射（AI 生成，深蓝底自动抠图；WebP 压缩版约为原 PNG 的 1/10） */
 const PORTRAITS = '/portraits';
-const HERO_PORTRAIT = `${PORTRAITS}/hero.png`;
+const HERO_PORTRAIT = `${PORTRAITS}/hero.webp`;
 interface PortraitRef {
   src: string;
   /** 立绘显示高度（px），体现体型差异 */
@@ -18,13 +18,16 @@ interface PortraitRef {
   flip?: boolean;
 }
 const MONSTER_PORTRAITS: Record<string, PortraitRef> = {
-  史莱姆: { src: `${PORTRAITS}/slime.png`, height: 120 },
-  骷髅兵: { src: `${PORTRAITS}/skeleton.png`, height: 155, flip: true },
-  僵尸: { src: `${PORTRAITS}/zombie.png`, height: 160, flip: true },
-  暗影幽魂: { src: `${PORTRAITS}/ghost.png`, height: 150 },
-  火焰魔: { src: `${PORTRAITS}/firedemon.png`, height: 190 },
-  恶龙: { src: `${PORTRAITS}/dragon.png`, height: 215 },
+  史莱姆: { src: `${PORTRAITS}/slime.webp`, height: 120 },
+  骷髅兵: { src: `${PORTRAITS}/skeleton.webp`, height: 155, flip: true },
+  僵尸: { src: `${PORTRAITS}/zombie.webp`, height: 160, flip: true },
+  暗影幽魂: { src: `${PORTRAITS}/ghost.webp`, height: 150 },
+  火焰魔: { src: `${PORTRAITS}/firedemon.webp`, height: 190 },
+  恶龙: { src: `${PORTRAITS}/dragon.webp`, height: 215 },
 };
+
+// 进入游戏即并发预下载+处理全部立绘（共约 40KB）：玩家看菜单的时间足够加载完，开战零等待
+preloadPortraits([HERO_PORTRAIT, ...Object.values(MONSTER_PORTRAITS).map((p) => p.src)]);
 
 
 
