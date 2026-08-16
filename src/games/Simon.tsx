@@ -69,7 +69,7 @@ export default function Simon() {
     if (phase !== 'input') return;
     SOUNDS[idx]();
     setLitIdx(idx);
-    window.setTimeout(() => setLitIdx(-1), 220);
+    timers.current.push(window.setTimeout(() => setLitIdx(-1), 220));
     if (sequence[inputIdx] !== idx) {
       sfx.lose();
       setPhase('over');
@@ -92,13 +92,6 @@ export default function Simon() {
       setInputIdx(next);
     }
   };
-
-  useEffect(() => {
-    if (phase === 'over' && round > bestRound) {
-      setBestRound(round);
-      best.updateBest(round, (a, b) => a > b);
-    }
-  }, [phase, round, best, bestRound]);
 
   return (
     <GameShell

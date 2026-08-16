@@ -73,6 +73,26 @@ export default function Taiko() {
     running: false,
     fx: [] as Array<{ x: number; text: string; color: string; t: number }>,
   });
+  /** 连击镜像（hit 在键盘/触屏回调中读取最新值） */
+  const comboRef = useRef(0);
+  comboRef.current = combo;
+  /** 切后台时刻：恢复时把暂停时长从曲目进度中扣除 */
+  const hiddenAtRef = useRef(0);
+
+  // 切后台暂停补偿：rAF 停摆期间不计时，避免恢复瞬间所有音符批量判 miss
+  useEffect(() => {
+    const onVis = () => {
+      const g = gameRef.current;
+      if (document.hidden) {
+        hiddenAtRef.current = performance.now();
+      } else if (hiddenAtRef.current > 0) {
+        g.startTime += performance.now() - hiddenAtRef.current;
+        hiddenAtRef.current = 0;
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
   const startSong = (idx: number) => {
     const song = SONGS[idx];
@@ -83,6 +103,7 @@ export default function Taiko() {
     gameRef.current.startTime = performance.now();
     gameRef.current.running = true;
     gameRef.current.fx = [];
+    comboRef.current = 0;
     setScore(0);
     setCombo(0);
     setMaxCombo(0);
@@ -113,13 +134,12 @@ export default function Taiko() {
     }
     const isGood = bestDist <= 0.06;
     bestNote.judged = isGood ? 1 : 2;
-    const gained = isGood ? 100 + Math.min(combo, 50) : 50;
+    const nc = comboRef.current + 1;
+    comboRef.current = nc;
+    const gained = isGood ? 100 + Math.min(comboRef.current, 50) : 50;
     setScore((s) => s + gained);
-    setCombo((c) => {
-      const nc = c + 1;
-      setMaxCombo((m) => Math.max(m, nc));
-      return nc;
-    });
+    setCombo(nc);
+    setMaxCombo((m) => Math.max(m, nc));
     setResult((r) => ({ ...r, good: r.good + (isGood ? 1 : 0), ok: r.ok + (isGood ? 0 : 1) }));
     if (isGood) {
       sfx.merge();
@@ -149,18 +169,16 @@ export default function Taiko() {
       for (const n of g.notes) {
         if (n.judged === 0 && !n.missed && n.time < elapsed - 0.15) {
           n.missed = true;
+          comboRef.current = 0;
           setCombo(0);
           setResult((r) => ({ ...r, miss: r.miss + 1 }));
           g.fx.push({ x: JUDGE_X, text: '不可', color: '#ef5350', t: 0 });
         }
       }
 
-      // 曲目结束
+      // 曲目结束（评级由渲染时的最新 result 计算，此处不读陈旧闭包）
       if (elapsed > g.song.seconds) {
         g.running = false;
-        const final = result;
-        const grade = final.miss === 0 && final.good / Math.max(1, final.good + final.ok) >= 0.9 ? 'S' : final.good / Math.max(1, final.good + final.ok) >= 0.75 ? 'A' : final.good / Math.max(1, final.good + final.ok) >= 0.5 ? 'B' : 'C';
-        void grade;
         sfx.win();
         setStatus('result');
         return;

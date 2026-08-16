@@ -140,6 +140,8 @@ export default function Game2048() {
   const [score, setScore] = useState(0);
   const [over, setOver] = useState(false);
   const [won, setWon] = useState(false);
+  /** 达成 2048 后玩家选择"继续挑战"时隐藏成就遮罩 */
+  const [dismissed, setDismissed] = useState(false);
   const [scorePop, setScorePop] = useState(0); // 触发分数动画
   const best = useBestScore(meta2048.id);
   const touchRef = useRef<{ x: number; y: number } | null>(null);
@@ -147,29 +149,29 @@ export default function Game2048() {
 
   const doMove = useCallback(
     (dir: Dir) => {
-      setBoard((prev) => {
-        const { board: next, score: gained, moved } = moveBoard(prev, dir);
-        if (!moved) return prev;
-        const spawned = spawn(next);
-        if (gained > 0) {
-          sfx.merge();
-          setScore((s) => s + gained);
-          setScorePop((p) => p + 1);
-        }
-        if (spawned.some((v) => v >= 2048)) {
-          setWon(true);
-          sfx.win();
-          toast('达成 2048！继续冲击更高分吧', 'success');
-        }
-        if (!canMove(spawned)) {
-          setOver(true);
-          sfx.lose();
-          toast('没有可移动的格子了', 'info');
-        }
-        return spawned;
-      });
+      // 终局拦截：over 恒拦截；won 且玩家选择了"继续挑战"（dismissed）后允许继续
+      if (over || (won && !dismissed)) return;
+      const { board: next, score: gained, moved } = moveBoard(board, dir);
+      if (!moved) return;
+      const spawned = spawn(next);
+      setBoard(spawned);
+      if (gained > 0) {
+        sfx.merge();
+        setScore((s) => s + gained);
+        setScorePop((p) => p + 1);
+      }
+      if (!won && spawned.some((v) => v >= 2048)) {
+        setWon(true);
+        sfx.win();
+        toast('达成 2048！可以继续冲击更高分', 'success');
+      }
+      if (!canMove(spawned)) {
+        setOver(true);
+        sfx.lose();
+        toast('没有可移动的格子了', 'info');
+      }
     },
-    [toast],
+    [board, over, won, dismissed, toast],
   );
 
   useEffect(() => {
@@ -188,7 +190,7 @@ export default function Game2048() {
   useEffect(() => {
     if (score > 0) {
       const isNew = best.updateBest(score, (a, b) => a > b);
-      if (isNew && score > 0) {
+      if (isNew) {
         sfx.record();
         toast(`新纪录！最高分 ${score}`, 'record');
       }
@@ -200,6 +202,7 @@ export default function Game2048() {
     setScore(0);
     setOver(false);
     setWon(false);
+    setDismissed(false);
   };
 
   const onTouchStart = (e: React.TouchEvent) => {
@@ -242,11 +245,16 @@ export default function Game2048() {
             </div>
           ))}
         </div>
-        {(over || won) && (
+        {(over || (won && !dismissed)) && (
           <div className="g2048-overlay">
-            <h2>{won ? '🎉 你合成了 2048！' : '💀 没有可移动的格子了'}</h2>
+            <h2>{over ? '💀 没有可移动的格子了' : '🎉 你合成了 2048！'}</h2>
             <p>最终得分 {score}</p>
-            <button className="btn btn-primary" onClick={restart}>
+            {won && !over && (
+              <button className="btn btn-primary" onClick={() => setDismissed(true)}>
+                🚀 继续挑战更高分
+              </button>
+            )}
+            <button className="btn btn-ghost" onClick={restart}>
               再来一局
             </button>
           </div>

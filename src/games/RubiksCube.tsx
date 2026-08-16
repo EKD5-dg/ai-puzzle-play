@@ -164,10 +164,19 @@ function isSolvedCube(cube: Cubie[]): boolean {
   return true;
 }
 
+/**
+ * 面转动角度：dir=1 为标准顺时针（从该面外侧观察）。
+ * 对 U/R/F（layer=+1）逆着轴正方向转，对 D/L/B（layer=-1）顺着轴正方向转——
+ * 因为从面的外侧观察时，法线为 + 轴与 - 轴的面其"顺时针"方向相反。
+ */
+function faceAngle(layer: -1 | 0 | 1, dir: 1 | -1): number {
+  return (-dir * layer * Math.PI) / 2;
+}
+
 /** 立即应用一次转动（无动画，用于打乱） */
 function applyMoveInstant(cube: Cubie[], faceIdx: number, dir: 1 | -1): void {
   const face = FACES[faceIdx];
-  const R = rotMat(face.axis, (dir * Math.PI) / 2);
+  const R = rotMat(face.axis, faceAngle(face.layer, dir));
   for (const c of cube) {
     if (c.pos[face.axis] !== face.layer) continue;
     c.pos = roundVec(matVec(R, c.pos));
@@ -338,7 +347,8 @@ export default function RubiksCube() {
       if (anim) {
         const t = Math.min(1, (now - anim.start) / anim.dur);
         const eased = t * t * (3 - 2 * t);
-        const R = rotMat(anim.axis, (anim.dir * eased * Math.PI) / 2);
+        // 动画方向与 applyMoveInstant 一致：dir=1 为标准顺时针（从面外侧观察）
+        const R = rotMat(anim.axis, faceAngle(anim.layer, anim.dir) * eased);
         // 旋转层沿垂直旋转轴方向整体轻微膨胀（sin 曲线，起止为 0），旋转过程中不露缝隙
         const bulge = 1 + 0.03 * Math.sin(Math.PI * eased);
         animState = { R, axis: anim.axis, layer: anim.layer, bulge };
@@ -499,8 +509,15 @@ export default function RubiksCube() {
 
   // ============ 还原成功 ============
 
+  /** 结算守卫：status 变 solved 时只结算一次（best/toast 每次渲染是新对象，不能进依赖） */
+  const solvedHandledRef = useRef(false);
   useEffect(() => {
-    if (status !== 'solved') return;
+    if (status !== 'solved') {
+      solvedHandledRef.current = false;
+      return;
+    }
+    if (solvedHandledRef.current) return;
+    solvedHandledRef.current = true;
     sfx.win();
     toast(`🎉 还原成功！用时 ${fmt(elapsed)}`, 'success');
     const isNew = best.updateBest(Math.round(elapsed), (a, b) => a < b);
@@ -509,7 +526,8 @@ export default function RubiksCube() {
       sfx.record();
       toast('🏆 新纪录！最快还原时间', 'record');
     }
-  }, [status, elapsed, best, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   // ============ 键盘 ============
 

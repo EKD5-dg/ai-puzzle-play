@@ -17,6 +17,9 @@ interface Bullet {
   vy: number;
 }
 
+/** 外星人类型配色（模块级常量，避免每帧为每只重建数组） */
+const INVADER_COLORS = ['#f44336', '#ff9800', '#4dd0e1', '#8bc34a', '#e91e63'];
+
 export default function SpaceInvaders() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<'ready' | 'playing' | 'over' | 'win'>('ready');
@@ -26,6 +29,9 @@ export default function SpaceInvaders() {
   const best = useBestScore(metaInvaders.id);
   const { toast } = useToast();
   const keysRef = useRef({ left: false, right: false });
+  /** 生命值镜像（rAF/定时器回调内读取最新值） */
+  const livesRef = useRef(3);
+  livesRef.current = lives;
 
   const gameRef = useRef({
     player: { x: W / 2 - 20, y: H - 44 },
@@ -74,11 +80,13 @@ export default function SpaceInvaders() {
     gameRef.current.enemyBullets = [];
     gameRef.current.dir = 1;
     gameRef.current.moveTimer = 0;
+    gameRef.current.fireTimer = 0; // 重置敌方开火计时，避免新一波开局立即出弹
     void lv;
   }, []);
 
   const startGame = useCallback(() => {
     setScore(0);
+    livesRef.current = 3;
     setLives(3);
     setLevel(1);
     initLevel(1);
@@ -165,16 +173,15 @@ export default function SpaceInvaders() {
         const b = g.enemyBullets[i];
         if (b.x > g.player.x && b.x < g.player.x + 40 && b.y > g.player.y && b.y < g.player.y + 24) {
           g.enemyBullets.splice(i, 1);
-          setLives((l) => {
-            const nl = l - 1;
-            if (nl <= 0) {
-              setStatus('over');
-              sfx.lose();
-            } else {
-              sfx.mismatch();
-            }
-            return nl;
-          });
+          const nl = livesRef.current - 1;
+          livesRef.current = nl;
+          setLives(nl);
+          if (nl <= 0) {
+            setStatus('over');
+            sfx.lose();
+          } else {
+            sfx.mismatch();
+          }
         }
       }
 
@@ -194,8 +201,7 @@ export default function SpaceInvaders() {
       // 外星人
       g.invaders.forEach((inv) => {
         if (!inv.alive) return;
-        const colors = ['#f44336', '#ff9800', '#4dd0e1', '#8bc34a', '#e91e63'];
-        ctx.fillStyle = colors[inv.type];
+        ctx.fillStyle = INVADER_COLORS[inv.type];
         // 简易外星人造型
         ctx.fillRect(inv.x + 4, inv.y, 24, 8);
         ctx.fillRect(inv.x, inv.y + 8, 32, 6);
@@ -222,11 +228,17 @@ export default function SpaceInvaders() {
     return () => cancelAnimationFrame(raf);
   }, [status, level]);
 
-  // 键盘控制
+  // 键盘控制（左右键阻止页面滚动；窗口失焦时清空按键，防止切回后炮台漂移）
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keysRef.current.left = true;
-      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keysRef.current.right = true;
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        e.preventDefault();
+        keysRef.current.left = true;
+      }
+      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        e.preventDefault();
+        keysRef.current.right = true;
+      }
       if (e.key === ' ') {
         e.preventDefault();
         if (status === 'ready' || status === 'over' || status === 'win') {
@@ -244,11 +256,17 @@ export default function SpaceInvaders() {
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keysRef.current.left = false;
       if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keysRef.current.right = false;
     };
+    const onBlur = () => {
+      keysRef.current.left = false;
+      keysRef.current.right = false;
+    };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
     };
   }, [status, startGame]);
 
@@ -263,16 +281,16 @@ export default function SpaceInvaders() {
     return () => window.clearInterval(t);
   }, [status]);
 
-  // 最高分
+  // 最高分：只在游戏结束时结算一次（避免破纪录后每击杀一个外星人刷屏）
   useEffect(() => {
-    if (score > 0) {
+    if ((status === 'over' || status === 'win') && score > 0) {
       const isNew = best.updateBest(score, (a, b) => a > b);
-      if (isNew && score > 0) {
+      if (isNew) {
         sfx.record();
         toast(`新纪录！${score} 分`, 'record');
       }
     }
-  }, [score, best, toast]);
+  }, [status, score, best, toast]);
 
   return (
     <GameShell

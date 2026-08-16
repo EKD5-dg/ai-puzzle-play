@@ -51,21 +51,26 @@ export default function MemoryMatch() {
   const [time, setTime] = useState(0);
   const [won, setWon] = useState(false);
   const [mismatchIds, setMismatchIds] = useState<number[]>([]); // 配对失败的卡（抖动）
+  /** 是否已开始（首次翻牌起计时，含翻牌过程） */
+  const [started, setStarted] = useState(false);
   const lockRef = useRef(false);
   const timerRef = useRef<number | null>(null);
+  const mismatchTimerRef = useRef<number | null>(null);
+  /** flipped 的实时镜像：连点第三张卡的防御守卫 */
+  const flippedRef = useRef<number[]>([]);
+  flippedRef.current = flipped;
   const best = useBestScore(metaMemory.id);
   const { toast } = useToast();
-  const matchedCount = deck.filter((c) => c.matched).length;
 
-  // 计时（仅进行中）
+  // 计时（首次翻牌开始，胜利停止）
   useEffect(() => {
-    if (matchedCount > 0 && !won) {
+    if (started && !won) {
       timerRef.current = window.setInterval(() => setTime((t) => t + 1), 1000);
       return () => {
         if (timerRef.current) window.clearInterval(timerRef.current);
       };
     }
-  }, [matchedCount > 0, won]);
+  }, [started, won]);
 
   // 翻牌配对检测
   useEffect(() => {
@@ -84,13 +89,24 @@ export default function MemoryMatch() {
     } else {
       sfx.mismatch();
       setMismatchIds([a, b]);
-      window.setTimeout(() => {
+      // 定时器受 ref 管理：重开/卸载时清除，避免旧定时器强制合上新一局的牌
+      mismatchTimerRef.current = window.setTimeout(() => {
+        mismatchTimerRef.current = null;
         setFlipped([]);
         setMismatchIds([]);
         lockRef.current = false;
       }, 900);
     }
   }, [flipped, deck]);
+
+  // 卸载时清理所有定时器
+  useEffect(
+    () => () => {
+      if (mismatchTimerRef.current !== null) window.clearTimeout(mismatchTimerRef.current);
+      if (timerRef.current !== null) window.clearInterval(timerRef.current);
+    },
+    [],
+  );
 
   // 胜利判定
   useEffect(() => {
@@ -106,22 +122,32 @@ export default function MemoryMatch() {
   }, [deck, won, moves, best, toast]);
 
   const startNew = (idx: number) => {
+    if (mismatchTimerRef.current !== null) {
+      window.clearTimeout(mismatchTimerRef.current);
+      mismatchTimerRef.current = null;
+    }
     setLevelIdx(idx);
     setDeck(buildDeck(LEVELS[idx].pairs));
     setFlipped([]);
+    flippedRef.current = [];
     setMoves(0);
     setTime(0);
     setWon(false);
+    setStarted(false);
     lockRef.current = false;
   };
 
   const flip = (card: Card) => {
     if (lockRef.current || won || card.matched) return;
-    if (flipped.includes(card.id)) return;
-    if (flipped.length >= 2) return;
+    // 用实时镜像守卫，连点不会出现第三张卡或重复计数
+    const cur = flippedRef.current;
+    if (cur.includes(card.id) || cur.length >= 2) return;
     sfx.flip();
-    setFlipped((prev) => [...prev, card.id]);
-    if (flipped.length === 1) setMoves((m) => m + 1);
+    const next = [...cur, card.id];
+    flippedRef.current = next;
+    setFlipped(next);
+    if (cur.length === 1) setMoves((m) => m + 1);
+    if (!started) setStarted(true);
   };
 
   const cols = LEVELS[levelIdx].pairs === 12 ? 6 : 4;

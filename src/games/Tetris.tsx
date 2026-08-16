@@ -102,15 +102,28 @@ export default function Tetris() {
   const [gameOver, setGameOver] = useState(false);
   const [paused, setPaused] = useState(false);
   const [flash, setFlash] = useState(0); // 消行闪光触发器
+  const [flashing, setFlashing] = useState(false); // 消行动画播放中（避免整盘重建）
   const bagRef = useRef<string[]>(makeBag());
   const boardRef = useRef(board);
   const activeRef = useRef(active);
+  /** nextType 实时镜像：lock 时用预览块作为下一个当前块 */
+  const nextTypeRef = useRef<string>(makeBag()[0]);
+  nextTypeRef.current = nextType;
   const best = useBestScore(metaTetris.id);
   const { toast } = useToast();
   const gameOverRef = useRef(false);
+  const initRef = useRef(false);
 
   boardRef.current = board;
   activeRef.current = active;
+
+  // 消行闪光动画：类切换 + 定时移除，不用 key 重建 200 格 DOM
+  useEffect(() => {
+    if (flash === 0) return;
+    setFlashing(true);
+    const t = window.setTimeout(() => setFlashing(false), 300);
+    return () => window.clearTimeout(t);
+  }, [flash]);
 
   const pullNext = useCallback((): string => {
     if (bagRef.current.length === 0) bagRef.current = makeBag();
@@ -147,9 +160,9 @@ export default function Tetris() {
     }
     setScore((s) => s + LINE_SCORES[n] * level);
     if (n > 0) setLevel((lv) => Math.min(15, lv + Math.floor(n / 2)));
-    const nt = pullNext();
-    setNextType(nt);
-    const next = spawn(nt);
+    // 下一个当前块 = 预览块（7-bag 连续抽取），预览再抽下一个
+    const next = spawn(nextTypeRef.current);
+    setNextType(pullNext());
     if (!next) {
       setGameOver(true);
       gameOverRef.current = true;
@@ -160,22 +173,25 @@ export default function Tetris() {
     }
   }, [level, pullNext, spawn, toast]);
 
-  // 初始化
+  // 初始化（幂等：StrictMode dev 下 effect 双执行不会重复抽块）
   useEffect(() => {
-    const type = pullNext();
-    setActive(spawn(type));
+    if (initRef.current) return;
+    initRef.current = true;
+    // 当前块先抽、预览后抽，与 lock 的抽取顺序一致（保证预览 = 下一个实际落下的块）
+    setActive(spawn(pullNext()));
+    setNextType(pullNext());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const move = useCallback(
-    (dx: number, dy: number): boolean => {
+    (dx: number, dy: number, silent = false): boolean => {
       const cur = activeRef.current;
       if (!cur || gameOverRef.current || paused) return false;
       const x = cur.x + dx;
       const y = cur.y + dy;
       if (collides(boardRef.current, cur.shape, x, y)) return false;
       setActive({ ...cur, x, y });
-      sfx.move();
+      if (!silent) sfx.move();
       return true;
     },
     [paused],
@@ -207,7 +223,8 @@ export default function Tetris() {
   }, [lock, paused]);
 
   const softDrop = useCallback(() => {
-    if (!move(0, 1)) lock();
+    // 静音下落：重力循环与 ↓ 键都不播移动音效（高等级时避免声音密集）
+    if (!move(0, 1, true)) lock();
   }, [move, lock]);
 
   // 重力循环
@@ -316,8 +333,7 @@ export default function Tetris() {
       <div className="tetris">
         <div className="tetris-main">
           <div
-            className={`tetris-board ${flash > 0 ? 'flash' : ''}`}
-            key={flash}
+            className={`tetris-board ${flashing ? 'flash' : ''}`}
             style={{ gridTemplateColumns: `repeat(${COLS}, 30px)` }}
           >
             {display.map((row, r) =>

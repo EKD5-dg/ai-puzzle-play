@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
+import { useBestScore } from '../core/sync';
 import { metaOthello } from '../core/gameMetas';
 
 
@@ -134,6 +135,7 @@ export default function Othello() {
   const [wins, setWins] = useState(0);
   const [losses, setLosses] = useState(0);
   const { toast } = useToast();
+  const best = useBestScore(metaOthello.id);
 
   const reset = () => {
     setBoard(emptyBoard());
@@ -171,16 +173,24 @@ export default function Othello() {
   }, [turn, gameOver]);
 
   const finish = () => {
+    // 幂等守卫：StrictMode 下 effect 双调用/终局后重复触发时只结算一次
+    if (gameOver) return;
     const [b, w] = count(board);
     setGameOver(true);
-    sfx.win();
     if (b > w) {
-      setWins((v) => v + 1);
+      sfx.win();
+      const newWins = wins + 1;
+      setWins(newWins);
+      best.updateBest(Math.round((newWins / (newWins + losses)) * 100), (a, b) => a > b);
       toast(`🎉 你赢了！${b} : ${w}`, 'success');
     } else if (w > b) {
-      setLosses((v) => v + 1);
+      sfx.lose();
+      const newLosses = losses + 1;
+      setLosses(newLosses);
+      best.updateBest(Math.round((wins / (wins + newLosses)) * 100), (a, b) => a > b);
       toast(`💀 电脑赢了 ${w} : ${b}`, 'info');
     } else {
+      sfx.mismatch();
       toast('🤝 平局！', 'info');
     }
   };
@@ -231,6 +241,10 @@ export default function Othello() {
           <div className="stat-box">
             <span>胜率</span>
             <strong>{winRate}%</strong>
+          </div>
+          <div className="stat-box">
+            <span>{metaOthello.bestScoreLabel}</span>
+            <strong>{best.value != null ? `${best.value}%` : '--'}</strong>
           </div>
           <button className="btn btn-primary" onClick={reset}>
             🔄 新一局

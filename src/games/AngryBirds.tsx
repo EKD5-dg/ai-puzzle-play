@@ -207,6 +207,7 @@ export default function AngryBirds() {
     gg.pullX = 0;
     gg.pullY = 0;
     gg.aiming = false;
+    aimPointerRef.current = null; // 重开/换关时释放拖拽手指，防止弹弓永久失灵
     gg.floaters = [];
     gg.endTimer = 0;
     setBirdsLeft(birds);
@@ -224,8 +225,10 @@ export default function AngryBirds() {
 
   const restart = useCallback(() => {
     const gg = g.current;
+    gg.score = 0; // 重来本关不清分会导致反复刷分
     loadLevel(gg.level);
     gg.status = 'playing';
+    setScore(0);
     setStatus('playing');
   }, [loadLevel]);
 
@@ -260,103 +263,105 @@ export default function AngryBirds() {
     }
   }, [loadLevel]);
 
-  const update = useCallback(() => {
-    const gg = g.current;
-    if (gg.status !== 'playing') return;
-    const b = gg.bird;
+  /** 物理主循环：dtMs 毫秒 → 帧归一化，保证 120Hz 屏上游戏速度与 60Hz 一致 */
+  const update = useCallback(
+    (dtMs: number) => {
+      const gg = g.current;
+      if (gg.status !== 'playing') return;
+      const b = gg.bird;
+      const frame = Math.min(3, dtMs / 16.67); // 1 帧 = 60Hz 的一帧
 
-    // 鸟飞行
-    if (b.state === 'flying') {
-      b.vy += GRAVITY;
-      b.vx *= 0.996;
-      b.x += b.vx;
-      b.y += b.vy;
-      b.rot = Math.atan2(b.vy, b.vx);
-      if (b.y >= GROUND - BIRD_R) {
-        b.y = GROUND - BIRD_R;
-        if (Math.abs(b.vx) < 0.6) {
-          b.vx = 0;
-          b.vy = 0;
-          b.state = 'grounded';
-        } else {
-          b.vy = 0;
-          b.vx *= 0.86;
+      // 鸟飞行
+      if (b.state === 'flying') {
+        b.vy += GRAVITY * frame;
+        b.vx *= Math.pow(0.996, frame);
+        b.x += b.vx * frame;
+        b.y += b.vy * frame;
+        b.rot = Math.atan2(b.vy, b.vx);
+        if (b.y >= GROUND - BIRD_R) {
+          b.y = GROUND - BIRD_R;
+          if (Math.abs(b.vx) < 0.6) {
+            b.vx = 0;
+            b.vy = 0;
+            b.state = 'grounded';
+          } else {
+            b.vy = 0;
+            b.vx *= Math.pow(0.86, frame);
+          }
         }
+        if (b.x < -80 || b.x > W + 80 || b.y > H + 40) b.state = 'gone';
+        if (b.state === 'flying') collideBird();
       }
-      if (b.x < -80 || b.x > W + 80 || b.y > H + 40) b.state = 'gone';
-      if (b.state === 'flying') collideBird();
-    }
 
-    // 飞行的木块
-    for (const c of gg.crates) {
-      if (!c.alive || !c.flying) continue;
-      c.vy += GRAVITY;
-      c.x += c.vx;
-      c.y += c.vy;
-      c.rot += c.vx * 0.02;
-      if (c.y + c.h >= GROUND) {
-        c.y = GROUND - c.h;
-        if (Math.abs(c.vx) < 0.6) {
-          c.vx = 0;
-          c.vy = 0;
+      // 飞行的木块
+      for (const c of gg.crates) {
+        if (!c.alive || !c.flying) continue;
+        c.vy += GRAVITY * frame;
+        c.x += c.vx * frame;
+        c.y += c.vy * frame;
+        c.rot += c.vx * 0.02 * frame;
+        if (c.y + c.h >= GROUND) {
+          c.y = GROUND - c.h;
+          if (Math.abs(c.vx) < 0.6) {
+            c.vx = 0;
+            c.vy = 0;
+            c.flying = false;
+            c.rot = 0;
+          } else {
+            c.vy = 0;
+            c.vx *= Math.pow(0.85, frame);
+          }
+        }
+        if (c.x < -120 || c.x > W + 120 || c.y > H + 60) {
+          c.alive = false;
           c.flying = false;
-          c.rot = 0;
-        } else {
-          c.vy = 0;
-          c.vx *= 0.85;
         }
       }
-      if (c.x < -120 || c.x > W + 120 || c.y > H + 60) {
-        c.alive = false;
-        c.flying = false;
-      }
-    }
 
-    // 飞行的猪
-    for (const p of gg.pigs) {
-      if (!p.alive || !p.flying) continue;
-      p.vy += GRAVITY;
-      p.x += p.vx;
-      p.y += p.vy;
-      if (p.y >= GROUND - p.r) {
-        p.y = GROUND - p.r;
-        if (Math.abs(p.vx) < 0.6) {
-          p.vx = 0;
-          p.vy = 0;
-          p.flying = false;
-        } else {
-          p.vy = 0;
-          p.vx *= 0.85;
-        }
-      }
-      if (p.x < -100 || p.x > W + 100 || p.y > H + 60) {
-        p.alive = false;
-        p.flying = false;
-      }
-    }
-
-    // 飞木块连锁（撞猪 / 撞静止木块）
-    for (const c of gg.crates) {
-      if (!c.alive || !c.flying) continue;
+      // 飞行的猪（被击飞的猪 alive 保持 true，直到飞出屏幕才消失）
       for (const p of gg.pigs) {
-        if (!p.alive) continue;
-        const nx = Math.max(c.x, Math.min(p.x, c.x + c.w));
-        const ny = Math.max(c.y, Math.min(p.y, c.y + c.h));
-        const dx = p.x - nx;
-        const dy = p.y - ny;
-        if (dx * dx + dy * dy < p.r * p.r) {
+        if (!p.flying) continue;
+        p.vy += GRAVITY * frame;
+        p.x += p.vx * frame;
+        p.y += p.vy * frame;
+        if (p.y >= GROUND - p.r) {
+          p.y = GROUND - p.r;
+          if (Math.abs(p.vx) < 0.6) {
+            p.vx = 0;
+            p.vy = 0;
+            p.flying = false;
+          } else {
+            p.vy = 0;
+            p.vx *= Math.pow(0.85, frame);
+          }
+        }
+        if (p.x < -100 || p.x > W + 100 || p.y > H + 60) {
           p.alive = false;
-          p.flying = true;
-          p.vx = c.vx * 0.5;
-          p.vy = c.vy * 0.4 - 1.5;
-          c.vx *= 0.55;
-          c.vy *= 0.55;
-          gg.score += 10;
-          setScore(gg.score);
-          gg.floaters.push({ x: p.x, y: p.y - 10, text: '+10', t: 0 });
-          sfx.clear();
+          p.flying = false;
         }
       }
+
+      // 飞木块连锁（撞猪 / 撞静止木块）
+      for (const c of gg.crates) {
+        if (!c.alive || !c.flying) continue;
+        for (const p of gg.pigs) {
+          if (!p.alive || p.flying) continue; // 已在飞的猪不再重复撞击计分
+          const nx = Math.max(c.x, Math.min(p.x, c.x + c.w));
+          const ny = Math.max(c.y, Math.min(p.y, c.y + c.h));
+          const dx = p.x - nx;
+          const dy = p.y - ny;
+          if (dx * dx + dy * dy < p.r * p.r) {
+            p.flying = true; // 猪被撞飞（alive 保持 true 直到飞出屏幕）
+            p.vx = c.vx * 0.5;
+            p.vy = c.vy * 0.4 - 1.5;
+            c.vx *= 0.55;
+            c.vy *= 0.55;
+            gg.score += 10;
+            setScore(gg.score);
+            gg.floaters.push({ x: p.x, y: p.y - 10, text: '+10', t: 0 });
+            sfx.clear();
+          }
+        }
       for (const d of gg.crates) {
         if (!d.alive || d === c || d.flying) continue;
         if (c.x < d.x + d.w && c.x + c.w > d.x && c.y < d.y + d.h && c.y + c.h > d.y) {
@@ -373,16 +378,16 @@ export default function AngryBirds() {
     // 飘字
     for (let i = gg.floaters.length - 1; i >= 0; i--) {
       const f = gg.floaters[i];
-      f.t += 1;
-      f.y -= 0.8;
+      f.t += frame;
+      f.y -= 0.8 * frame;
       if (f.t > 45) gg.floaters.splice(i, 1);
     }
 
     // 回合结束判定
     if (b.state === 'grounded' || b.state === 'gone') {
-      const moving = gg.crates.some((c) => c.flying && c.alive) || gg.pigs.some((p) => p.flying && p.alive);
+      const moving = gg.crates.some((c) => c.flying && c.alive) || gg.pigs.some((p) => p.flying);
       if (!moving) {
-        gg.endTimer += 1;
+        gg.endTimer += frame;
         if (gg.endTimer > 50) finishTurn();
       } else gg.endTimer = 0;
     } else gg.endTimer = 0;
@@ -392,13 +397,12 @@ export default function AngryBirds() {
     const gg = g.current;
     const b = gg.bird;
     for (const p of gg.pigs) {
-      if (!p.alive) continue;
+      if (!p.alive || p.flying) continue; // 已在飞的猪不再重复撞击计分
       const dx = p.x - b.x;
       const dy = p.y - b.y;
       const rr = p.r + BIRD_R;
       if (dx * dx + dy * dy < rr * rr) {
-        p.alive = false;
-        p.flying = true;
+        p.flying = true; // 猪被撞飞（alive 保持 true 直到飞出屏幕）
         p.vx = b.vx * 0.5 + (Math.random() - 0.5) * 2;
         p.vy = b.vy * 0.4 - 2;
         b.vx *= 0.55;
@@ -715,8 +719,11 @@ export default function AngryBirds() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     let raf = 0;
-    const loop = () => {
-      update();
+    let last = performance.now();
+    const loop = (now: number) => {
+      const dt = Math.min(100, now - last);
+      last = now;
+      update(dt);
       draw(ctx);
       raf = requestAnimationFrame(loop);
     };
@@ -734,21 +741,26 @@ export default function AngryBirds() {
     };
   };
 
+  /** 当前拖拽手指的 pointerId（多指时忽略第二根手指的干扰） */
+  const aimPointerRef = useRef<number | null>(null);
+
   const onDown = (e: React.PointerEvent) => {
     const gg = g.current;
     if (gg.status !== 'playing' || gg.bird.state !== 'idle') return;
+    if (aimPointerRef.current !== null) return; // 已有手指在拖
     const pos = toLocal(e);
     const dx = pos.x - gg.bird.x;
     const dy = pos.y - gg.bird.y;
     if (dx * dx + dy * dy > 70 * 70) return;
     gg.aiming = true;
+    aimPointerRef.current = e.pointerId;
     canvasRef.current?.setPointerCapture(e.pointerId);
     sfx.click();
   };
 
   const onMove = (e: React.PointerEvent) => {
     const gg = g.current;
-    if (!gg.aiming) return;
+    if (!gg.aiming || e.pointerId !== aimPointerRef.current) return;
     const pos = toLocal(e);
     let px = pos.x - SLING_X;
     let py = pos.y - (SLING_Y - BIRD_R);
@@ -767,8 +779,11 @@ export default function AngryBirds() {
     gg.bird.y = SLING_Y - BIRD_R + py;
   };
 
-  const onUp = () => {
+  const onUp = (e: React.PointerEvent) => {
     const gg = g.current;
+    // 无论 aiming 状态，只要是对应手指就释放引用（防止取消/重开路径残留）
+    if (e.pointerId !== aimPointerRef.current) return;
+    aimPointerRef.current = null;
     if (!gg.aiming) return;
     gg.aiming = false;
     const len = Math.hypot(gg.pullX, gg.pullY);

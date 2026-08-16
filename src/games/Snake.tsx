@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
@@ -54,22 +54,28 @@ export default function Snake() {
   const best = useBestScore(metaSnake.id);
   const { toast } = useToast();
   const dirRef = useRef<Dir>('right');
+  /** 上次 tick 实际应用的方向（180° 掉头守卫的基准，防止同 tick 双按键绕过） */
+  const lastAppliedRef = useRef<Dir>('right');
   const snakeRef = useRef(snake);
   const foodRef = useRef(food);
   const statusRef = useRef(status);
+  const scoreRef = useRef(score);
 
   snakeRef.current = snake;
   foodRef.current = food;
   statusRef.current = status;
+  scoreRef.current = score;
 
-  const start = () => {
+  const start = useCallback(() => {
     setSnake([{ x: 10, y: 10 }]);
     setFood(randFood([{ x: 10, y: 10 }]));
     dirRef.current = 'right';
+    lastAppliedRef.current = 'right';
+    scoreRef.current = 0;
     setScore(0);
     setSpeed(1);
     setStatus('playing');
-  };
+  }, []);
 
   // 游戏循环
   useEffect(() => {
@@ -78,6 +84,7 @@ export default function Snake() {
     const t = window.setInterval(() => {
       const cur = snakeRef.current;
       const d = DIRS[dirRef.current];
+      lastAppliedRef.current = dirRef.current;
       const head = { x: cur[0].x + d.x, y: cur[0].y + d.y };
       // 撞墙
       if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
@@ -85,23 +92,23 @@ export default function Snake() {
         setStatus('over');
         return;
       }
-      // 撞自己
-      if (cur.some((p) => p.x === head.x && p.y === head.y)) {
+      const ate = head.x === foodRef.current.x && head.y === foodRef.current.y;
+      // 撞自己（不进食时尾格本 tick 会腾空，移入尾格是合法移动）
+      const bodyForCollision = ate ? cur : cur.slice(0, -1);
+      if (bodyForCollision.some((p) => p.x === head.x && p.y === head.y)) {
         sfx.lose();
         setStatus('over');
         return;
       }
-      const ate = head.x === foodRef.current.x && head.y === foodRef.current.y;
       const next = [head, ...cur];
       if (!ate) next.pop();
       setSnake(next);
       if (ate) {
         sfx.merge();
-        setScore((s) => {
-          const ns = s + 10;
-          setSpeed(Math.min(9, Math.floor(ns / 30) + 1));
-          return ns;
-        });
+        const ns = scoreRef.current + 10;
+        scoreRef.current = ns;
+        setScore(ns);
+        setSpeed(Math.min(9, Math.floor(ns / 30) + 1));
         setFood(randFood(next));
       }
     }, tick);
@@ -115,8 +122,8 @@ export default function Snake() {
       if (d) {
         e.preventDefault();
         if (statusRef.current === 'ready') start();
-        // 禁止 180° 掉头
-        const cur = dirRef.current;
+        // 禁止 180° 掉头（以"上次 tick 应用的方向"为基准，同 tick 双按键也无法绕过）
+        const cur = lastAppliedRef.current;
         const opp: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
         if (opp[cur] !== d) {
           dirRef.current = d;
@@ -131,27 +138,32 @@ export default function Snake() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  });
+  }, [start]);
 
-  // 触屏滑动
-  const touchRef = useRef<{ x: number; y: number } | null>(null);
+  // 触屏滑动（记录手指 id：多指时只响应最初那根手指）
+  const touchRef = useRef<{ x: number; y: number; id: number } | null>(null);
   const onTouchStart = (e: React.TouchEvent) => {
-    touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (touchRef.current) return; // 忽略第二根手指，避免污染滑动基准
+    const t = e.touches[0];
+    touchRef.current = { x: t.clientX, y: t.clientY, id: t.identifier };
     if (statusRef.current === 'ready') start();
   };
   const onTouchEnd = (e: React.TouchEvent) => {
-    if (!touchRef.current) return;
-    const dx = e.changedTouches[0].clientX - touchRef.current.x;
-    const dy = e.changedTouches[0].clientY - touchRef.current.y;
+    const base = touchRef.current;
+    if (!base) return;
+    const t = Array.from(e.changedTouches).find((t) => t.identifier === base.id);
+    if (!t) return; // 抬起的不是被追踪的那根手指
+    touchRef.current = null; // 先清基准：短按（<20px）也要释放，否则后续触摸全部被忽略
+    const dx = t.clientX - base.x;
+    const dy = t.clientY - base.y;
     if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) return;
     const d: Dir =
       Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
-    const cur = dirRef.current;
+    const cur = lastAppliedRef.current;
     const opp: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
     if (opp[cur] !== d) {
       dirRef.current = d;
     }
-    touchRef.current = null;
   };
 
   // 记录最高分
@@ -196,7 +208,7 @@ export default function Snake() {
       <div className="snake" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         <div
           className="snake-board"
-          style={{ gridTemplateColumns: `repeat(${COLS}, ${cell}px)` }}
+          style={{ gridTemplateColumns: `repeat(${COLS}, var(--snake-cell, ${cell}px))` }}
         >
           {Array.from({ length: ROWS }, (_, y) =>
             Array.from({ length: COLS }, (_, x) => {
@@ -207,7 +219,7 @@ export default function Snake() {
                 <div
                   key={`${y}-${x}`}
                   className={`snake-cell ${isHead ? 'head' : ''} ${isBody ? 'body' : ''} ${isFood ? 'food' : ''}`}
-                  style={{ width: cell, height: cell }}
+                  style={{ width: 'var(--snake-cell, 22px)', height: 'var(--snake-cell, 22px)' }}
                 />
               );
             }),

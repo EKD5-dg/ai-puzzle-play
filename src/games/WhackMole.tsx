@@ -16,7 +16,8 @@ interface MoleState {
 }
 
 function emptyMoles(): MoleState[] {
-  return Array(HOLES).fill({ visible: false, kind: 'normal', timer: 0 });
+  // Array.from 生成独立对象（fill 会让 9 个洞共享同一引用）
+  return Array.from({ length: HOLES }, () => ({ visible: false, kind: 'normal' as const, timer: 0 }));
 }
 
 export default function WhackMole() {
@@ -31,8 +32,10 @@ export default function WhackMole() {
   const comboRef = useRef(0);
   const maxComboRef = useRef(0);
   const statusRef = useRef(status);
+  const timeRef = useRef(30);
 
   statusRef.current = status;
+  timeRef.current = time;
 
   const start = useCallback(() => {
     setScore(0);
@@ -41,6 +44,7 @@ export default function WhackMole() {
     setMaxCombo(0);
     comboRef.current = 0;
     maxComboRef.current = 0;
+    timeRef.current = 30;
     setMoles(emptyMoles());
     setStatus('playing');
   }, []);
@@ -49,14 +53,15 @@ export default function WhackMole() {
   useEffect(() => {
     if (status !== 'playing') return;
     const t = window.setInterval(() => {
-      setTime((s) => {
-        if (s <= 1) {
-          setStatus('over');
-          sfx.win();
-          return 0;
-        }
-        return s - 1;
-      });
+      if (timeRef.current <= 1) {
+        timeRef.current = 0;
+        setTime(0);
+        setStatus('over');
+        sfx.win();
+        return;
+      }
+      timeRef.current -= 1;
+      setTime(timeRef.current);
     }, 1000);
     return () => window.clearInterval(t);
   }, [status]);
@@ -71,7 +76,7 @@ export default function WhackMole() {
         next.forEach((m, i) => {
           if (m.visible && m.timer <= 0) next[i] = { visible: false, kind: 'normal', timer: 0 };
         });
-        // 生成新地鼠（最多同时 2 只）
+        // 生成新地鼠（最多同时 2 只）；存活时长：普通 ≈4.2s / 金 ≈3.1s / 炸弹 ≈4.7s
         const visibleCount = next.filter((m) => m.visible).length;
         if (visibleCount < 2) {
           const empty = next.map((m, i) => (m.visible ? -1 : i)).filter((i) => i >= 0);
@@ -79,7 +84,7 @@ export default function WhackMole() {
             const idx = empty[Math.floor(Math.random() * empty.length)];
             const roll = Math.random();
             const kind = roll < 0.08 ? 'gold' : roll < 0.14 ? 'bomb' : 'normal';
-            next[idx] = { visible: true, kind, timer: kind === 'normal' ? 40 : kind === 'gold' ? 30 : 45 };
+            next[idx] = { visible: true, kind, timer: kind === 'normal' ? 16 : kind === 'gold' ? 12 : 18 };
           }
         }
         return next;
@@ -91,34 +96,36 @@ export default function WhackMole() {
 
   const whack = (i: number) => {
     if (status !== 'playing') return;
+    const m = moles[i];
+    if (!m.visible) return;
+    // 状态计算与副作用统一放在 updater 之外（StrictMode 下 updater 双执行会导致双倍结算）
     setMoles((prev) => {
-      const m = prev[i];
-      if (!m.visible) return prev;
       const next = [...prev];
       next[i] = { visible: false, kind: 'normal', timer: 0 };
-      if (m.kind === 'normal') {
-        comboRef.current += 1;
-        maxComboRef.current = Math.max(maxComboRef.current, comboRef.current);
-        setCombo(comboRef.current);
-        setMaxCombo(maxComboRef.current);
-        const pts = 10 * Math.min(comboRef.current, 5);
-        setScore((s) => s + pts);
-        sfx.clear();
-      } else if (m.kind === 'gold') {
-        comboRef.current += 1;
-        maxComboRef.current = Math.max(maxComboRef.current, comboRef.current);
-        setCombo(comboRef.current);
-        const pts = 50;
-        setScore((s) => s + pts);
-        sfx.record();
-      } else {
-        comboRef.current = 0;
-        setCombo(0);
-        setScore((s) => Math.max(0, s - 20));
-        sfx.lose();
-      }
       return next;
     });
+    if (m.kind === 'normal') {
+      comboRef.current += 1;
+      maxComboRef.current = Math.max(maxComboRef.current, comboRef.current);
+      setCombo(comboRef.current);
+      setMaxCombo(maxComboRef.current);
+      const pts = 10 * Math.min(comboRef.current, 5);
+      setScore((s) => s + pts);
+      sfx.clear();
+    } else if (m.kind === 'gold') {
+      comboRef.current += 1;
+      maxComboRef.current = Math.max(maxComboRef.current, comboRef.current);
+      setCombo(comboRef.current);
+      setMaxCombo(maxComboRef.current); // 金地鼠也计入最高连击
+      const pts = 50;
+      setScore((s) => s + pts);
+      sfx.record();
+    } else {
+      comboRef.current = 0;
+      setCombo(0);
+      setScore((s) => Math.max(0, s - 20));
+      sfx.lose();
+    }
   };
 
   // 结束记录

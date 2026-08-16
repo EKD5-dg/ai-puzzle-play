@@ -6,8 +6,13 @@ import { useEffect, useState } from 'react';
  * 显示时配合 image-rendering: pixelated 放大，呈现真实复古像素质感。
  */
 
-/** 模块级内存缓存：同一立绘只下载+处理一次，切换楼层/再次战斗秒开 */
+/** 模块级内存缓存：同一立绘只下载+处理一次，切换楼层/再次战斗秒开（键含处理参数） */
 const dataUrlCache = new Map<string, string>();
+
+/** 处理中的任务：预加载与组件挂载并发请求同一立绘时共享等待，不重复下载/处理 */
+const inFlight = new Map<string, Promise<PortraitResult>>();
+
+type PortraitResult = { ok: true; url: string } | { ok: false; failed: boolean };
 
 /** 持久化缓存：处理结果写入 localStorage，下次打开页面直接命中，免下载免处理 */
 const CACHE_KEY = 'pp:portrait-cache:v1';
@@ -52,6 +57,11 @@ interface PortraitProps {
 
 const DEFAULT_TOLERANCE = 4500;
 const DEFAULT_PIXEL_SIZE = 64;
+
+/** 缓存键：src + 处理参数（同一图不同参数的处理结果不能互用） */
+function cacheKey(src: string, tolerance: number, pixelSize: number): string {
+  return `${src}|${tolerance}|${pixelSize}`;
+}
 
 /** 处理一张立绘为像素 dataURL；失败返回 null（保留原图兜底） */
 function processPortrait(img: HTMLImageElement, tolerance: number, pixelSize: number): string | null {
@@ -122,10 +132,31 @@ function processPortrait(img: HTMLImageElement, tolerance: number, pixelSize: nu
   }
 }
 
-/** 处理完成后的收尾：写入内存 + 本地缓存 */
-function cacheUrl(src: string, url: string): void {
-  dataUrlCache.set(src, url);
-  persistCache();
+/** 下载并处理一张立绘（同一 key 的并发调用共享同一个 Promise） */
+function loadPortrait(src: string, tolerance: number, pixelSize: number): Promise<PortraitResult> {
+  const key = cacheKey(src, tolerance, pixelSize);
+  const cached = dataUrlCache.get(key);
+  if (cached) return Promise.resolve({ ok: true, url: cached });
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+  const task = new Promise<PortraitResult>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const url = processPortrait(img, tolerance, pixelSize);
+      resolve(url ? { ok: true, url } : { ok: false, failed: false });
+    };
+    img.onerror = () => resolve({ ok: false, failed: true });
+    img.src = src;
+  }).then((r) => {
+    inFlight.delete(key);
+    if (r.ok) {
+      dataUrlCache.set(key, r.url);
+      persistCache();
+    }
+    return r;
+  });
+  inFlight.set(key, task);
+  return task;
 }
 
 /**
@@ -134,49 +165,33 @@ function cacheUrl(src: string, url: string): void {
  */
 export function preloadPortraits(srcs: string[]): void {
   for (const src of srcs) {
-    if (dataUrlCache.has(src)) continue;
-    const img = new Image();
-    img.onload = () => {
-      const url = processPortrait(img, DEFAULT_TOLERANCE, DEFAULT_PIXEL_SIZE);
-      if (url) cacheUrl(src, url);
-    };
-    // 预加载失败静默：战斗时组件自身会重试并显示 emoji 兜底
-    img.src = src;
+    loadPortrait(src, DEFAULT_TOLERANCE, DEFAULT_PIXEL_SIZE).catch(() => {
+      /* 预加载失败静默：战斗时组件自身会重试并显示兜底 */
+    });
   }
 }
 
 export function Portrait({ src, className, tolerance = DEFAULT_TOLERANCE, pixelSize = DEFAULT_PIXEL_SIZE, fallback = '❓' }: PortraitProps) {
-  const [dataUrl, setDataUrl] = useState<string | null>(() => dataUrlCache.get(src) ?? null);
+  const [dataUrl, setDataUrl] = useState<string | null>(() => dataUrlCache.get(cacheKey(src, tolerance, pixelSize)) ?? null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    // 已有缓存（含初始化命中）：无需重新下载与处理
-    const cached = dataUrlCache.get(src);
-    if (cached) {
-      setDataUrl(cached);
-      return;
-    }
     let cancelled = false;
     // 清除上一个 src 的立绘，避免切换怪物时旧图残留
     setDataUrl(null);
     setFailed(false);
-    const img = new Image();
-    img.onload = () => {
-      const url = processPortrait(img, tolerance, pixelSize);
+    loadPortrait(src, tolerance, pixelSize).then((r) => {
       if (cancelled) return;
-      if (url) {
-        cacheUrl(src, url);
-        setDataUrl(url);
+      if (r.ok) {
+        setDataUrl(r.url);
+      } else if (r.failed) {
+        // 加载失败：显示 emoji 占位，避免显示破图
+        setFailed(true);
       } else {
         // 处理失败：回退原图（至少能看到角色）
         setDataUrl(src);
       }
-    };
-    img.onerror = () => {
-      // 加载失败：显示 emoji 占位，避免显示破图
-      if (!cancelled) setFailed(true);
-    };
-    img.src = src;
+    });
     return () => {
       cancelled = true;
     };

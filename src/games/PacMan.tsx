@@ -17,7 +17,7 @@ const MAP = [
   '#.##.#.#####.#.##.#',
   '#....#...#...#....#',
   '####.# ##### #.####',
-  '    #.  P  .#    ',
+  '    #.   P   .#    ',
   '####.# ##=## #.####',
   '    .  #   #  .    ',
   '####.# ##### #.####',
@@ -31,7 +31,7 @@ const MAP = [
 ];
 
 const COLS = 19;
-const ROWS = 17;
+const ROWS = 18;
 const TILE = 26;
 
 const GHOST_COLORS = ['#ff1744', '#ff9f1a', '#4dd0e1', '#ff6ec7'];
@@ -53,8 +53,28 @@ export default function PacMan() {
     totalDots: 0,
     maze: [] as string[][],
     frightTimer: 0,
+    ghostSpeed: 2,
   });
   const staticRef = useRef<HTMLCanvasElement | null>(null);
+  /** 生命值镜像（rAF 循环内读取最新值，避免闭包陈旧） */
+  const livesRef = useRef(3);
+  livesRef.current = lives;
+  /** 本局内未跟踪的 setTimeout（吃鬼复活等），卸载/重开时清理 */
+  const gameTimersRef = useRef<number[]>([]);
+
+  // 卸载时清理全部定时器与动画帧
+  useEffect(
+    () => () => {
+      gameTimersRef.current.forEach((t) => window.clearTimeout(t));
+      gameTimersRef.current = [];
+    },
+    [],
+  );
+
+  const clearGameTimers = () => {
+    gameTimersRef.current.forEach((t) => window.clearTimeout(t));
+    gameTimersRef.current = [];
+  };
 
   const initMaze = useCallback((): string[][] => {
     const maze = MAP.map((row) => row.split(''));
@@ -99,28 +119,38 @@ export default function PacMan() {
     return maze;
   }, []);
 
-  const startGame = useCallback(() => {
-    const maze = initMaze();
-    gameRef.current.maze = maze;
-    gameRef.current.player = { x: 9 * TILE + TILE / 2, y: 7.5 * TILE, dir: 'left', nextDir: 'left', speed: 2.6, invincible: 150 };
-    gameRef.current.ghosts = [
-      { x: 9 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[0], mode: 'chase', timer: 0, delay: 90 },
-      { x: 8 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[1], mode: 'chase', timer: 0, delay: 180 },
-      { x: 10 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[2], mode: 'chase', timer: 0, delay: 270 },
-      { x: 9 * TILE + TILE / 2, y: 9.5 * TILE, dir: 'up', color: GHOST_COLORS[3], mode: 'chase', timer: 0, delay: 360 },
-    ];
-    gameRef.current.frightTimer = 0;
-    setScore(0);
-    setLives(3);
-    setLevel(1);
-    setStatus('playing');
-  }, [initMaze]);
+  /** 开始/重开一局；lv 为关卡（胜利后进入下一关，幽灵速度随关卡提升） */
+  const startGame = useCallback(
+    (lv = 1) => {
+      clearGameTimers();
+      const maze = initMaze();
+      gameRef.current.maze = maze;
+      gameRef.current.player = { x: 9 * TILE + TILE / 2, y: 7.5 * TILE, dir: 'left', nextDir: 'left', speed: 2.6, invincible: 2500 };
+      gameRef.current.ghosts = [
+        { x: 9 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[0], mode: 'chase', timer: 0, delay: 90 },
+        { x: 8 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[1], mode: 'chase', timer: 0, delay: 180 },
+        { x: 10 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[2], mode: 'chase', timer: 0, delay: 270 },
+        { x: 9 * TILE + TILE / 2, y: 9.5 * TILE, dir: 'up', color: GHOST_COLORS[3], mode: 'chase', timer: 0, delay: 360 },
+      ];
+      gameRef.current.frightTimer = 0;
+      gameRef.current.ghostSpeed = 2 + (lv - 1) * 0.25;
+      livesRef.current = 3;
+      setScore(0);
+      setLives(3);
+      setLevel(lv);
+      setStatus('playing');
+    },
+    [initMaze],
+  );
 
   const isWall = useCallback((x: number, y: number): boolean => {
     const maze = gameRef.current.maze;
-    const col = Math.floor(x / TILE);
+    let col = Math.floor(x / TILE);
     const row = Math.floor(y / TILE);
-    if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return true;
+    if (row < 0 || row >= ROWS) return true;
+    // 隧道行（第 9 行 `'    .  #   #  .    '` 左右全宽贯通）允许水平回绕：col 取模后永远有效
+    if (row === 9) col = ((col % COLS) + COLS) % COLS;
+    else if (col < 0 || col >= COLS) return true;
     const ch = maze[row][col];
     // '#' 墙、'=' 幽灵房墙体（玩家不可入）；其余（空格/豆子/能量豆/P）均可通行
     return ch === '#' || ch === '=';
@@ -129,6 +159,7 @@ export default function PacMan() {
   // 主循环
   useEffect(() => {
     if (status !== 'playing') return;
+    const statusRef = { current: status };
     let raf = 0;
     let last = performance.now();
 
@@ -175,7 +206,7 @@ export default function PacMan() {
           setScore((s) => s + 10);
         } else {
           setScore((s) => s + 50);
-          g.frightTimer = 500;
+          g.frightTimer = 8000; // 毫秒
           g.ghosts.forEach((gh) => {
             if (gh.mode === 'chase') gh.mode = 'fright';
           });
@@ -196,7 +227,7 @@ export default function PacMan() {
           return;
         }
         if (gh.mode === 'fright') {
-          gh.timer++;
+          gh.timer += dt;
           if (gh.timer > g.frightTimer) {
             gh.mode = 'chase';
             gh.timer = 0;
@@ -239,12 +270,15 @@ export default function PacMan() {
         }
         const vx = gh.dir === 'left' ? -1 : gh.dir === 'right' ? 1 : 0;
         const vy = gh.dir === 'up' ? -1 : gh.dir === 'down' ? 1 : 0;
-        gh.x += vx * 2 * dt * 0.06;
-        gh.y += vy * 2 * dt * 0.06;
+        gh.x += vx * g.ghostSpeed * dt * 0.06;
+        gh.y += vy * g.ghostSpeed * dt * 0.06;
+        // 幽灵与玩家相同的隧道坐标回绕（否则出屏后永久丢失）
+        if (gh.x < -TILE / 2) gh.x = COLS * TILE + TILE / 2 - 1;
+        if (gh.x > COLS * TILE + TILE / 2) gh.x = -TILE / 2 + 1;
       });
 
       // 碰撞检测（开局短暂无敌，幽灵可穿过）
-      if (p.invincible > 0) p.invincible--;
+      if (p.invincible > 0) p.invincible -= dt;
       for (const gh of g.ghosts) {
         const dist = Math.hypot(gh.x - p.x, gh.y - p.y);
         if (dist < TILE * 0.7) {
@@ -252,31 +286,32 @@ export default function PacMan() {
             gh.mode = 'eyes';
             setScore((s) => s + 200);
             sfx.clear();
-            window.setTimeout(() => {
+            // 复活定时器纳入统一管理：卸载/重开时清除，避免旧局复活干扰新局
+            const t = window.setTimeout(() => {
               gh.x = 9 * TILE + TILE / 2;
               gh.y = 9.5 * TILE;
               gh.mode = 'chase';
             }, 1200);
+            gameTimersRef.current.push(t);
           } else if (gh.mode !== 'eyes' && p.invincible <= 0) {
-            setLives((l) => {
-              const nl = l - 1;
-              if (nl <= 0) {
-                setStatus('over');
-                sfx.lose();
-              } else {
-                p.x = 9 * TILE + TILE / 2;
-                p.y = 7.5 * TILE;
-                p.dir = 'left';
-                p.nextDir = 'left';
-                p.invincible = 120;
-                g.ghosts.forEach((gg) => {
-                  gg.x = 9 * TILE + TILE / 2;
-                  gg.y = 8.5 * TILE;
-                });
-                sfx.mismatch();
-              }
-              return nl;
-            });
+            const nl = livesRef.current - 1;
+            livesRef.current = nl;
+            setLives(nl);
+            if (nl <= 0) {
+              setStatus('over');
+              sfx.lose();
+            } else {
+              p.x = 9 * TILE + TILE / 2;
+              p.y = 7.5 * TILE;
+              p.dir = 'left';
+              p.nextDir = 'left';
+              p.invincible = 2000;
+              g.ghosts.forEach((gg) => {
+                gg.x = 9 * TILE + TILE / 2;
+                gg.y = 8.5 * TILE;
+              });
+              sfx.mismatch();
+            }
             break;
           }
         }
@@ -342,7 +377,6 @@ export default function PacMan() {
       if (statusRef.current === 'playing') raf = requestAnimationFrame(step);
     };
 
-    const statusRef = { current: status };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [status, isWall]);
@@ -384,16 +418,16 @@ export default function PacMan() {
     gameRef.current.player.nextDir = d;
   };
 
-  // 最高分
+  // 最高分：只在游戏结束时结算一次（避免破纪录后每吃一颗豆刷屏 toast/音效/云请求）
   useEffect(() => {
-    if (score > 0) {
+    if ((status === 'over' || status === 'win') && score > 0) {
       const isNew = best.updateBest(score, (a, b) => a > b);
-      if (isNew && score > 0) {
+      if (isNew) {
         sfx.record();
         toast(`新纪录！${score} 分`, 'record');
       }
     }
-  }, [score, best, toast]);
+  }, [status, score, best, toast]);
 
   return (
     <GameShell
@@ -428,7 +462,7 @@ export default function PacMan() {
             <div className="arcade-overlay">
               <h2>👻 吃豆人</h2>
               <p>吃掉所有豆子 · 能量豆可反吃幽灵</p>
-              <button className="btn btn-primary" onClick={startGame}>
+              <button className="btn btn-primary" onClick={() => startGame()}>
                 开始游戏
               </button>
             </div>
@@ -437,7 +471,7 @@ export default function PacMan() {
             <div className="arcade-overlay">
               <h2>💀 游戏结束</h2>
               <p>得分 {score} · 到达第 {level} 关</p>
-              <button className="btn btn-primary" onClick={startGame}>
+              <button className="btn btn-primary" onClick={() => startGame()}>
                 再来一局
               </button>
             </div>
@@ -446,10 +480,9 @@ export default function PacMan() {
             <div className="arcade-overlay">
               <h2>🎉 通关！</h2>
               <p>得分 {score}</p>
-              <button className="btn btn-primary" onClick={startGame}>
-                下一关
-              </button>
-            </div>
+              <button className="btn btn-primary" onClick={() => startGame(level + 1)}>
+                下一关（第 {level + 1} 关）
+              </button>            </div>
           )}
         </div>
         <p className="hint">方向键 / WASD 转向 · 空格开始</p>

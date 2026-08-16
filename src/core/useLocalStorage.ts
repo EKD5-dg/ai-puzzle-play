@@ -20,13 +20,22 @@ export function useLocalStorage<T extends number>(key: string, initial: T | null
   const read = useCallback((): T | null => {
     try {
       const raw = localStorage.getItem(`pp:${key}`);
-      return raw === null ? initial : (JSON.parse(raw) as T);
+      if (raw === null) return initial;
+      const parsed = JSON.parse(raw) as unknown;
+      // 类型校验：历史脏数据（字符串等）一律回退初始值
+      if (typeof parsed !== 'number' || !Number.isFinite(parsed)) return initial;
+      return parsed as T;
     } catch {
       return initial;
     }
   }, [key, initial]);
 
   const [value, setValue] = useState<T | null>(read);
+
+  // key 变化（如扫雷按难度细分记录）时重新读取；同页签广播与跨页签 storage 事件也触发刷新
+  useEffect(() => {
+    setValue(read());
+  }, [read]);
 
   // 监听同页签广播与跨页签 storage 事件，外部写入后自动刷新
   useEffect(() => {

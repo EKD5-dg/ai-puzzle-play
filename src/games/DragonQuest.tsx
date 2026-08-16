@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useBestScore, getSyncCode, pushProgress } from '../core/sync';
 import { useToast } from '../core/Toast';
@@ -132,7 +132,7 @@ function clearSave(): void {
   } catch {
     /* ignore */
   }
-  // 通关/死亡/新开局时同步清除云端存档
+  // 通关/死亡/新开局时同步上传本机存档状态（云端始终保留多设备中最优存档，不会因某台设备清档而被删除）
   const code = getSyncCode();
   if (code) pushProgress(code).catch(() => { /* 离线静默 */ });
 }
@@ -154,11 +154,22 @@ export default function DragonQuest() {
   const best = useBestScore(metaDragon.id);
   const { toast } = useToast();
 
+  /** 飘字定时器句柄（卸载时清理，避免对已卸载组件 setState） */
+  const floaterTimersRef = useRef<number[]>([]);
+  useEffect(
+    () => () => {
+      floaterTimersRef.current.forEach((t) => window.clearTimeout(t));
+      floaterTimersRef.current = [];
+    },
+    [],
+  );
+
   /** 伤害飘字（monster=怪物受击，hero=勇者受击） */
   const addFloater = useCallback((text: string, kind: 'hero' | 'monster') => {
     const id = Date.now() + Math.random();
     setFloaters((prev) => [...prev.slice(-5), { id, text, kind }]);
-    window.setTimeout(() => setFloaters((prev) => prev.filter((f) => f.id !== id)), 950);
+    const t = window.setTimeout(() => setFloaters((prev) => prev.filter((f) => f.id !== id)), 950);
+    floaterTimersRef.current.push(t);
   }, []);
 
   const pushLog = useCallback((msg: string) => {
@@ -386,8 +397,7 @@ export default function DragonQuest() {
     saveGame(nextFloorNum, next);
     setSaveExists(true);
     setPhase('idle');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monster, phase]);
+  }, [monster, phase, player, floor]);
 
   // 战斗胜利后的过渡：进入下一层
   useEffect(() => {

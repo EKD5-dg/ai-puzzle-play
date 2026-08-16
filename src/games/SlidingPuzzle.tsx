@@ -75,18 +75,19 @@ export default function SlidingPuzzle() {
     if (isSolved(next)) {
       setWon(true);
       sfx.win();
-      const isNew = best.updateBest(moves + 1, (a, b) => a < b);
-      if (isNew) {
-        sfx.record();
-        toast(`新纪录！${moves + 1} 步完成`, 'record');
-      }
     }
   };
 
-  // 通关后记录最佳步数（兜底，move 内已处理）
+  // 通关后结算一次最佳步数（won 翻转时 moves 已是最新值，避免与 move 内双通道重复）
   useEffect(() => {
-    if (won && moves > 0) best.updateBest(moves, (a, b) => a < b);
-  }, [won, moves, best]);
+    if (!won) return;
+    const isNew = best.updateBest(moves, (a, b) => a < b);
+    if (isNew) {
+      sfx.record();
+      toast(`新纪录！${moves} 步完成`, 'record');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [won]);
 
   const tileSize = size === 5 ? 72 : size === 4 ? 92 : 108;
   const pad = 3; // 内边距偏移

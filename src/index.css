@@ -2984,3 +2984,34 @@ code {
 }
 .cube-overlay h2 { font-size: 24px; }
 .cube-overlay p { color: var(--text-dim); line-height: 1.6; }
+
+/* ============ 移动端小屏适配（贪吃蛇/打地鼠/2048） ============ */
+@media (max-width: 640px) {
+  .snake-board {
+    --snake-cell: 15px;
+  }
+
+  .mole-field {
+    grid-template-columns: repeat(3, 72px);
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .mole-hole {
+    width: 72px;
+    height: 64px;
+  }
+
+  .mole-creature {
+    font-size: 28px;
+    bottom: 14px;
+  }
+
+  .mole-creature.gold {
+    font-size: 30px;
+  }
+
+  .g2048 {
+    touch-action: none;
+  }
+}

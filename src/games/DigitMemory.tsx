@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
@@ -19,10 +19,28 @@ export default function DigitMemory() {
   const [answer, setAnswer] = useState('');
   const [input, setInput] = useState('');
   const [len, setLen] = useState(3);
+  /** 通关后进入下一轮的过渡定时器（重开/卸载时清除） */
+  const transitionRef = useRef<number | null>(null);
   const best = useBestScore(metaDigit.id);
   const { toast } = useToast();
 
+  const clearTransition = () => {
+    if (transitionRef.current !== null) {
+      window.clearTimeout(transitionRef.current);
+      transitionRef.current = null;
+    }
+  };
+
+  // 卸载时清理过渡定时器
+  useEffect(
+    () => () => {
+      if (transitionRef.current !== null) window.clearTimeout(transitionRef.current);
+    },
+    [],
+  );
+
   const startGame = useCallback(() => {
+    clearTransition();
     const a = genNumber(3);
     setAnswer(a);
     setInput('');
@@ -40,32 +58,46 @@ export default function DigitMemory() {
     return () => window.clearTimeout(t);
   }, [phase]);
 
+  /** 输入完成后的统一判定（数字键输满自动触发，✓ 按钮手动触发） */
+  const finishInput = (next: string) => {
+    // 过渡定时器挂起期间拦截重复提交（连点 ✓ / 自动判定后手点）
+    if (transitionRef.current !== null) return;
+    if (next === answer) {
+      sfx.merge();
+      const nl = len + 1;
+      transitionRef.current = window.setTimeout(() => {
+        transitionRef.current = null;
+        setLen(nl);
+        setAnswer(genNumber(nl));
+        setInput('');
+        setPhase('show');
+      }, 400);
+    } else {
+      // 错误分支：清掉可能挂起的过渡定时器，避免旧 timer 把失败"复活"到下一轮
+      clearTransition();
+      sfx.lose();
+      setPhase('over');
+      const isNew = best.updateBest(len - 1, (a, b) => a > b);
+      if (isNew) {
+        sfx.record();
+        toast(`新纪录！记住 ${len - 1} 位数字`, 'record');
+      }
+    }
+  };
+
   const pressDigit = (d: string) => {
     if (phase !== 'input') return;
     if (input.length >= answer.length) return;
     sfx.click();
     const next = input + d;
     setInput(next);
-    if (next.length === answer.length) {
-      if (next === answer) {
-        sfx.merge();
-        const nl = len + 1;
-        window.setTimeout(() => {
-          setLen(nl);
-          setAnswer(genNumber(nl));
-          setInput('');
-          setPhase('show');
-        }, 400);
-      } else {
-        sfx.lose();
-        setPhase('over');
-        const isNew = best.updateBest(len - 1, (a, b) => a > b);
-        if (isNew) {
-          sfx.record();
-          toast(`新纪录！记住 ${len - 1} 位数字`, 'record');
-        }
-      }
-    }
+    if (next.length === answer.length) finishInput(next);
+  };
+
+  /** 确认当前输入（输满时可用） */
+  const submit = () => {
+    if (phase !== 'input') return;
+    if (input.length === answer.length) finishInput(input);
   };
 
   const backspace = () => {
@@ -73,13 +105,25 @@ export default function DigitMemory() {
     setInput((s) => s.slice(0, -1));
   };
 
-  // 实体键盘支持
+  // 实体键盘支持（不设依赖数组：每次渲染重绑保证读到最新 input/phase 闭包）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key >= '0' && e.key <= '9') pressDigit(e.key);
-      if (e.key === 'Backspace') backspace();
-      if (e.key === 'Enter' && (phase === 'start' || phase === 'over')) startGame();
-      if (e.key === ' ' && (phase === 'start' || phase === 'over')) startGame();
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        pressDigit(e.key);
+      }
+      if (e.key === 'Backspace') {
+        e.preventDefault(); // 阻止页面后退
+        backspace();
+      }
+      if (e.key === 'Enter' && (phase === 'start' || phase === 'over')) {
+        e.preventDefault();
+        startGame();
+      }
+      if (e.key === ' ' && (phase === 'start' || phase === 'over')) {
+        e.preventDefault(); // 阻止页面滚动
+        startGame();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -149,8 +193,8 @@ export default function DigitMemory() {
               <button
                 key={k}
                 className="btn num-btn digit-key"
-                onClick={() => (k === '⌫' ? backspace() : k === '✓' ? undefined : pressDigit(k))}
-                disabled={k === '✓'}
+                onClick={() => (k === '⌫' ? backspace() : k === '✓' ? submit() : pressDigit(k))}
+                disabled={k === '✓' && input.length !== answer.length}
               >
                 {k}
               </button>

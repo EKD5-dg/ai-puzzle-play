@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 type ToastType = 'info' | 'success' | 'record';
@@ -39,6 +39,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     },
     [dismiss],
   );
+
+  // 卸载时清理所有未触发的定时器
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      for (const id of pending) window.clearTimeout(id);
+      pending.clear();
+    };
+  }, []);
 
   return (
     <ToastContext.Provider value={{ toast }}>

@@ -70,7 +70,7 @@ export default function ColorSequence() {
     if (phase !== 'input') return;
     SOUNDS[idx % SOUNDS.length]();
     setLitIdx(idx);
-    window.setTimeout(() => setLitIdx(-1), 200);
+    timers.current.push(window.setTimeout(() => setLitIdx(-1), 200));
     if (sequence[inputIdx] !== idx) {
       sfx.lose();
       setPhase('over');

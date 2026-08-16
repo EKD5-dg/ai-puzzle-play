@@ -287,3 +287,30 @@ export const metaCube: GameMeta = {
   higherIsBetter: false,
 };
 
+/** 成绩比较方向权威表：false=成绩越小越好（步数/时间类）。由各 meta 派生，云同步服务端也内置了同样白名单（functions/api/sync.js），新增"成绩取小"的游戏需两处同步 */
+export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
+  [
+    meta2048,
+    metaMines,
+    metaMemory,
+    metaSliding,
+    metaSudoku,
+    metaTetris,
+    metaDragon,
+    metaSokoban,
+    metaSnake,
+    metaGomoku,
+    metaOthello,
+    metaPacMan,
+    metaInvaders,
+    metaFrogger,
+    metaMole,
+    metaTaiko,
+    metaSimon,
+    metaDigit,
+    metaColorSeq,
+    metaBirds,
+    metaCube,
+  ].map((m) => [m.id, m.higherIsBetter]),
+);
+

@@ -101,7 +101,8 @@ export default function Minesweeper() {
   const [firstClick, setFirstClick] = useState(false);
   const [shake, setShake] = useState(0); // 震屏触发器
   const timerRef = useRef<number | null>(null);
-  const best = useBestScore(metaMines.id);
+  // 最佳成绩按难度细分（简单档记录不再压住困难档），云端键同步带后缀
+  const best = useBestScore(`${metaMines.id}:${levelIdx}`);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -145,25 +146,23 @@ export default function Minesweeper() {
 
   const reveal = (r: number, c: number) => {
     if (status !== 'playing') return;
-    setGrid((prev) => {
-      const cell = prev[r][c];
-      if (cell.state !== 'hidden') return prev;
-      // 首次点击：重建棋盘确保安全
-      const g = firstClick ? prev : buildGrid(level.rows, level.cols, level.mines, r, c);
-      const target = g[r][c];
-      if (target.mine) {
-        const exploded = g.map((row) => row.map((x) => ({ ...x })));
-        exploded.forEach((row) => row.forEach((x) => { if (x.mine && x.state === 'hidden') x.state = 'revealed'; }));
-        setStatus('lost');
-        setShake((s) => s + 1);
-        return exploded;
-      }
-      const revealed = floodReveal(g, r, c);
-      const allSafe = revealed.flat().filter((x) => !x.mine).every((x) => x.state === 'revealed');
-      if (allSafe) setStatus('won');
-      else if (revealed[r][c].adjacent === 0) sfx.move();
-      return revealed;
-    });
+    // 首次点击：重建棋盘确保安全
+    const g = firstClick ? grid : buildGrid(level.rows, level.cols, level.mines, r, c);
+    const target = g[r][c];
+    if (target.state !== 'hidden') return;
+    if (target.mine) {
+      const exploded = g.map((row) => row.map((x) => ({ ...x })));
+      exploded.forEach((row) => row.forEach((x) => { if (x.mine && x.state === 'hidden') x.state = 'revealed'; }));
+      setGrid(exploded);
+      setStatus('lost');
+      setShake((s) => s + 1);
+      return;
+    }
+    const revealed = floodReveal(g, r, c);
+    setGrid(revealed);
+    const allSafe = revealed.flat().filter((x) => !x.mine).every((x) => x.state === 'revealed');
+    if (allSafe) setStatus('won');
+    else if (revealed[r][c].adjacent === 0) sfx.move();
     if (!firstClick) setFirstClick(true);
   };
 
@@ -180,26 +179,38 @@ export default function Minesweeper() {
   };
 
   const flagsLeft = grid.flat().filter((x) => x.state === 'flagged').length;
-  const minesLeft = level.mines - flagsLeft;
+  const minesLeft = Math.max(0, level.mines - flagsLeft);
 
-  // 触屏长按插旗
-  const longPressRef = useRef<{ timer: number | null; fired: boolean }>({ timer: null, fired: false });
-  const touchStart = (r: number, c: number) => {
-    longPressRef.current.fired = false;
+  // 触屏长按插旗（preventDefault 抑制 Android 原生长按 contextmenu，避免旗子插上又被取消）
+  const longPressRef = useRef<{ timer: number | null; firedAt: number }>({ timer: null, firedAt: 0 });
+  const clearLongPress = () => {
+    if (longPressRef.current.timer !== null) {
+      window.clearTimeout(longPressRef.current.timer);
+      longPressRef.current.timer = null;
+    }
+  };
+  // 卸载时清理长按定时器
+  useEffect(() => clearLongPress, []);
+  const touchStart = (e: React.TouchEvent, r: number, c: number) => {
+    e.preventDefault();
+    clearLongPress();
+    longPressRef.current.firedAt = 0;
     longPressRef.current.timer = window.setTimeout(() => {
-      longPressRef.current.fired = true;
+      longPressRef.current.timer = null;
+      longPressRef.current.firedAt = Date.now();
       flag({ preventDefault: () => undefined } as React.MouseEvent, r, c);
       sfx.flip();
     }, 420);
   };
   const touchEnd = (e: React.TouchEvent, r: number, c: number) => {
     e.preventDefault(); // 阻止合成 click，避免与 touchEnd 的 reveal 冲突
-    if (longPressRef.current.timer) {
-      window.clearTimeout(longPressRef.current.timer);
-      longPressRef.current.timer = null;
-    }
+    clearLongPress();
     // 短按（未触发长按）则翻开
-    if (!longPressRef.current.fired) reveal(r, c);
+    if (longPressRef.current.firedAt === 0) reveal(r, c);
+  };
+  const touchCancel = (e: React.TouchEvent) => {
+    e.preventDefault();
+    clearLongPress();
   };
 
   const cellSize = level.cols >= 30 ? 28 : level.cols >= 16 ? 34 : 46;
@@ -259,9 +270,18 @@ export default function Minesweeper() {
                 className={`mines-cell ${cell.state} ${cell.state === 'revealed' && cell.adjacent > 0 ? `n${cell.adjacent}` : ''}`}
                 style={{ width: cellSize, height: cellSize, fontSize: cellSize * 0.5 }}
                 onClick={() => reveal(r, c)}
-                onContextMenu={(e) => flag(e, r, c)}
-                onTouchStart={() => touchStart(r, c)}
+                onContextMenu={(e) => {
+                  // 长按插旗后 600ms 内派生的 contextmenu 视为长按副产品：跳过 toggle，
+                  // 避免刚插上的旗被取消（桌面右键不受影响）
+                  if (Date.now() - longPressRef.current.firedAt < 600) {
+                    e.preventDefault();
+                    return;
+                  }
+                  flag(e, r, c);
+                }}
+                onTouchStart={(e) => touchStart(e, r, c)}
                 onTouchEnd={(e) => touchEnd(e, r, c)}
+                onTouchCancel={touchCancel}
               >
                 {cell.state === 'flagged' && '🚩'}
                 {cell.state === 'revealed' && (cell.mine ? '💥' : cell.adjacent > 0 ? cell.adjacent : '')}

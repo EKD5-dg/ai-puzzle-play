@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useLocalStorage } from './useLocalStorage';
-import { games } from './registry';
+import { HIGHER_IS_BETTER } from './gameMetas';
+import { setMuted as applySoundMuted } from './sound';
 
 /**
  * 跨设备成绩云同步（Cloudflare Pages Functions + KV）
@@ -10,14 +11,15 @@ const API = 'https://puzzle-play.pages.dev/api/sync';
 const PAIR_API = 'https://puzzle-play.pages.dev/api/pair';
 const CODE_KEY = 'pp:sync-code';
 
-/** gameId → 成绩比较方向（部分游戏成绩越小越好，如步数/时间） */
-const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
-  games.map((g) => [g.meta.id, g.meta.higherIsBetter]),
-);
+/** 取 gameId 的基础 id（支持 `id:后缀` 形式，如扫雷按难度细分 `minesweeper:0`，方向判断只看基础 id） */
+function baseGameId(gameId: string): string {
+  const i = gameId.indexOf(':');
+  return i >= 0 ? gameId.slice(0, i) : gameId;
+}
 
-/** 按游戏比较方向判断 next 是否优于 prev */
+/** 按游戏比较方向判断 next 是否优于 prev（方向表来自 gameMetas 权威定义） */
 export function isBetterScore(gameId: string, next: number, prev: number): boolean {
-  return HIGHER_IS_BETTER[gameId] === false ? next < prev : next > prev;
+  return HIGHER_IS_BETTER[baseGameId(gameId)] === false ? next < prev : next > prev;
 }
 
 /** 勇者斗恶龙存档（楼层 + 勇者状态），跨设备同步用 */
@@ -46,7 +48,6 @@ export interface SyncPayload {
 
 const DQ_SAVE_KEY = 'pp:dq:save';
 const SOUND_MUTE_KEY = 'pp:sound-muted';
-
 /** 读取本机勇者斗恶龙存档 */
 export function readDqSave(): DqSave | null {
   try {
@@ -76,13 +77,9 @@ export function readSoundMuted(): boolean {
   }
 }
 
-/** 写入本机音效开关 */
+/** 写入本机音效开关（委托 sound.ts 的 setMuted：同时更新内存态，避免按钮显示与实际发声不一致） */
 export function writeSoundMuted(muted: boolean): void {
-  try {
-    localStorage.setItem(SOUND_MUTE_KEY, muted ? '1' : '0');
-  } catch {
-    /* ignore */
-  }
+  applySoundMuted(muted);
 }
 
 /** 比较两份存档优劣：楼层高者优；同层则勇者等级高者优 */
@@ -108,11 +105,17 @@ export function setSyncCode(code: string | null): void {
   }
 }
 
-/** 生成 6 位同步码（大写字母 + 数字，去易混字符） */
+/** 生成 6 位同步码（大写字母 + 数字，去易混字符；crypto 强随机，避免可预测码被枚举） */
 export function generateSyncCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
-  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  const rand = new Uint32Array(6);
+  try {
+    crypto.getRandomValues(rand);
+  } catch {
+    for (let i = 0; i < 6; i++) rand[i] = Math.floor(Math.random() * 0xffffffff);
+  }
+  for (let i = 0; i < 6; i++) code += chars[rand[i] % chars.length];
   return code;
 }
 
@@ -123,12 +126,14 @@ async function fetchCloud(code: string): Promise<SyncPayload> {
   return data;
 }
 
-async function pushCloud(code: string, payload: SyncPayload, lowerBetter: string[] = []): Promise<void> {
-  await fetch(API, {
+/** 上传负载到云端（成绩合并方向由服务端权威白名单决定，客户端不再声明） */
+async function pushCloud(code: string, payload: SyncPayload): Promise<void> {
+  const res = await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, ...payload, lowerBetter }),
+    body: JSON.stringify({ code, ...payload }),
   });
+  if (!res.ok) throw new Error('push failed');
 }
 
 /** 上传本机进度与偏好到云端（存档按优劣合并，偏好直接覆盖） */
@@ -208,8 +213,7 @@ export function useBestScore(gameId: string) {
       if (isNew) {
         const code = getSyncCode();
         if (code) {
-          const lower = HIGHER_IS_BETTER[gameId] === false ? [gameId] : [];
-          pushCloud(code, { scores: { [gameId]: next } }, lower).catch(() => {
+          pushCloud(code, { scores: { [gameId]: next } }).catch(() => {
             /* 云端失败不影响本地 */
           });
         }

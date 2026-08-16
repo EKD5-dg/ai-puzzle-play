@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, memo, useEffect, useMemo, useState } from 'react';
 import { games, findGame } from './core/registry';
 import { useLocalStorage, notifyScoresUpdated } from './core/useLocalStorage';
 import { isMuted, setMuted, sfx } from './core/sound';
@@ -16,9 +16,20 @@ function routeFromHash(): string {
 const CATEGORIES = ['全部', '逻辑', '记忆', '策略', '反应', '经典'] as const;
 const DIFFICULTIES = ['全部', '简单', '中等', '困难'] as const;
 
-function GameCard({ meta }: { meta: GameMeta }) {
+/** 游戏卡片：memo 化避免输入搜索词/切筛选时 21 张卡片全量重渲染 */
+const GameCard = memo(function GameCard({ meta }: { meta: GameMeta }) {
   const best = useLocalStorage<number>(`best:${meta.id}`);
-  const played = best.value !== null;
+  // 扫雷按难度细分记录（minesweeper:0..2），卡片展示三档中最优；兼容旧基础键数据
+  const best0 = useLocalStorage<number>('best:minesweeper:0');
+  const best1 = useLocalStorage<number>('best:minesweeper:1');
+  const best2 = useLocalStorage<number>('best:minesweeper:2');
+  const bestValue =
+    meta.id === 'minesweeper'
+      ? [best0.value, best1.value, best2.value]
+          .filter((v): v is number => v !== null)
+          .reduce<number | null>((a, b) => (a === null ? b : Math.min(a, b)), null) ?? best.value
+      : best.value;
+  const played = bestValue !== null;
   return (
     <a href={`#/game/${meta.id}`} className="game-card">
       <div className="game-card-icon" aria-hidden>
@@ -39,14 +50,14 @@ function GameCard({ meta }: { meta: GameMeta }) {
             </span>
           ))}
           <span className="best">
-            {meta.bestScoreLabel}：{best.value ?? '--'}
+            {meta.bestScoreLabel}：{bestValue ?? '--'}
           </span>
           <span className="game-card-play">{played ? '继续 ▶' : '开始 ▶'}</span>
         </div>
       </div>
     </a>
   );
-}
+});
 
 export default function App() {
   const [currentId, setCurrentId] = useState(routeFromHash);
@@ -77,14 +88,17 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  // 大厅统计：已游玩 / 已通关（有最佳成绩）
+  // 大厅统计：已游玩 / 已通关（有最佳成绩；扫雷含分难度记录）
   const stats = useMemo(() => {
     let played = 0;
     let cleared = 0;
     for (const g of games) {
       try {
-        const v = localStorage.getItem(`pp:best:${g.meta.id}`);
-        if (v !== null) {
+        let found = localStorage.getItem(`pp:best:${g.meta.id}`) !== null;
+        if (!found && g.meta.id === 'minesweeper') {
+          found = ['0', '1', '2'].some((i) => localStorage.getItem(`pp:best:minesweeper:${i}`) !== null);
+        }
+        if (found) {
           played++;
           cleared++;
         }
@@ -144,6 +158,7 @@ export default function App() {
     // 拉取并合并云端成绩 + 进度 + 偏好到本地
     try {
       const res = await fetch(`https://puzzle-play.pages.dev/api/sync?code=${encodeURIComponent(code)}`);
+      if (!res.ok) throw new Error('fetch failed');
       const data = (await res.json()) as {
         scores?: Record<string, number>;
         progress?: { dqSave?: ReturnType<typeof readDqSave> };
@@ -151,14 +166,17 @@ export default function App() {
       };
       const cloud = data.scores ?? {};
       let merged = 0;
-      for (const g of games) {
-        const cv = cloud[g.meta.id];
-        if (cv == null) continue;
-        const raw = localStorage.getItem(`pp:best:${g.meta.id}`);
-        const lv = raw === null ? null : Number(raw);
-        // 按各游戏比较方向合并（步数/时间类取更小值）
-        if (lv === null || Number.isNaN(lv) || isBetterScore(g.meta.id, cv, lv)) {
-          localStorage.setItem(`pp:best:${g.meta.id}`, JSON.stringify(cv));
+      // 遍历云端所有成绩键（支持 `id:后缀` 细分键，如扫雷按难度），按各游戏比较方向合并
+      for (const [cid, cv] of Object.entries(cloud)) {
+        let lv: number | null;
+        try {
+          const raw = localStorage.getItem(`pp:best:${cid}`);
+          lv = raw === null ? null : Number(raw);
+        } catch {
+          lv = null;
+        }
+        if (lv === null || Number.isNaN(lv) || isBetterScore(cid, cv, lv)) {
+          localStorage.setItem(`pp:best:${cid}`, JSON.stringify(cv));
           merged++;
         }
       }
@@ -188,29 +206,42 @@ export default function App() {
     }
   };
 
-  /** 收集本机全部成绩并上传云端（服务端按比较方向合并），返回上传条数 */
-  const pushLocalScores = async (code: string): Promise<number> => {
+  /** 读取本机全部最佳成绩（含 `id:后缀` 细分键），供上传与迁移 */
+  const readAllLocalScores = (): Record<string, number> => {
     const scores: Record<string, number> = {};
-    for (const g of games) {
-      const raw = localStorage.getItem(`pp:best:${g.meta.id}`);
-      if (raw === null) continue;
-      const lv = Number(raw);
-      if (Number.isNaN(lv) || lv <= 0) continue;
-      scores[g.meta.id] = lv;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith('pp:best:')) continue;
+        const gameId = key.slice('pp:best:'.length);
+        // 扫雷旧基础键已废弃（分难度键为准）：不再上传，避免云端形成孤立键
+        if (gameId === 'minesweeper') continue;
+        const raw = localStorage.getItem(key);
+        if (raw === null) continue;
+        const lv = Number(raw);
+        if (Number.isFinite(lv) && lv > 0) scores[gameId] = lv;
+      }
+    } catch {
+      /* 隐私模式等跳过 */
     }
+    return scores;
+  };
+
+  /** 收集本机全部成绩并上传云端（服务端按权威方向表合并），返回上传条数 */
+  const pushLocalScores = async (code: string): Promise<number> => {
+    const scores = readAllLocalScores();
     const count = Object.keys(scores).length;
-    const lowerBetter = games.filter((g) => !g.meta.higherIsBetter).map((g) => g.meta.id);
-    await fetch('https://puzzle-play.pages.dev/api/sync', {
+    const res = await fetch('https://puzzle-play.pages.dev/api/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         code,
         scores: count > 0 ? scores : undefined,
-        lowerBetter,
         progress: { dqSave: readDqSave() },
         prefs: { soundMuted: readSoundMuted() },
       }),
     });
+    if (!res.ok) throw new Error('upload failed');
     return count;
   };
 
@@ -258,6 +289,7 @@ export default function App() {
     let cloudSave: ReturnType<typeof readDqSave> = null;
     try {
       const res = await fetch(`https://puzzle-play.pages.dev/api/sync?code=${encodeURIComponent(oldCode ?? '')}`);
+      if (!res.ok) throw new Error('fetch failed');
       const data = (await res.json()) as {
         scores?: Record<string, number>;
         progress?: { dqSave?: ReturnType<typeof readDqSave> };
@@ -268,32 +300,28 @@ export default function App() {
       /* 旧码云端不可达则跳过 */
     }
     // 2. 合并本地成绩（按各游戏比较方向取最优）
-    for (const g of games) {
-      const raw = localStorage.getItem(`pp:best:${g.meta.id}`);
-      if (raw === null) continue;
-      const lv = Number(raw);
-      if (Number.isNaN(lv) || lv <= 0) continue;
-      const cur = merged[g.meta.id];
-      if (cur == null || isBetterScore(g.meta.id, lv, cur)) merged[g.meta.id] = lv;
+    const localScores = readAllLocalScores();
+    for (const [gameId, lv] of Object.entries(localScores)) {
+      const cur = merged[gameId];
+      if (cur == null || isBetterScore(gameId, lv, cur)) merged[gameId] = lv;
     }
     // 3. 存档取更优（本地 vs 旧码云端）
     const localSave = readDqSave();
     const bestSave =
       localSave && cloudSave ? (isBetterDqSave(localSave, cloudSave) ? localSave : cloudSave) : (localSave ?? cloudSave);
     // 4. 写入新码
-    const lowerBetter = games.filter((g) => !g.meta.higherIsBetter).map((g) => g.meta.id);
     try {
-      await fetch('https://puzzle-play.pages.dev/api/sync', {
+      const res = await fetch('https://puzzle-play.pages.dev/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code: newCode,
           scores: merged,
-          lowerBetter,
           progress: { dqSave: bestSave },
           prefs: { soundMuted: readSoundMuted() },
         }),
       });
+      if (!res.ok) throw new Error('upload failed');
     } catch {
       /* ignore */
     }

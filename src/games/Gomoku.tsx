@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
+import { useBestScore } from '../core/sync';
 import { metaGomoku } from '../core/gameMetas';
 
 
@@ -127,17 +128,20 @@ export default function Gomoku() {
   const [board, setBoard] = useState<Board>(emptyBoard);
   const [turn, setTurn] = useState<'player' | 'ai'>('player');
   const [winner, setWinner] = useState<0 | 1 | 2 | 3>(0);
+  /** 最后一手下标：胜负判定只检查这一手（此前按最大下标检查会漏判） */
+  const [lastMove, setLastMove] = useState(-1);
   const [wins, setWins] = useState(0);
+  const [losses, setLosses] = useState(0);
   const [streak, setStreak] = useState(0);
   const [thinking, setThinking] = useState(false);
   const { toast } = useToast();
-
-  const empty = useMemo(() => board.every((c) => c === 0), [board]);
+  const best = useBestScore(metaGomoku.id);
 
   const reset = useCallback(() => {
     setBoard(emptyBoard());
     setTurn('player');
     setWinner(0);
+    setLastMove(-1);
     setThinking(false);
   }, []);
 
@@ -157,40 +161,37 @@ export default function Gomoku() {
         next[move] = 2;
         return next;
       });
+      setLastMove(move);
       setTurn('player');
       setThinking(false);
     }, 350);
     return () => window.clearTimeout(t);
   }, [turn, winner, board]);
 
-  // 落子后胜负判定
+  // 落子后胜负判定（只检查最后一手，任何位置连五都能命中）
   useEffect(() => {
-    if (winner !== 0 || empty) return;
-    const lastIdx = -1;
-    for (let i = board.length - 1; i >= 0; i--) {
-      if (board[i] !== 0) {
-        if (checkWin(board, i)) {
-          const w = board[i];
-          setWinner(w);
-          if (w === 1) {
-            sfx.win();
-            setWins((v) => v + 1);
-            setStreak((v) => v + 1);
-            toast(`你赢了！当前 ${streak + 1} 连胜`, 'success');
-          } else {
-            sfx.lose();
-            setStreak(0);
-            toast('电脑获胜，再来一局！', 'info');
-          }
-        } else if (board.every((c) => c !== 0)) {
-          setWinner(3);
-          toast('平局！', 'info');
-        }
-        break;
+    if (winner !== 0 || lastMove < 0) return;
+    if (checkWin(board, lastMove)) {
+      const w = board[lastMove];
+      setWinner(w);
+      if (w === 1) {
+        sfx.win();
+        const newStreak = streak + 1;
+        setWins((v) => v + 1);
+        setStreak(newStreak);
+        best.updateBest(newStreak, (a, b) => a > b);
+        toast(`你赢了！当前 ${newStreak} 连胜`, 'success');
+      } else {
+        sfx.lose();
+        setLosses((v) => v + 1);
+        setStreak(0);
+        toast('电脑获胜，再来一局！', 'info');
       }
+    } else if (board.every((c) => c !== 0)) {
+      setWinner(3);
+      toast('平局！', 'info');
     }
-    void lastIdx;
-  }, [board, winner, empty, streak, toast]);
+  }, [board, winner, lastMove, streak, toast, best]);
 
   const place = (i: number) => {
     if (winner !== 0 || turn !== 'player' || thinking) return;
@@ -201,10 +202,11 @@ export default function Gomoku() {
       next[i] = 1;
       return next;
     });
+    setLastMove(i);
     setTurn('ai');
   };
 
-  const total = wins + streak > 0 ? wins + streak : 0;
+  const total = wins + losses;
   const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
 
   return (
@@ -224,6 +226,10 @@ export default function Gomoku() {
           <div className="stat-box">
             <span>胜率</span>
             <strong>{winRate}%</strong>
+          </div>
+          <div className="stat-box">
+            <span>{metaGomoku.bestScoreLabel}</span>
+            <strong>{best.value ?? '--'}</strong>
           </div>
           <button className="btn btn-primary" onClick={reset}>
             🔄 新一局

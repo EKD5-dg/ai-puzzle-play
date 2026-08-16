@@ -42,7 +42,8 @@ function buildLanes(level: number): Lane[] {
   defs.forEach((d, i) => {
     const lane: Lane = { kind: d.kind as Lane['kind'], dir: d.dir, speed: d.speed, items: [] };
     if (lane.kind !== 'safe') {
-      const spacing = lane.kind === 'road' ? 130 - level * 4 : 150 - level * 4;
+      // 间距下限 60：level 增长时不会降到 ≤0 导致死循环，也不会让道具重叠
+      const spacing = Math.max(60, lane.kind === 'road' ? 130 - level * 4 : 150 - level * 4);
       const w = lane.kind === 'road' ? 46 : 62;
       for (let x = -20; x < W + 20; x += spacing) {
         lane.items.push({ x: x + ((i * 37) % spacing), w });
@@ -63,11 +64,14 @@ export default function Frogger() {
   const { toast } = useToast();
 
   const gameRef = useRef({
-    frog: { x: W / 2 - 14, y: H - ROW_H + 8, onLog: null as { dx: number } | null },
+    frog: { x: W / 2 - 14, y: H - ROW_H + 8, onLog: null as { log: { x: number; w: number }; dx: number } | null },
     lanes: [] as Lane[],
     goals: Array(5).fill(false) as boolean[],
     deathTimer: 0,
   });
+  /** 生命值镜像（rAF 回调内读取最新值） */
+  const livesRef = useRef(3);
+  livesRef.current = lives;
 
   // 静态背景层（车道/河流底色+线+目标洞），每帧直接贴图
   const bgRef = useRef<HTMLCanvasElement | null>(null);
@@ -114,6 +118,7 @@ export default function Frogger() {
     gameRef.current.lanes = buildLanes(1);
     gameRef.current.goals = Array(5).fill(false);
     gameRef.current.deathTimer = 0;
+    livesRef.current = 3;
     setScore(0);
     setLives(3);
     setLevel(1);
@@ -138,17 +143,23 @@ export default function Frogger() {
       const ctx = cv?.getContext('2d');
       if (!cv || !ctx) return;
 
-      // 移动车道/河流道具
+      const f = g.frog;
+
+      // 移动车道/河流道具（浮木回绕时同步搬移站着的青蛙，避免瞬移落水）
       g.lanes.forEach((lane) => {
         if (lane.kind === 'safe') return;
         lane.items.forEach((it) => {
           it.x += lane.dir * lane.speed * dt * 0.06;
-          if (it.x > W + 20) it.x = -60;
-          if (it.x < -60) it.x = W + 20;
+          if (it.x > W + 20) {
+            it.x = -60;
+            if (f.onLog?.log === it) f.x += -60 - (W + 20);
+          } else if (it.x < -60) {
+            it.x = W + 20;
+            if (f.onLog?.log === it) f.x += W + 20 + 60;
+          }
         });
       });
 
-      const f = g.frog;
       const row = Math.floor((f.y + 10) / ROW_H);
       const lane = g.lanes[Math.min(Math.max(row, 0), ROWS - 1)];
 
@@ -156,19 +167,19 @@ export default function Frogger() {
       if (g.deathTimer > 0) {
         g.deathTimer -= dt;
         if (g.deathTimer <= 0) {
-          setLives((l) => {
-            const nl = l - 1;
-            if (nl <= 0) {
-              setStatus('over');
-              sfx.lose();
-            } else {
-              respawn();
-            }
-            return nl;
-          });
+          const nl = livesRef.current - 1;
+          livesRef.current = nl;
+          setLives(nl);
+          if (nl <= 0) {
+            setStatus('over');
+            sfx.lose();
+          } else {
+            respawn();
+          }
         }
       } else if (lane.kind === 'road') {
-        // 撞车检测
+        // 撞车检测（离开河流行后清理浮木引用，防止浮木回绕连带瞬移路上的青蛙）
+        if (f.onLog) f.onLog = null;
         for (const car of lane.items) {
           if (f.x + 24 > car.x && f.x < car.x + car.w && f.y > row * ROW_H && f.y < (row + 1) * ROW_H) {
             g.deathTimer = 600;
@@ -178,10 +189,10 @@ export default function Frogger() {
         }
       } else if (lane.kind === 'river') {
         // 找浮木
-        let onLog: { dx: number } | null = null;
+        let onLog: { log: { x: number; w: number }; dx: number } | null = null;
         for (const log of lane.items) {
           if (f.x + 20 > log.x && f.x + 8 < log.x + log.w && f.y > row * ROW_H && f.y < (row + 1) * ROW_H) {
-            onLog = { dx: lane.dir * lane.speed * dt * 0.06 };
+            onLog = { log, dx: lane.dir * lane.speed * dt * 0.06 };
             break;
           }
         }
@@ -197,8 +208,8 @@ export default function Frogger() {
         f.onLog = null;
       }
 
-      // 边界
-      f.x = Math.max(2, Math.min(W - 30, f.x));
+      // 边界（不在浮木上时钳制在画布内；在浮木上时允许随浮木短暂出屏再回绕，避免 clamp 破坏搬移）
+      if (!f.onLog) f.x = Math.max(2, Math.min(W - 30, f.x));
 
       // 到达目标
       if (f.y < ROW_H) {
@@ -286,8 +297,10 @@ export default function Frogger() {
     return () => cancelAnimationFrame(raf);
   }, [status, respawn]);
 
-  // 键盘/方向控制
+  // 键盘/方向控制（仅游戏中且非死亡动画期间可移动）
   const moveFrog = (dx: number, dy: number) => {
+    if (status !== 'playing') return;
+    if (gameRef.current.deathTimer > 0) return;
     const f = gameRef.current.frog;
     f.x = Math.max(2, Math.min(W - 30, f.x + dx));
     f.y = Math.max(0, Math.min(H - ROW_H + 8, f.y + dy));
@@ -319,16 +332,16 @@ export default function Frogger() {
     return () => window.removeEventListener('keydown', onKey);
   }, [status, startGame, moveFrog]);
 
-  // 最高分
+  // 最高分：只在游戏结束时结算一次（避免每次进洞加分刷屏 toast/音效/云请求）
   useEffect(() => {
-    if (score > 0) {
+    if ((status === 'over' || status === 'win') && score > 0) {
       const isNew = best.updateBest(score, (a, b) => a > b);
-      if (isNew && score > 0) {
+      if (isNew) {
         sfx.record();
         toast(`新纪录！${score} 分`, 'record');
       }
     }
-  }, [score, best, toast]);
+  }, [status, score, best, toast]);
 
   return (
     <GameShell

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
@@ -145,19 +145,29 @@ export default function Sudoku() {
   const [showMistakes, setShowMistakes] = useState(true);
   const [time, setTime] = useState(0);
   const [won, setWon] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  /** 生成任务编号：快速连点新一局时丢弃过期任务 */
+  const genRef = useRef(0);
   const best = useBestScore(metaSudoku.id);
   const { toast } = useToast();
 
   const startNew = (idx: number) => {
-    const { puzzle: p, solution: s } = generatePuzzle(LEVELS[idx].blanks);
-    setLevelIdx(idx);
-    setPuzzle(p);
-    setSolution(s);
-    setCurrent([...p]);
-    setSelected(null);
-    setMistakes(0);
-    setTime(0);
-    setWon(false);
+    const gen = ++genRef.current;
+    setGenerating(true);
+    // 生成放到宏任务执行：困难难度回溯求解可能耗时数百毫秒，避免阻塞主线程 UI
+    window.setTimeout(() => {
+      if (gen !== genRef.current) return;
+      const { puzzle: p, solution: s } = generatePuzzle(LEVELS[idx].blanks);
+      setLevelIdx(idx);
+      setPuzzle(p);
+      setSolution(s);
+      setCurrent([...p]);
+      setSelected(null);
+      setMistakes(0);
+      setTime(0);
+      setWon(false);
+      setGenerating(false);
+    }, 0);
   };
 
   // 首次进入生成一局
@@ -302,6 +312,7 @@ export default function Sudoku() {
             🎉 数独完成！用时 {time}s，错误 {mistakes} 次
           </div>
         )}
+        {generating && <div className="banner">⏳ 正在生成谜题…</div>}
         <div className="sudoku-grid">
           {current.map((v, i) => {
             const isGiven = puzzle[i] !== 0;
