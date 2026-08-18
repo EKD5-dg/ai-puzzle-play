@@ -23,6 +23,7 @@ import {
   metaBirds,
   metaCube,
   metaMaze3D,
+  metaPong3D,
 } from './gameMetas';
 
 /**
@@ -55,6 +56,7 @@ export const games: GameDefinition[] = [
   { meta: metaBirds, component: lazy(() => import('../games/AngryBirds')) },
   { meta: metaCube, component: lazy(() => import('../games/RubiksCube')) },
   { meta: metaMaze3D, component: lazy(() => import('../games/Maze3D')) },
+  { meta: metaPong3D, component: lazy(() => import('../games/Pong3D')) },
 ];
 
 /** 按 id 查找游戏 */

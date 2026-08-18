@@ -299,6 +299,18 @@ export const metaMaze3D: GameMeta = {
   higherIsBetter: false,
 };
 
+export const metaPong3D: GameMeta = {
+  id: 'pong-3d',
+  title: '3D 乒乓球',
+  description: '在霓虹隧道中迎战 AI，挥拍加旋，逐级加速别漏球！',
+  icon: '🏓',
+  difficulty: '中等',
+  category: '经典',
+  tags: ['3D', '街机', '对战'],
+  bestScoreLabel: '最高分',
+  higherIsBetter: true,
+};
+
 /** 成绩比较方向权威表：false=成绩越小越好（步数/时间类）。由各 meta 派生，云同步服务端也内置了同样白名单（functions/api/sync.js），新增"成绩取小"的游戏需两处同步 */
 export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
   [
@@ -324,6 +336,7 @@ export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
     metaBirds,
     metaCube,
     metaMaze3D,
+    metaPong3D,
   ].map((m) => [m.id, m.higherIsBetter]),
 );
 
