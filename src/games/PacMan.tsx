@@ -48,7 +48,7 @@ export default function PacMan() {
   // 游戏状态（ref 供游戏循环读写）
   const gameRef = useRef({
     player: { x: 9 * TILE + TILE / 2, y: 7.5 * TILE, dir: 'left' as string, nextDir: 'left' as string, speed: 2.6, invincible: 0 },
-    ghosts: [] as Array<{ x: number; y: number; dir: string; color: string; mode: 'chase' | 'fright' | 'eyes'; timer: number; delay: number }>,
+    ghosts: [] as Array<{ x: number; y: number; dir: string; color: string; mode: 'chase' | 'fright' | 'eyes'; timer: number; delay: number; tx: number; ty: number; released: boolean }>,
     dots: 0,
     totalDots: 0,
     maze: [] as string[][],
@@ -126,11 +126,12 @@ export default function PacMan() {
       const maze = initMaze();
       gameRef.current.maze = maze;
       gameRef.current.player = { x: 9 * TILE + TILE / 2, y: 7.5 * TILE, dir: 'left', nextDir: 'left', speed: 2.6, invincible: 2500 };
+      // 出生点全部落在开阔格（房门下方口袋 + 房门本身），幽灵可按格子寻路法正常出发
       gameRef.current.ghosts = [
-        { x: 9 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[0], mode: 'chase', timer: 0, delay: 90 },
-        { x: 8 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[1], mode: 'chase', timer: 0, delay: 180 },
-        { x: 10 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[2], mode: 'chase', timer: 0, delay: 270 },
-        { x: 9 * TILE + TILE / 2, y: 9.5 * TILE, dir: 'up', color: GHOST_COLORS[3], mode: 'chase', timer: 0, delay: 360 },
+        { x: 9 * TILE + TILE / 2, y: 9.5 * TILE, dir: 'up', color: GHOST_COLORS[0], mode: 'chase', timer: 0, delay: 90, tx: 0, ty: 0, released: false },
+        { x: 8 * TILE + TILE / 2, y: 9.5 * TILE, dir: 'up', color: GHOST_COLORS[1], mode: 'chase', timer: 0, delay: 180, tx: 0, ty: 0, released: false },
+        { x: 10 * TILE + TILE / 2, y: 9.5 * TILE, dir: 'up', color: GHOST_COLORS[2], mode: 'chase', timer: 0, delay: 270, tx: 0, ty: 0, released: false },
+        { x: 9 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[3], mode: 'chase', timer: 0, delay: 360, tx: 0, ty: 0, released: false },
       ];
       gameRef.current.frightTimer = 0;
       // 幽灵速度随关卡提升但封顶 2.85（玩家 2.6），保证高关卡仍可玩
@@ -224,7 +225,8 @@ export default function PacMan() {
         }
       }
 
-      // 幽灵移动（简单追逐：趋向玩家 + 随机扰动；恐惧时远离）
+      // 幽灵移动：整格寻路——只在格子中心落位决策，且只走向已通过碰撞检查的相邻格心，
+      // 消除旧实现“中心±1.5px窗口 + 帧间直线位移无碰撞校验”导致的幽灵随机穿墙
       g.ghosts.forEach((gh) => {
         // 出房延迟：分批放出，避免开局围杀
         if (gh.delay > 0) {
@@ -238,10 +240,12 @@ export default function PacMan() {
             gh.timer = 0;
           }
         }
-        // 每帧按格子对齐点决策转向
+        // 到格心才决策，到心即精确落位（不保留余量，杜绝超调进墙）
         const gx = Math.floor(gh.x / TILE) * TILE + TILE / 2;
         const gy = Math.floor(gh.y / TILE) * TILE + TILE / 2;
-        if (Math.abs(gh.x - gx) < 1.5 && Math.abs(gh.y - gy) < 1.5) {
+        if (Math.abs(gh.x - gx) < 1.2 && Math.abs(gh.y - gy) < 1.2) {
+          gh.x = gx;
+          gh.y = gy;
           const options: string[] = [];
           const dirs: Array<[string, number, number]> = [
             ['left', -1, 0],
@@ -249,13 +253,35 @@ export default function PacMan() {
             ['up', 0, -1],
             ['down', 0, 1],
           ];
+          const rev = gh.dir === 'left' ? 'right' : gh.dir === 'right' ? 'left' : gh.dir === 'up' ? 'down' : 'up';
           for (const [d, dx, dy] of dirs) {
-            if (d === (gh.dir === 'left' ? 'right' : gh.dir === 'right' ? 'left' : gh.dir === 'up' ? 'down' : 'up')) continue;
-            const nx = gx + dx * TILE;
-            const ny = gy + dy * TILE;
-            if (!isWall(nx, ny, true)) options.push(d); // 幽灵视角：可穿 '=' 房门
+            if (d === rev) continue;
+            if (!isWall(gx + dx * TILE, gy + dy * TILE, true)) options.push(d); // 幽灵视角：可穿 '=' 房门
           }
-          if (options.length > 0) {
+          if (options.length === 0) {
+            // 死胡同尽头：允许原地掉头，否则会在此格卡死
+            const rdx = rev === 'left' ? -1 : rev === 'right' ? 1 : 0;
+            const rdy = rev === 'up' ? -1 : rev === 'down' ? 1 : 0;
+            if (!isWall(gx + rdx * TILE, gy + rdy * TILE, true)) gh.dir = rev;
+          } else if (!gh.released) {
+            // 出房引导：延迟结束后确定性地沿最短路径走向门洞上方的外走廊（行7），
+            // 到达才切换追逐——避免幽灵在口袋里靠 12% 随机转向“碰运气”才出得去
+            const exitX = 9 * TILE + TILE / 2;
+            const exitY = 7 * TILE + TILE / 2;
+            let bestD = options[0];
+            let bestDist = Infinity;
+            for (const d of options) {
+              const dx = d === 'left' ? -1 : d === 'right' ? 1 : 0;
+              const dy = d === 'up' ? -1 : d === 'down' ? 1 : 0;
+              const dist = Math.abs(gx + dx * TILE - exitX) + Math.abs(gy + dy * TILE - exitY);
+              if (dist < bestDist) {
+                bestDist = dist;
+                bestD = d;
+              }
+            }
+            gh.dir = bestD;
+            if (Math.floor(gh.y / TILE) === 7) gh.released = true;
+          } else {
             // 追逐：选朝玩家的方向（曼哈顿距离最小）
             const target = gh.mode === 'fright' ? { x: COLS * TILE - p.x, y: p.y } : p;
             let bestD = options[0];
@@ -272,16 +298,33 @@ export default function PacMan() {
             if (Math.random() < 0.12) gh.dir = options[Math.floor(Math.random() * options.length)];
             else gh.dir = bestD;
           }
+          // 锁定目标格心；隧道行（第9行）水平越界时回绕到对侧格心
+          const vx = gh.dir === 'left' ? -1 : gh.dir === 'right' ? 1 : 0;
+          const vy = gh.dir === 'up' ? -1 : gh.dir === 'down' ? 1 : 0;
+          let nx = gx + vx * TILE;
+          const ny = gy + vy * TILE;
+          if (Math.floor(ny / TILE) === 9) nx = (((Math.floor(nx / TILE) % COLS) + COLS) % COLS) * TILE + TILE / 2;
+          // 目标与当前相距超一格 → 目标在对侧（隧道），直接瞬移过去
+          if (Math.abs(nx - gx) > TILE || Math.abs(ny - gy) > TILE) {
+            gh.x = nx;
+            gh.y = ny;
+          }
+          gh.tx = nx;
+          gh.ty = ny;
         }
-        const vx = gh.dir === 'left' ? -1 : gh.dir === 'right' ? 1 : 0;
-        const vy = gh.dir === 'up' ? -1 : gh.dir === 'down' ? 1 : 0;
-        // 恐惧模式幽灵减速一半（经典规则），否则高关卡恐惧幽灵比玩家快，吃鬼机制失效
+        // 只朝已锁定的目标格心移动；恐惧模式减速一半（经典规则），否则高关卡恐惧幽灵比玩家快
         const speed = gh.mode === 'fright' ? g.ghostSpeed * 0.5 : g.ghostSpeed;
-        gh.x += vx * speed * dt * 0.06;
-        gh.y += vy * speed * dt * 0.06;
-        // 幽灵与玩家相同的隧道坐标回绕（否则出屏后永久丢失）
-        if (gh.x < -TILE / 2) gh.x = COLS * TILE + TILE / 2 - 1;
-        if (gh.x > COLS * TILE + TILE / 2) gh.x = -TILE / 2 + 1;
+        const dx = gh.tx - gh.x;
+        const dy = gh.ty - gh.y;
+        const dist = Math.hypot(dx, dy);
+        const step = speed * dt * 0.06;
+        if (dist <= step) {
+          gh.x = gh.tx;
+          gh.y = gh.ty;
+        } else {
+          gh.x += (dx / dist) * step;
+          gh.y += (dy / dist) * step;
+        }
       });
 
       // 碰撞检测（开局短暂无敌，幽灵可穿过）
@@ -298,6 +341,7 @@ export default function PacMan() {
               gh.x = 9 * TILE + TILE / 2;
               gh.y = 9.5 * TILE;
               gh.mode = 'chase';
+              gh.released = false;
             }, 1200);
             gameTimersRef.current.push(t);
           } else if (gh.mode !== 'eyes' && p.invincible <= 0) {
@@ -313,9 +357,17 @@ export default function PacMan() {
               p.dir = 'left';
               p.nextDir = 'left';
               p.invincible = 2000;
-              g.ghosts.forEach((gg) => {
-                gg.x = 9 * TILE + TILE / 2;
-                gg.y = 8.5 * TILE;
+              // 幽灵回到出生口袋（不开阔格，避免叠门/卡死）
+              const respawn: Array<[number, number]> = [
+                [9 * TILE + TILE / 2, 9.5 * TILE],
+                [8 * TILE + TILE / 2, 9.5 * TILE],
+                [10 * TILE + TILE / 2, 9.5 * TILE],
+                [9 * TILE + TILE / 2, 8.5 * TILE],
+              ];
+              g.ghosts.forEach((gg, i) => {
+                gg.x = respawn[i][0];
+                gg.y = respawn[i][1];
+                gg.released = false;
               });
               sfx.mismatch();
             }
