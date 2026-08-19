@@ -311,6 +311,18 @@ export const metaPong3D: GameMeta = {
   higherIsBetter: true,
 };
 
+export const metaSki3D: GameMeta = {
+  id: 'ski-3d',
+  title: '3D 滑雪冲刺',
+  description: '从雪山之巅俯冲而下，避开障碍收集宝石，滑得更远！',
+  icon: '⛷️',
+  difficulty: '中等',
+  category: '反应',
+  tags: ['3D', '躲避', '竞速'],
+  bestScoreLabel: '最远距离',
+  higherIsBetter: true,
+};
+
 /** 成绩比较方向权威表：false=成绩越小越好（步数/时间类）。由各 meta 派生，云同步服务端也内置了同样白名单（functions/api/sync.js），新增"成绩取小"的游戏需两处同步 */
 export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
   [
@@ -337,6 +349,7 @@ export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
     metaCube,
     metaMaze3D,
     metaPong3D,
+    metaSki3D,
   ].map((m) => [m.id, m.higherIsBetter]),
 );
 

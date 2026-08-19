@@ -3305,3 +3305,84 @@ html {
   }
 }
 
+/* ============ 3D 滑雪冲刺（Ski3D） ============ */
+
+.s3d {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.s3d-stage {
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+}
+
+.s3d-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  background: #1a2c50;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: crosshair;
+}
+
+.s3d-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(16, 28, 52, 0.86);
+  border-radius: var(--radius);
+  z-index: 5;
+  text-align: center;
+  padding: 16px;
+}
+
+.s3d-overlay h2 {
+  font-size: 24px;
+}
+
+.s3d-overlay p {
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.s3d-keys {
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+
+.s3d-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.s3d-lives {
+  color: #ff5b74;
+  letter-spacing: 2px;
+}
+
+@media (max-width: 640px) {
+  .s3d-overlay h2 {
+    font-size: 20px;
+  }
+
+  .s3d-keys {
+    font-size: 11.5px;
+  }
+}
+
