@@ -34,6 +34,16 @@ const INVULN = 1.6;
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
+/** 在 [lo, hi] 随机取横向位置，重试采样保证与已占用位置拉开 minGap，避免障碍/宝石黏在一起 */
+function pickX(taken: number[], lo: number, hi: number, minGap: number): number {
+  let x = lo + Math.random() * (hi - lo);
+  for (let tries = 0; tries < 14; tries++) {
+    if (taken.every((o) => Math.abs(o - x) >= minGap)) return x;
+    x = lo + Math.random() * (hi - lo);
+  }
+  return x;
+}
+
 type ObType = 'tree' | 'rock' | 'snowman';
 
 interface Obstacle {
@@ -44,11 +54,14 @@ interface Obstacle {
   r: number;
   /** 装饰性随机尺寸/相位 */
   seed: number;
+  /** 是否已判过碰撞：每个障碍只在穿过玩家平面时判一次，避免里程突变（吃宝石跳跃）时重复/滞后判定 */
+  judged: boolean;
 }
 
 interface Gem {
   x: number;
   z: number;
+  judged: boolean;
 }
 
 /** 路边树（纯装饰，不随距离消失，循环回收） */
@@ -304,28 +317,28 @@ export default function Ski3D() {
 
         // ---- 生成：前方阈值到达时铺一段障碍（可能附带宝石） ----
         while (w.dist >= w.nextSpawn) {
-          const zAt = w.nextSpawn + FAR * 0.8;
+          // 吃宝石大跳跃后 nextSpawn 可能远落后于 dist：生成位置钉在玩家前方，
+          // 避免障碍直接出生在身后立刻触发碰撞
+          const zAt = Math.max(w.nextSpawn, w.dist) + FAR * 0.8;
           if (Math.random() < 0.62) {
             const n = 1 + (Math.random() < 0.55 ? 1 : 0);
             const xs: number[] = [];
             for (let i = 0; i < n; i++) {
-              let x = -3.2 + Math.random() * 6.4;
-              // 与已选位置错开，避免完全重叠
-              if (xs.some((o) => Math.abs(o - x) < 1.2)) x = clamp(x + 1.6, -3.2, 3.2);
+              const x = pickX(xs, -3.2, 3.2, 1.4);
               xs.push(x);
               const roll = Math.random();
               const type: ObType = roll < 0.5 ? 'tree' : roll < 0.8 ? 'rock' : 'snowman';
               const r = type === 'tree' ? 0.32 : type === 'snowman' ? 0.3 : 0.42;
-              w.obstacles.push({ x, z: zAt + Math.random() * 2, type, r, seed: Math.random() });
+              w.obstacles.push({ x, z: zAt + Math.random() * 2, type, r, seed: Math.random(), judged: false });
             }
-            // 缝隙里放宝石引导走位（离障碍至少 1.1 米）
+            // 宝石单独放前方一排（z 错开 ≥2m 不与障碍同行），横向离障碍 ≥1.6m：
+            // 吃宝石半径 0.6 + 最大撞判半径 0.68 ≈ 1.28，留足余量避免"吃宝石顺带撞树"
             if (Math.random() < 0.45) {
-              let gx = -3 + Math.random() * 6;
-              if (xs.some((o) => Math.abs(o - gx) < 1.1)) gx = clamp(gx + 1.4, -3, 3);
-              w.gemsArr.push({ x: gx, z: zAt + 1 });
+              const gx = pickX(xs, -3, 3, 1.6);
+              w.gemsArr.push({ x: gx, z: zAt + 4 + Math.random() * 2, judged: false });
             }
           } else if (Math.random() < 0.8) {
-            w.gemsArr.push({ x: -2.6 + Math.random() * 5.2, z: zAt });
+            w.gemsArr.push({ x: -2.6 + Math.random() * 5.2, z: zAt + 1, judged: false });
           }
           // 间距随速度收紧（时间下限约 0.55s），保证始终可穿行
           const gap = clamp(w.speed * 0.72, 8, 16);
@@ -337,9 +350,11 @@ export default function Ski3D() {
         for (let i = w.obstacles.length - 1; i >= 0; i--) {
           const o = w.obstacles[i];
           const z = rel(o);
-          // 障碍穿过玩家平面（z 从正到负）时判一次碰撞
-          if (z < 0) {
-            if (w.invuln <= 0 && Math.abs(o.x - p.x) < o.r + 0.26) {
+          // 障碍到达玩家平面（z = PZ，即视觉重合位置）时判一次碰撞
+          if (!o.judged && z <= PZ) {
+            o.judged = true;
+            // 只在玩家身前判碰撞：已在身后的障碍（如异常生成）不伤人
+            if (z > -0.5 && w.invuln <= 0 && Math.abs(o.x - p.x) < o.r + 0.26) {
               w.lives -= 1;
               w.combo = 1;
               w.invuln = INVULN;
@@ -355,6 +370,8 @@ export default function Ski3D() {
                 toast(`💥 撞上${o.type === 'tree' ? '松树' : o.type === 'rock' ? '岩石' : '雪人'}！剩余 ${w.lives} 条命`, 'info');
               }
             }
+          }
+          if (z < -1) {
             w.obstacles.splice(i, 1);
           } else if (z > FAR * 1.2) {
             w.obstacles.splice(i, 1);
@@ -363,16 +380,28 @@ export default function Ski3D() {
         for (let i = w.gemsArr.length - 1; i >= 0; i--) {
           const g = w.gemsArr[i];
           const z = rel(g);
-          if (z < 0.4 && z > -0.4 && Math.abs(g.x - p.x) < 0.6) {
-            w.gems += 1;
-            w.combo = Math.min(5, w.combo + 1);
-            w.dist += 15 * w.combo;
-            w.gemFlash = t;
-            setGems(w.gems);
-            sfx.match();
-            if (w.combo > 1) toast(`💎 宝石 ×${w.combo} 连击！里程 +${15 * w.combo}m`, 'success');
-            w.gemsArr.splice(i, 1);
-          } else if (z < -0.5 || z > FAR * 1.2) {
+          // 宝石到达玩家平面时判一次收集
+          if (!g.judged && z <= PZ) {
+            g.judged = true;
+            if (Math.abs(g.x - p.x) < 0.6) {
+              w.gems += 1;
+              w.combo = Math.min(5, w.combo + 1);
+              const jump = 15 * w.combo;
+              w.dist += jump;
+              // 里程瞬间前跳会把前方障碍直接甩到身后、或把玩家瞬移到障碍跟前，
+              // 玩家没有躲避机会：被掠过及落点前方 3.5m 内的障碍免判碰撞，
+              // 避免"吃宝石却被撞"的不公平体验
+              for (const o of w.obstacles) {
+                if (!o.judged && o.z - w.dist <= PZ + 3.5) o.judged = true;
+              }
+              w.gemFlash = t;
+              setGems(w.gems);
+              sfx.match();
+              if (w.combo > 1) toast(`💎 宝石 ×${w.combo} 连击！里程 +${jump}m`, 'success');
+              w.gemsArr.splice(i, 1);
+            }
+          }
+          if (z < -0.5 || z > FAR * 1.2) {
             w.gemsArr.splice(i, 1);
           }
         }
