@@ -565,14 +565,16 @@ export default function Stack3D() {
       // ---- 塔身：底 → 顶画家序 ----
       const top = w.tower[w.tower.length - 1];
       const drawLayer = (ly: Layer, lvl: number, isBase: boolean) => {
-        const y0 = lvl * LAYER_H;
-        const y1 = y0 + LAYER_H;
+        // 数组下标 i 的物理占位是 [(i-1)·LAYER_H, i·LAYER_H]（基座顶面 y=0 向下延伸），
+        // 与 placeBlock 的 y0/y1、滑块 my0、光环与碎块的 y 一致，错一层就会视觉穿插
+        const y1 = lvl * LAYER_H;
+        const y0 = isBase ? -7 : y1 - LAYER_H;
         if (y1 < fy - 10 || y0 > fy + 6) return;
         const grow = isBase ? 0.5 : 0;
         const hue = isBase ? 218 : (lvl * 14 + 165) % 360;
         const sat = isBase ? 16 : 62;
         const lig = isBase ? 56 : 57;
-        drawBox(ly.x - ly.w / 2 - grow, ly.x + ly.w / 2 + grow, y0 - (isBase ? 7 : 0), y1, ly.z - ly.d / 2 - grow, ly.z + ly.d / 2 + grow, fy, hue, sat, lig);
+        drawBox(ly.x - ly.w / 2 - grow, ly.x + ly.w / 2 + grow, y0, y1, ly.z - ly.d / 2 - grow, ly.z + ly.d / 2 + grow, fy, hue, sat, lig);
       };
       const from = Math.max(0, w.tower.length - 26);
       for (let i = 0; i < w.tower.length; i++) {
