@@ -25,6 +25,7 @@ import {
   metaMaze3D,
   metaPong3D,
   metaSki3D,
+  metaStack3D,
 } from './gameMetas';
 
 /**
@@ -59,6 +60,7 @@ export const games: GameDefinition[] = [
   { meta: metaMaze3D, component: lazy(() => import('../games/Maze3D')) },
   { meta: metaPong3D, component: lazy(() => import('../games/Pong3D')) },
   { meta: metaSki3D, component: lazy(() => import('../games/Ski3D')) },
+  { meta: metaStack3D, component: lazy(() => import('../games/Stack3D')) },
 ];
 
 /** 按 id 查找游戏 */
