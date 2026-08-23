@@ -280,6 +280,180 @@ export default function Ski3D() {
     /** 远雾混合：k=0 原色，k→1 融入雪白 */
     const fogged = (rgb: string, k: number) => `rgba(${rgb},${(1 - k * 0.82).toFixed(3)})`;
 
+    /** 雪松：渐变树干 + 三层下垂针叶（含底部阴影、中央体积高亮、层间雪盖） */
+    const drawPine = (bx: number, by: number, h: number, tw: number, fog: number) => {
+      const trunkH = h * 0.2;
+      const trunkW = tw * 0.16;
+      // 树干（左亮右暗渐变）
+      const tg = ctx.createLinearGradient(bx - trunkW, 0, bx + trunkW, 0);
+      tg.addColorStop(0, fogged('134,88,48', fog));
+      tg.addColorStop(0.55, fogged('96,64,34', fog));
+      tg.addColorStop(1, fogged('54,36,20', fog));
+      ctx.fillStyle = tg;
+      ctx.beginPath();
+      ctx.moveTo(bx - trunkW, by);
+      ctx.lineTo(bx - trunkW * 0.7, by - trunkH);
+      ctx.lineTo(bx + trunkW * 0.7, by - trunkH);
+      ctx.lineTo(bx + trunkW, by);
+      ctx.closePath();
+      ctx.fill();
+
+      // 三层针叶（底→顶逐层收窄）
+      const baseYs = [by - trunkH, by - h * 0.42, by - h * 0.64];
+      const apexYs = [by - h * 0.55, by - h * 0.76, by - h];
+      const halfWs = [tw, tw * 0.8, tw * 0.56];
+      for (let l = 0; l < 3; l++) {
+        const bY = baseYs[l];
+        const aY = apexYs[l];
+        const hw = halfWs[l];
+        const sag = (aY - bY) * 0.16; // 底缘下垂
+        // 主体
+        ctx.fillStyle = fogged('45,96,60', fog);
+        ctx.beginPath();
+        ctx.moveTo(bx - hw, bY);
+        ctx.quadraticCurveTo(bx, bY + sag, bx + hw, bY);
+        ctx.lineTo(bx, aY);
+        ctx.closePath();
+        ctx.fill();
+        // 底部深色阴影带
+        ctx.strokeStyle = fogged('27,64,42', fog);
+        ctx.lineWidth = Math.max(1, tw * 0.05);
+        ctx.beginPath();
+        ctx.moveTo(bx - hw, bY);
+        ctx.quadraticCurveTo(bx, bY + sag, bx + hw, bY);
+        ctx.stroke();
+        // 中央体积高亮
+        ctx.fillStyle = fogged('72,124,84', fog);
+        ctx.beginPath();
+        ctx.moveTo(bx - hw * 0.12, bY);
+        ctx.quadraticCurveTo(bx, bY + sag * 0.5, bx + hw * 0.12, bY);
+        ctx.lineTo(bx, aY);
+        ctx.closePath();
+        ctx.fill();
+        // 两侧雪盖（沿上缘）
+        ctx.fillStyle = fogged('242,249,254', fog);
+        ctx.beginPath();
+        ctx.moveTo(bx, aY);
+        ctx.lineTo(bx - hw, bY);
+        ctx.quadraticCurveTo(bx - hw * 0.55, (aY + bY) / 2, bx - hw * 0.14, aY + (bY - aY) * 0.3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(bx, aY);
+        ctx.lineTo(bx + hw, bY);
+        ctx.quadraticCurveTo(bx + hw * 0.55, (aY + bY) / 2, bx + hw * 0.14, aY + (bY - aY) * 0.3);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // 顶部雪尖
+      ctx.fillStyle = fogged('248,251,254', fog);
+      ctx.beginPath();
+      ctx.moveTo(bx - tw * 0.14, by - h * 0.93);
+      ctx.lineTo(bx + tw * 0.14, by - h * 0.93);
+      ctx.lineTo(bx, by - h);
+      ctx.closePath();
+      ctx.fill();
+    };
+
+    /** 雪人：渐变立体三球 + 树枝手臂 + 围巾 + 针织帽 + 脸部细节 + 纽扣 */
+    const drawSnowman = (bx: number, by: number, u: number, fog: number) => {
+      // 三个雪球（左亮右暗径向渐变）
+      const balls: Array<[number, number]> = [
+        [by - u * 0.42, u * 0.52],
+        [by - u * 1.1, u * 0.38],
+        [by - u * 1.6, u * 0.26],
+      ];
+      for (const [cy, r] of balls) {
+        const g = ctx.createRadialGradient(bx - r * 0.35, cy - r * 0.4, r * 0.08, bx, cy, r);
+        g.addColorStop(0, fogged('255,255,255', fog));
+        g.addColorStop(0.72, fogged('238,245,251', fog));
+        g.addColorStop(1, fogged('198,213,229', fog));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(bx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 树枝手臂（从中球伸出，带分叉）
+      ctx.strokeStyle = fogged('112,76,44', fog);
+      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(1.2, u * 0.04);
+      for (const dir of [-1, 1]) {
+        const shx = bx + dir * u * 0.32;
+        const shy = by - u * 1.08;
+        const elx = bx + dir * u * 0.66;
+        const ely = by - u * 0.92;
+        ctx.beginPath();
+        ctx.moveTo(shx, shy);
+        ctx.lineTo(elx, ely);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(elx, ely);
+        ctx.lineTo(elx + dir * u * 0.14, ely - u * 0.12);
+        ctx.stroke();
+      }
+
+      // 围巾（绕脖 + 垂带）
+      const neckY = by - u * 1.36;
+      ctx.fillStyle = fogged('226,74,66', fog);
+      ctx.beginPath();
+      ctx.ellipse(bx, neckY, u * 0.3, u * 0.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(bx + u * 0.05, neckY);
+      ctx.quadraticCurveTo(bx + u * 0.22, neckY + u * 0.1, bx + u * 0.14, neckY + u * 0.32);
+      ctx.lineTo(bx + u * 0.08, neckY + u * 0.3);
+      ctx.quadraticCurveTo(bx + u * 0.1, neckY + u * 0.08, bx - u * 0.02, neckY);
+      ctx.closePath();
+      ctx.fill();
+
+      // 针织帽（蓝色帽体 + 白色折边 + 毛球）
+      const headY = by - u * 1.6;
+      const headR = u * 0.26;
+      ctx.fillStyle = fogged('58,120,224', fog);
+      ctx.beginPath();
+      ctx.moveTo(bx - headR * 0.92, headY - u * 0.08);
+      ctx.quadraticCurveTo(bx - headR * 0.6, headY - u * 0.34, bx, headY - u * 0.36);
+      ctx.quadraticCurveTo(bx + headR * 0.6, headY - u * 0.34, bx + headR * 0.92, headY - u * 0.08);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = fogged('236,242,250', fog);
+      ctx.beginPath();
+      ctx.ellipse(bx, headY - u * 0.08, headR * 0.95, u * 0.07, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = fogged('250,251,253', fog);
+      ctx.beginPath();
+      ctx.arc(bx, headY - u * 0.42, u * 0.07, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 脸：眼睛、胡萝卜鼻、微笑
+      ctx.fillStyle = fogged('34,38,46', fog);
+      ctx.beginPath();
+      ctx.arc(bx - u * 0.09, headY - u * 0.02, u * 0.032, 0, Math.PI * 2);
+      ctx.arc(bx + u * 0.09, headY - u * 0.02, u * 0.032, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = fogged('242,142,42', fog);
+      ctx.beginPath();
+      ctx.moveTo(bx, headY);
+      ctx.lineTo(bx - u * 0.05, headY + u * 0.12);
+      ctx.lineTo(bx + u * 0.05, headY + u * 0.12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = fogged('52,58,66', fog);
+      ctx.lineWidth = Math.max(1, u * 0.025);
+      ctx.beginPath();
+      ctx.arc(bx, headY + u * 0.06, u * 0.12, Math.PI * 0.15, Math.PI * 0.85);
+      ctx.stroke();
+
+      // 纽扣
+      ctx.fillStyle = fogged('52,58,66', fog);
+      for (const sy of [by - u * 0.98, by - u * 0.8, by - u * 0.62]) {
+        ctx.beginPath();
+        ctx.arc(bx, sy, u * 0.035, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    };
+
     let raf = 0;
     let last = performance.now();
     let lastDistShown = -1;
@@ -521,29 +695,7 @@ export default function Ski3D() {
             const fog = clamp(s.z / FAR, 0, 1);
             const h = 1.9 * s.s * b.s;
             const tw = 0.55 * s.s * b.s;
-            // 树干
-            ctx.fillStyle = fogged('101,67,33', fog);
-            ctx.fillRect(b.x - tw * 0.12, b.y - h * 0.18, tw * 0.24, h * 0.2);
-            // 三层针叶
-            ctx.fillStyle = fogged('47,94,60', fog);
-            for (let l = 0; l < 3; l++) {
-              const ly = b.y - h * (0.16 + l * 0.26);
-              const lw = tw * (1 - l * 0.24);
-              ctx.beginPath();
-              ctx.moveTo(b.x - lw, ly);
-              ctx.lineTo(b.x + lw, ly);
-              ctx.lineTo(b.x, ly - h * 0.36);
-              ctx.closePath();
-              ctx.fill();
-            }
-            // 积雪顶
-            ctx.fillStyle = fogged('235,244,252', fog);
-            ctx.beginPath();
-            ctx.moveTo(b.x - tw * 0.3, b.y - h * 0.86);
-            ctx.lineTo(b.x + tw * 0.3, b.y - h * 0.86);
-            ctx.lineTo(b.x, b.y - h);
-            ctx.closePath();
-            ctx.fill();
+            drawPine(b.x, b.y, h, tw, fog);
           },
         });
       }
@@ -559,19 +711,7 @@ export default function Ski3D() {
             if (o.type === 'tree') {
               const h = (1.7 + o.seed * 0.5) * b.s;
               const tw = (0.62 + o.seed * 0.2) * b.s;
-              ctx.fillStyle = fogged('92,60,30', fog);
-              ctx.fillRect(b.x - tw * 0.1, b.y - h * 0.14, tw * 0.2, h * 0.16);
-              ctx.fillStyle = fogged('36,86,52', fog);
-              for (let l = 0; l < 3; l++) {
-                const ly = b.y - h * (0.12 + l * 0.26);
-                const lw = tw * (1 - l * 0.25);
-                ctx.beginPath();
-                ctx.moveTo(b.x - lw, ly);
-                ctx.lineTo(b.x + lw, ly);
-                ctx.lineTo(b.x, ly - h * 0.38);
-                ctx.closePath();
-                ctx.fill();
-              }
+              drawPine(b.x, b.y, h, tw, fog);
             } else if (o.type === 'rock') {
               const rw2 = (0.75 + o.seed * 0.3) * b.s;
               const rh2 = rw2 * (0.62 + o.seed * 0.2);
@@ -593,28 +733,7 @@ export default function Ski3D() {
             } else {
               // 雪人
               const u = b.s * (0.85 + o.seed * 0.2);
-              ctx.fillStyle = fogged('244,248,252', fog);
-              for (const [cy, cr] of [
-                [-u * 0.4, u * 0.52],
-                [-u * 1.15, u * 0.36],
-                [-u * 1.68, u * 0.24],
-              ] as const) {
-                ctx.beginPath();
-                ctx.arc(b.x, b.y + cy, cr, 0, Math.PI * 2);
-                ctx.fill();
-              }
-              ctx.fillStyle = fogged('30,34,44', fog);
-              ctx.beginPath();
-              ctx.arc(b.x - u * 0.08, b.y - u * 1.72, u * 0.035, 0, Math.PI * 2);
-              ctx.arc(b.x + u * 0.08, b.y - u * 1.72, u * 0.035, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.fillStyle = fogged('240,140,40', fog);
-              ctx.beginPath();
-              ctx.moveTo(b.x, b.y - u * 1.68);
-              ctx.lineTo(b.x + u * 0.22, b.y - u * 1.64);
-              ctx.lineTo(b.x, b.y - u * 1.62);
-              ctx.closePath();
-              ctx.fill();
+              drawSnowman(b.x, b.y, u, fog);
             }
           },
         });
@@ -661,52 +780,167 @@ export default function Ski3D() {
       items.sort((a, b) => b.z - a.z);
       for (const it of items) it.draw();
 
-      // ---- 滑雪者（近端中央偏下） ----
+      // ---- 滑雪者（背面视角，近端中央偏下） ----
       const p = w.player;
       const blink = w.invuln > 0 && Math.floor(t * 10) % 2 === 0;
       if (!blink) {
         const base = proj(p.x, 0, PZ, camX);
         const u = base.s;
         const lean = clamp(p.vx * 0.05, -0.4, 0.4);
-        // 影子
+        const lx = lean * u; // 头部水平偏移（px），形成倾斜动感
+
+        // 关键纵向层级
+        const footY = base.y - u * 0.03;
+        const hipY = base.y - u * 0.52;
+        const shouY = base.y - u * 0.82;
+        const neckY = base.y - u * 0.86;
+        const headY = base.y - u * 1.0;
+        const headR = u * 0.15;
+        const hipX = base.x + lx * 0.15;
+        const shouX = base.x + lx * 0.4;
+        const headX = base.x + lx * 0.6;
+
+        // —— 影子 ——
         ctx.fillStyle = 'rgba(40,60,90,0.28)';
         ctx.beginPath();
-        ctx.ellipse(base.x, base.y + u * 0.04, u * 0.42, u * 0.13, 0, 0, Math.PI * 2);
+        ctx.ellipse(base.x + lx * 0.4, base.y + u * 0.04, u * 0.48, u * 0.13, lean * 0.3, 0, Math.PI * 2);
         ctx.fill();
-        // 双板
-        ctx.strokeStyle = '#e04f4f';
-        ctx.lineWidth = Math.max(2, u * 0.07);
-        ctx.lineCap = 'round';
-        for (const off of [-0.14, 0.14]) {
+
+        // —— 双板（上翘板头 + 中央高光） ——
+        const skiTipOff = lx * 0.5;
+        for (const off of [-0.17, 0.17]) {
+          const sx = base.x + off * u + lx * 0.14;
+          const tx = sx + skiTipOff;
+          const bw = u * 0.055; // 板尾半宽
+          const tw = u * 0.03; // 板头半宽
           ctx.beginPath();
-          ctx.moveTo(base.x + (off - 0.05 * lean) * u, base.y + u * 0.02);
-          ctx.lineTo(base.x + (off + 0.32 * lean) * u, base.y - u * 0.1);
+          ctx.moveTo(sx - bw, footY);
+          ctx.lineTo(sx + bw, footY);
+          ctx.lineTo(tx + tw, base.y - u * 0.42);
+          ctx.quadraticCurveTo(tx + tw * 0.9, base.y - u * 0.55, tx + tw * 0.2, base.y - u * 0.52);
+          ctx.lineTo(tx - tw * 0.2, base.y - u * 0.5);
+          ctx.lineTo(tx - tw, base.y - u * 0.42);
+          ctx.closePath();
+          ctx.fillStyle = '#d94040';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(150,44,44,0.55)';
+          ctx.lineWidth = Math.max(0.8, u * 0.012);
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+          ctx.lineWidth = Math.max(1, u * 0.016);
+          ctx.beginPath();
+          ctx.moveTo(sx, footY - u * 0.02);
+          ctx.lineTo(tx, base.y - u * 0.44);
           ctx.stroke();
         }
-        // 身体（倾斜）
-        const headX = base.x + lean * u * 0.42;
-        const headY = base.y - u * 1.05;
-        ctx.strokeStyle = '#2563eb';
-        ctx.lineWidth = Math.max(2.5, u * 0.14);
+
+        // —— 雪靴 ——
+        ctx.fillStyle = '#18202e';
+        for (const off of [-0.17, 0.17]) {
+          const bx = base.x + off * u + lx * 0.14;
+          ctx.beginPath();
+          ctx.ellipse(bx, footY, u * 0.07, u * 0.05, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // —— 裤腿（髋→踝） ——
+        ctx.strokeStyle = '#24324a';
+        ctx.lineCap = 'round';
+        ctx.lineWidth = Math.max(2, u * 0.14);
+        for (const off of [-0.12, 0.12]) {
+          ctx.beginPath();
+          ctx.moveTo(hipX + off * u, hipY);
+          ctx.lineTo(base.x + off * u * 1.4 + lx * 0.14, footY - u * 0.02);
+          ctx.stroke();
+        }
+
+        // —— 躯干（夹克：肩宽腰窄 + 渐变 + 背部接缝 + 领口） ——
+        const jacket = ctx.createLinearGradient(shouX - u * 0.24, 0, shouX + u * 0.24, 0);
+        jacket.addColorStop(0, '#2e6bd6');
+        jacket.addColorStop(0.5, '#3f86ef');
+        jacket.addColorStop(1, '#1f4fa6');
+        ctx.fillStyle = jacket;
         ctx.beginPath();
-        ctx.moveTo(base.x, base.y - u * 0.12);
-        ctx.lineTo(headX, headY + u * 0.16);
-        ctx.stroke();
-        // 手臂 + 雪杖
-        ctx.strokeStyle = '#1e40af';
-        ctx.lineWidth = Math.max(1.5, u * 0.07);
-        ctx.beginPath();
-        ctx.moveTo(base.x - u * 0.3, base.y - u * 0.55);
-        ctx.lineTo(base.x + u * 0.3, base.y - u * 0.62);
-        ctx.stroke();
-        // 头
-        ctx.fillStyle = '#ffd9b3';
-        ctx.beginPath();
-        ctx.arc(headX, headY, u * 0.16, 0, Math.PI * 2);
+        ctx.moveTo(hipX - u * 0.14, hipY);
+        ctx.lineTo(shouX - u * 0.22, shouY);
+        ctx.quadraticCurveTo(shouX, shouY - u * 0.05, shouX + u * 0.22, shouY);
+        ctx.lineTo(hipX + u * 0.14, hipY);
+        ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = '#e04f4f';
+        // 背部中央接缝
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = Math.max(1, u * 0.015);
         ctx.beginPath();
-        ctx.arc(headX, headY - u * 0.05, u * 0.16, Math.PI, Math.PI * 2);
+        ctx.moveTo(hipX, hipY + u * 0.02);
+        ctx.lineTo(shouX, shouY - u * 0.02);
+        ctx.stroke();
+        // 领口
+        ctx.fillStyle = '#f4f7fb';
+        ctx.beginPath();
+        ctx.ellipse(shouX, shouY - u * 0.02, u * 0.09, u * 0.03, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // —— 手臂（肩→肘→手，持杖弯曲） ——
+        ctx.strokeStyle = '#2e6bd6';
+        ctx.lineWidth = Math.max(2, u * 0.11);
+        for (const dir of [-1, 1]) {
+          const sh = { x: shouX + dir * u * 0.2, y: shouY + u * 0.02 };
+          const el = { x: shouX + dir * u * 0.34, y: shouY + u * 0.26 };
+          const ha = { x: shouX + dir * u * 0.3, y: shouY + u * 0.44 };
+          ctx.beginPath();
+          ctx.moveTo(sh.x, sh.y);
+          ctx.quadraticCurveTo(el.x, el.y, ha.x, ha.y);
+          ctx.stroke();
+          // 手套
+          ctx.fillStyle = '#e9eef5';
+          ctx.beginPath();
+          ctx.arc(ha.x, ha.y, u * 0.055, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // —— 雪杖（手→雪面，带杖盘） ——
+        ctx.strokeStyle = '#4a5470';
+        ctx.lineWidth = Math.max(1.2, u * 0.024);
+        for (const dir of [-1, 1]) {
+          const ha = { x: shouX + dir * u * 0.3, y: shouY + u * 0.44 };
+          const tipX = ha.x + dir * u * 0.05;
+          const tipY = base.y - u * 0.12;
+          ctx.beginPath();
+          ctx.moveTo(ha.x, ha.y);
+          ctx.lineTo(tipX, tipY);
+          ctx.stroke();
+          ctx.fillStyle = '#5b6b8c';
+          ctx.beginPath();
+          ctx.arc(tipX, tipY, u * 0.05, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // —— 头部（背视：头盔 + 护目镜带 + 围巾） ——
+        ctx.fillStyle = '#f2c9a0';
+        ctx.beginPath();
+        ctx.arc(headX, headY, headR, 0, Math.PI * 2);
+        ctx.fill();
+        // 头盔（覆盖后脑上半）
+        ctx.fillStyle = '#ff5b56';
+        ctx.beginPath();
+        ctx.arc(headX, headY - u * 0.02, headR + u * 0.015, Math.PI * 0.85, Math.PI * 2.15);
+        ctx.fill();
+        // 护目镜带（横向）
+        ctx.strokeStyle = '#24324a';
+        ctx.lineWidth = Math.max(1.5, u * 0.06);
+        ctx.beginPath();
+        ctx.moveTo(headX - headR - u * 0.02, headY - u * 0.05);
+        ctx.lineTo(headX + headR + u * 0.02, headY - u * 0.05);
+        ctx.stroke();
+        // 头盔顶饰
+        ctx.fillStyle = '#f4f7fb';
+        ctx.beginPath();
+        ctx.ellipse(headX, headY - u * 0.13, headR * 0.32, u * 0.035, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // 围巾
+        ctx.fillStyle = '#f2b63c';
+        ctx.beginPath();
+        ctx.ellipse(headX, neckY, u * 0.1, u * 0.04, 0, 0, Math.PI * 2);
         ctx.fill();
       }
 
