@@ -554,27 +554,27 @@ export default function Ski3D() {
           // 避免障碍直接出生在身后立刻触发碰撞
           const zAt = Math.max(w.nextSpawn, w.dist) + FAR * 0.8;
           if (Math.random() < 0.62) {
-            const n = 1 + (Math.random() < 0.55 ? 1 : 0);
+            const n = 1 + (Math.random() < 0.4 ? 1 : 0);
             const xs: number[] = [];
             for (let i = 0; i < n; i++) {
-              const x = pickX(xs, -3.2, 3.2, 1.4);
+              const x = pickX(xs, -3.2, 3.2, 2.5);
               xs.push(x);
               const roll = Math.random();
               const type: ObType = roll < 0.5 ? 'tree' : roll < 0.8 ? 'rock' : 'snowman';
               const r = type === 'tree' ? 0.32 : type === 'snowman' ? 0.3 : 0.42;
               w.obstacles.push({ x, z: zAt + Math.random() * 2, type, r, seed: Math.random(), judged: false });
             }
-            // 宝石单独放前方一排（z 错开 ≥2m 不与障碍同行），横向离障碍 ≥1.6m：
+            // 宝石单独放前方一排（z 错开 ≥2m 不与障碍同行），横向离障碍 ≥2.2m：
             // 吃宝石半径 0.6 + 最大撞判半径 0.68 ≈ 1.28，留足余量避免"吃宝石顺带撞树"
             if (Math.random() < 0.45) {
-              const gx = pickX(xs, -3, 3, 1.6);
+              const gx = pickX(xs, -3, 3, 2.2);
               w.gemsArr.push({ x: gx, z: zAt + 4 + Math.random() * 2, judged: false });
             }
           } else if (Math.random() < 0.8) {
             w.gemsArr.push({ x: -2.6 + Math.random() * 5.2, z: zAt + 1, judged: false });
           }
-          // 间距随速度收紧（时间下限约 0.55s），保证始终可穿行
-          const gap = clamp(w.speed * 0.72, 8, 16);
+          // 横向 spacing 已加大；纵向相邻两批间距也放宽，避免远处透视下堆叠成一团
+          const gap = clamp(w.speed * 0.82, 10, 18);
           w.nextSpawn += gap;
         }
 
