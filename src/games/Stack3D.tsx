@@ -193,6 +193,7 @@ export default function Stack3D() {
   const start = useCallback(() => {
     worldRef.current = newWorld();
     overHandledRef.current = false;
+    lastPlaceAtRef.current = 0;
     setScore(0);
     setBestCombo(0);
     setNewRecord(false);
@@ -207,9 +208,20 @@ export default function Stack3D() {
 
   // ============ 落块判定 ============
 
+  /** 放置冷却：防 Enter/Space/点击在极短时间内连触发两次落块 */
+  const lastPlaceAtRef = useRef(0);
+
   const placeBlock = () => {
     if (statusRef.current !== 'playing') return;
+    const nowMs = performance.now();
+    if (nowMs - lastPlaceAtRef.current < 120) return;
     const w = worldRef.current;
+    // 入场保护：新滑块刚从边缘出发、还没到达塔顶投影范围时落块必然整脱靶，
+    // 紧张双击（间隔 200-400ms）会触发这种"非玩家过错的暴毙"——此时忽略该次输入
+    if (Math.abs(w.mover.pos - w.tower[w.tower.length - 1][w.axis === 'x' ? 'x' : 'z']) >= (w.axis === 'x' ? w.mover.w : w.mover.d)) {
+      return; // 不写冷却戳，滑块滑入范围后的下一次输入正常生效
+    }
+    lastPlaceAtRef.current = nowMs;
     const t = performance.now() / 1000;
     const top = w.tower[w.tower.length - 1];
     const a = w.axis;
@@ -323,13 +335,14 @@ export default function Stack3D() {
     const down = (e: KeyboardEvent) => {
       const k = e.code;
       if (e.key.startsWith('Arrow') || e.key === ' ') e.preventDefault();
-      if (k === 'KeyP') togglePause();
+      if (k === 'KeyP' && !e.repeat) togglePause();
       else if (k === 'Enter') {
         const s = statusRef.current;
         if (s === 'ready' || s === 'over') start();
         else if (!e.repeat) placeRef.current();
       } else if ((k === 'Space' || k === 'ArrowDown') && !e.repeat) {
-        if (statusRef.current === 'ready' || statusRef.current === 'over') start();
+        if (statusRef.current === 'paused') togglePause();
+        else if (statusRef.current === 'ready' || statusRef.current === 'over') start();
         else placeRef.current();
       }
     };
@@ -384,9 +397,9 @@ export default function Stack3D() {
       style: string;
     }
 
-    /** 绘制一个轴对齐盒子：背面剔除 + 可见面按深度排序 */
     // 角点深度缓存（drawBox 每次绘制时填充，供可见面按深度排序）
     const depths = new Array<number>(8).fill(0);
+    /** 绘制一个轴对齐盒子：背面剔除 + 可见面按深度排序 */
     const drawBox = (
       x0: number,
       x1: number,
@@ -562,24 +575,70 @@ export default function Stack3D() {
         }
       }
 
-      // ---- 塔身：底 → 顶画家序 ----
+      // ---- 塔身 + 坠落碎块：合并进同一按深度降序的绘制列表（避免背面碎块透塔画出） ----
       const top = w.tower[w.tower.length - 1];
-      const drawLayer = (ly: Layer, lvl: number, isBase: boolean) => {
+      interface Drawable {
+        depth: number;
+        draw: () => void;
+      }
+      const items: Drawable[] = [];
+      const pushLayer = (ly: Layer, lvl: number, isBase: boolean) => {
         // 数组下标 i 的物理占位是 [(i-1)·LAYER_H, i·LAYER_H]（基座顶面 y=0 向下延伸），
         // 与 placeBlock 的 y0/y1、滑块 my0、光环与碎块的 y 一致，错一层就会视觉穿插
         const y1 = lvl * LAYER_H;
         const y0 = isBase ? -7 : y1 - LAYER_H;
-        if (y1 < fy - 10 || y0 > fy + 6) return;
+        // 基座用 -11 阈值：-10 会在高塔时让基座顶缘提前 ~12px 出屏露天空
+        if (y1 < fy - (isBase ? 11 : 10) || y0 > fy + 6) return;
         const grow = isBase ? 0.5 : 0;
         const hue = isBase ? 218 : (lvl * 14 + 165) % 360;
         const sat = isBase ? 16 : 62;
         const lig = isBase ? 56 : 57;
-        drawBox(ly.x - ly.w / 2 - grow, ly.x + ly.w / 2 + grow, y0, y1, ly.z - ly.d / 2 - grow, ly.z + ly.d / 2 + grow, fy, hue, sat, lig);
+        const x0 = ly.x - ly.w / 2 - grow;
+        const x1 = ly.x + ly.w / 2 + grow;
+        const z0 = ly.z - ly.d / 2 - grow;
+        const z1 = ly.z + ly.d / 2 + grow;
+        items.push({
+          // 面深度取盒子近角（对相机而言最近点），塔层与碎块的穿插判定以此为准
+          depth: rot(x1, y1, z1, fy).vz,
+          draw: () => drawBox(x0, x1, y0, y1, z0, z1, fy, hue, sat, lig),
+        });
       };
       const from = Math.max(0, w.tower.length - 26);
       for (let i = 0; i < w.tower.length; i++) {
         if (i < from && i !== 0) continue;
-        drawLayer(w.tower[i], i, i === 0);
+        pushLayer(w.tower[i], i, i === 0);
+      }
+      for (const db of w.debris) {
+        items.push({
+          depth: rot(db.x1, db.y1, db.z1, fy).vz,
+          draw: () => {
+            // fade 在销毁线处归零，避免 25% 透明度瞬间"弹出"消失
+            const fade = clamp((db.y1 - (fy - 9)) / 3, 0, 1);
+            if (fade <= 0) return;
+            drawBox(db.x0, db.x1, db.y0, db.y1, db.z0, db.z1, fy, 210, 30, 52, fade);
+          },
+        });
+      }
+      items.sort((a, b) => b.depth - a.depth);
+      for (const it of items) it.draw();
+
+      // ---- 完美光环（属于已落下的世界，画在 mover 之前） ----
+      for (const r of w.rings) {
+        const p = (t - r.t0) / 0.55;
+        const g = 1 + 0.55 * p;
+        const q = [
+          proj(r.x - (r.w / 2) * g, r.y + 0.02, r.z - (r.d / 2) * g, fy),
+          proj(r.x + (r.w / 2) * g, r.y + 0.02, r.z - (r.d / 2) * g, fy),
+          proj(r.x + (r.w / 2) * g, r.y + 0.02, r.z + (r.d / 2) * g, fy),
+          proj(r.x - (r.w / 2) * g, r.y + 0.02, r.z + (r.d / 2) * g, fy),
+        ];
+        ctx.strokeStyle = `rgba(255,255,255,${(0.9 * (1 - p)).toFixed(3)})`;
+        ctx.lineWidth = 1 + 2.5 * (1 - p);
+        ctx.beginPath();
+        ctx.moveTo(q[0].x, q[0].y);
+        for (let i = 1; i < 4; i++) ctx.lineTo(q[i].x, q[i].y);
+        ctx.closePath();
+        ctx.stroke();
       }
 
       // ---- 落点引导影（移动块与塔顶的重叠区投影在顶面上） ----
@@ -608,17 +667,6 @@ export default function Stack3D() {
         }
       }
 
-      // ---- 坠落碎块 ----
-      const dbs = [...w.debris].sort((a, b) => {
-        const ca = rot((a.x0 + a.x1) / 2, 0, (a.z0 + a.z1) / 2, fy);
-        const cb = rot((b.x0 + b.x1) / 2, 0, (b.z0 + b.z1) / 2, fy);
-        return cb.vz - ca.vz;
-      });
-      for (const db of dbs) {
-        const fade = clamp((db.y1 - (fy - 9)) / 4, 0.25, 1);
-        drawBox(db.x0, db.x1, db.y0, db.y1, db.z0, db.z1, fy, 210, 30, 52, fade);
-      }
-
       // ---- 移动中的方块（最高层，最后绘制） ----
       if (statusRef.current !== 'over') {
         const my0 = (w.tower.length - 1) * LAYER_H;
@@ -637,43 +685,34 @@ export default function Stack3D() {
         );
       }
 
-      // ---- 完美光环 ----
-      for (const r of w.rings) {
-        const p = (t - r.t0) / 0.55;
-        const g = 1 + 0.55 * p;
-        const q = [
-          proj(r.x - (r.w / 2) * g, r.y + 0.02, r.z - (r.d / 2) * g, fy),
-          proj(r.x + (r.w / 2) * g, r.y + 0.02, r.z - (r.d / 2) * g, fy),
-          proj(r.x + (r.w / 2) * g, r.y + 0.02, r.z + (r.d / 2) * g, fy),
-          proj(r.x - (r.w / 2) * g, r.y + 0.02, r.z + (r.d / 2) * g, fy),
-        ];
-        ctx.strokeStyle = `rgba(255,255,255,${(0.9 * (1 - p)).toFixed(3)})`;
-        ctx.lineWidth = 1 + 2.5 * (1 - p);
-        ctx.beginPath();
-        ctx.moveTo(q[0].x, q[0].y);
-        for (let i = 1; i < 4; i++) ctx.lineTo(q[i].x, q[i].y);
-        ctx.closePath();
-        ctx.stroke();
-      }
-
-      // 完美提示字
+      // 完美提示字（白字+暗描边，白天/夜晚天空下都可读）
       const pk = Math.max(0, 1 - (t - w.perfectAt) * 2.6);
       if (pk > 0) {
         ctx.font = '700 19px system-ui, sans-serif';
         ctx.textAlign = 'center';
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = `rgba(15,20,35,${(0.55 * pk).toFixed(3)})`;
+        ctx.strokeText('完美!', CX, CY - 66 - (1 - pk) * 16);
         ctx.fillStyle = `rgba(255,255,255,${pk.toFixed(3)})`;
         ctx.fillText('完美!', CX, CY - 66 - (1 - pk) * 16);
       }
 
-      // 画布内 HUD（ready 态隐藏）
+      // 画布内 HUD（ready 态隐藏；浅色/深色天空统一走白字+恒定暗描边，避免昼夜硬切跳色）
       if (statusRef.current !== 'ready') {
         ctx.textAlign = 'left';
         ctx.font = '700 15px system-ui, sans-serif';
-        ctx.fillStyle = nightK > 0.5 ? 'rgba(255,255,255,0.92)' : 'rgba(20,32,60,0.85)';
-        ctx.fillText(`🗼 ${sc} 层`, 12, 24);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(15,20,35,0.55)';
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        const hud1 = `🗼 ${sc} 层`;
+        ctx.strokeText(hud1, 12, 24);
+        ctx.fillText(hud1, 12, 24);
         if (w.combo > 1) {
-          ctx.fillStyle = '#ffb020';
-          ctx.fillText(`🔥 连击 ×${w.combo}`, 12, 43);
+          const hud2 = `🔥 连击 ×${w.combo}`;
+          // 橙黄在亮天空上不可读，改用深琥珀 + 暗描边保证全天候对比
+          ctx.fillStyle = '#ffcf5c';
+          ctx.strokeText(hud2, 12, 43);
+          ctx.fillText(hud2, 12, 43);
         }
       }
 
@@ -712,8 +751,8 @@ export default function Stack3D() {
             <strong>{score}</strong>
           </div>
           <div className="stat-box">
-            <span>连击</span>
-            <strong>{bestCombo > 0 ? `×${bestCombo}` : '—'}</strong>
+            <span>最高连击</span>
+            <strong>{bestCombo > 1 ? `×${bestCombo}` : '—'}</strong>
           </div>
           <div className="stat-box">
             <span>{metaStack3D.bestScoreLabel}</span>
@@ -729,7 +768,8 @@ export default function Stack3D() {
             className="stk-canvas"
             role="img"
             aria-label="3D 层层叠游戏画面"
-            onPointerDown={() => {
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
               if (statusRef.current === 'playing') placeRef.current();
             }}
           />
@@ -743,8 +783,14 @@ export default function Stack3D() {
                 <br />
                 完美对齐触发连击，连击还会让方块逐渐回涨。
               </p>
-              <p className="stk-keys">点击画面 / 空格 落下方块 · P 暂停</p>
-              <button className="btn btn-primary" onClick={start}>
+              <p className="stk-keys">点击画面 / 空格 落下方块 · P 或空格 继续 · 暂停时无效</p>
+              <button
+                className="btn btn-primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  start();
+                }}
+              >
                 开始堆塔
               </button>
             </div>
@@ -761,10 +807,16 @@ export default function Stack3D() {
             <div className="stk-overlay" onClick={start}>
               <h2>🏁 塔倒了</h2>
               <p>
-                最终 {score} 层 · 最高连击 ×{bestCombo}
+                最终 {score} 层 · 最高连击 {bestCombo > 1 ? `×${bestCombo}` : '—'}
                 {newRecord ? ' · 🏆 新纪录！' : best.value != null ? ` · 最佳 ${best.value} 层` : ''}
               </p>
-              <button className="btn btn-primary" onClick={start}>
+              <button
+                className="btn btn-primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  start();
+                }}
+              >
                 再来一次
               </button>
             </div>
@@ -778,7 +830,7 @@ export default function Stack3D() {
             🔄 重新开始
           </button>
         </div>
-        <p className="hint">白色引导框显示当前重叠区 · 完美对齐（连击≥2）会让方块慢慢长回来</p>
+        <p className="hint">白色引导框显示当前重叠区 · 完美对齐（连击≥2）方块回涨 · 失焦自动暂停</p>
       </div>
     </GameShell>
   );
