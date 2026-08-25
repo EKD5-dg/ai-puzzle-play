@@ -34,6 +34,8 @@ const ACC = 0.05;
 const EPS = 0.13;
 const GROW = 0.08;
 const GRAV = 20;
+/** 方块最小可玩尺寸：切到低于此值直接判塔倒（避免细针塔死局与不可游玩的视觉） */
+const MIN_SIZE = 0.18;
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
@@ -216,11 +218,12 @@ export default function Stack3D() {
     const nowMs = performance.now();
     if (nowMs - lastPlaceAtRef.current < 120) return;
     const w = worldRef.current;
-    // 入场保护：新滑块刚从边缘出发、还没到达塔顶投影范围时落块必然整脱靶，
-    // 紧张双击（间隔 200-400ms）会触发这种"非玩家过错的暴毙"——此时忽略该次输入
-    if (Math.abs(w.mover.pos - w.tower[w.tower.length - 1][w.axis === 'x' ? 'x' : 'z']) >= (w.axis === 'x' ? w.mover.w : w.mover.d)) {
-      return; // 不写冷却戳，滑块滑入范围后的下一次输入正常生效
-    }
+    // 入场保护：滑块还在接近途中（未抵达塔顶投影范围）时落块无效，
+    // 防紧张双击造成"非玩家过错的暴毙"。只按运动方向拦接近侧——
+    // 越过中心后的脱靶是唯一的败北路径，误拦会让游戏永远无法结束（细针塔死局）。
+    const topNow = w.tower[w.tower.length - 1];
+    const dNow = w.mover.pos - (w.axis === 'x' ? topNow.x : topNow.z);
+    if (dNow * w.mover.dir < 0 && Math.abs(dNow) >= (w.axis === 'x' ? w.mover.w : w.mover.d)) return;
     lastPlaceAtRef.current = nowMs;
     const t = performance.now() / 1000;
     const top = w.tower[w.tower.length - 1];
@@ -309,6 +312,15 @@ export default function Stack3D() {
       }
       w.combo = 0;
       sfx.drop();
+      // 切后尺寸低于可玩下限：整塔判倒结算，避免细针塔死局
+      const remain = a === 'x' ? ks : nd;
+      if (remain < MIN_SIZE) {
+        w.shakeAt = t;
+        sfx.lose();
+        statusRef.current = 'over';
+        setStatus('over');
+        return;
+      }
     }
 
     w.tower.push({ x: nx, z: nz, w: nw, d: nd });
