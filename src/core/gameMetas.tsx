@@ -335,6 +335,18 @@ export const metaStack3D: GameMeta = {
   higherIsBetter: true,
 };
 
+export const metaTunnel3D: GameMeta = {
+  id: 'tunnel-3d',
+  title: '3D 星空隧道',
+  description: '驾驶飞船穿越旋转能量环与陨石群，收集核心飞得更远！',
+  icon: '🌌',
+  difficulty: '中等',
+  category: '反应',
+  tags: ['3D', '躲避', '飞行'],
+  bestScoreLabel: '最远距离',
+  higherIsBetter: true,
+};
+
 /** 成绩比较方向权威表：false=成绩越小越好（步数/时间类）。由各 meta 派生，云同步服务端也内置了同样白名单（functions/api/sync.js），新增"成绩取小"的游戏需两处同步 */
 export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
   [
@@ -363,6 +375,7 @@ export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
     metaPong3D,
     metaSki3D,
     metaStack3D,
+    metaTunnel3D,
   ].map((m) => [m.id, m.higherIsBetter]),
 );
 

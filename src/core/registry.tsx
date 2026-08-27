@@ -26,6 +26,7 @@ import {
   metaPong3D,
   metaSki3D,
   metaStack3D,
+  metaTunnel3D,
 } from './gameMetas';
 
 /**
@@ -61,6 +62,7 @@ export const games: GameDefinition[] = [
   { meta: metaPong3D, component: lazy(() => import('../games/Pong3D')) },
   { meta: metaSki3D, component: lazy(() => import('../games/Ski3D')) },
   { meta: metaStack3D, component: lazy(() => import('../games/Stack3D')) },
+  { meta: metaTunnel3D, component: lazy(() => import('../games/Tunnel3D')) },
 ];
 
 /** 按 id 查找游戏 */
