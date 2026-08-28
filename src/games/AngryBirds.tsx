@@ -153,8 +153,8 @@ function buildLevel(lv: number) {
   const pigs = [...t.pigs];
   const extra = Math.max(0, lv - TEMPLATES.length);
   for (let i = 0; i < extra && pigs.length < 8; i++) {
-    // 间距 40 保证与模板猪（240,332）不重叠（直径 36）
-    pigs.push([245 - i * 40, GROUND - 18, 18]);
+    // 从模板最左猪（x=240）再往左排，间距 40 > 直径 36，保证互不重叠（旧起点 245 会与模板猪叠影）
+    pigs.push([195 - i * 40, GROUND - 18, 18]);
   }
   return { crates: t.crates, pigs, birds: Math.max(3, pigs.length + 2) };
 }

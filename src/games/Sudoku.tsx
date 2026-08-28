@@ -176,11 +176,23 @@ export default function Sudoku() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 计时
+  // 计时（切后台/锁屏时暂停：计时排行游戏后台照跑既不公平，后台节流还会让计时漂移）
   useEffect(() => {
     if (won) return;
-    const t = window.setInterval(() => setTime((s) => s + 1), 1000);
-    return () => window.clearInterval(t);
+    let timer: number | null = window.setInterval(() => setTime((s) => s + 1), 1000);
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') {
+        if (timer != null) window.clearInterval(timer);
+        timer = null;
+      } else if (timer == null) {
+        timer = window.setInterval(() => setTime((s) => s + 1), 1000);
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      if (timer != null) window.clearInterval(timer);
+    };
   }, [won]);
 
   const inputNumber = (v: number) => {

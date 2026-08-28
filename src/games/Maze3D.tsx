@@ -384,9 +384,11 @@ export default function Maze3D() {
     };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
-    // 窗口失焦时清空按键状态，避免"按住 W 切窗口后一直前进"
+    // 窗口失焦时清空按键状态并暂停，避免"按住 W 切窗口后一直前进"、
+    // 以及分屏/双屏场景下失焦仍可见时逃脱计时照涨（与 Pong3D 行为对齐）
     const clear = () => {
       keysRef.current = { fwd: false, back: false, strafeL: false, strafeR: false, turnL: false, turnR: false };
+      if (statusRef.current === 'playing') setStatus('paused');
     };
     window.addEventListener('blur', clear);
     return () => {

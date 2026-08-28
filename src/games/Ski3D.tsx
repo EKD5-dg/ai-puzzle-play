@@ -34,14 +34,13 @@ const INVULN = 1.6;
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
-/** 在 [lo, hi] 随机取横向位置，重试采样保证与已占用位置拉开 minGap，避免障碍/宝石黏在一起 */
-function pickX(taken: number[], lo: number, hi: number, minGap: number): number {
-  let x = lo + Math.random() * (hi - lo);
+/** 在 [lo, hi] 随机取横向位置，重试采样保证与已占用位置拉开 minGap；失败返回 null 由调用方放弃生成，避免静默降级为随机黏连 */
+function pickX(taken: number[], lo: number, hi: number, minGap: number): number | null {
   for (let tries = 0; tries < 14; tries++) {
+    const x = lo + Math.random() * (hi - lo);
     if (taken.every((o) => Math.abs(o - x) >= minGap)) return x;
-    x = lo + Math.random() * (hi - lo);
   }
-  return x;
+  return null;
 }
 
 type ObType = 'tree' | 'rock' | 'snowman';
@@ -163,7 +162,9 @@ export default function Ski3D() {
   const { toast } = useToast();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const worldRef = useRef<World>(newWorld());
+  // 懒初始化：useRef(newWorld()) 的实参每次渲染都会求值，HUD 高频刷新会白建完整世界
+  const worldRef = useRef<World>(null as unknown as World);
+  if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   const keysRef = useRef({ l: false, r: false });
   const overHandledRef = useRef(false);
@@ -549,15 +550,18 @@ export default function Ski3D() {
         w.invuln = Math.max(0, w.invuln - dt);
 
         // ---- 生成：前方阈值到达时铺一段障碍（可能附带宝石） ----
+        // 吃宝石大跳跃后 nextSpawn 可能远落后于 dist：先把游标推平到玩家处，
+        // 否则 while 多批循环里 Math.max(nextSpawn, dist) 恒取 dist，多批全部
+        // 堆叠在同一 zAt 上形成不可穿行的墙、且跨批无横向去重
+        if (w.nextSpawn < w.dist) w.nextSpawn = w.dist;
         while (w.dist >= w.nextSpawn) {
-          // 吃宝石大跳跃后 nextSpawn 可能远落后于 dist：生成位置钉在玩家前方，
-          // 避免障碍直接出生在身后立刻触发碰撞
-          const zAt = Math.max(w.nextSpawn, w.dist) + FAR * 0.8;
+          const zAt = w.nextSpawn + FAR * 0.8;
           if (Math.random() < 0.62) {
             const n = 1 + (Math.random() < 0.4 ? 1 : 0);
             const xs: number[] = [];
             for (let i = 0; i < n; i++) {
               const x = pickX(xs, -3.2, 3.2, 2.5);
+              if (x == null) continue;
               xs.push(x);
               const roll = Math.random();
               const type: ObType = roll < 0.5 ? 'tree' : roll < 0.8 ? 'rock' : 'snowman';
@@ -568,7 +572,7 @@ export default function Ski3D() {
             // 吃宝石半径 0.6 + 最大撞判半径 0.68 ≈ 1.28，留足余量避免"吃宝石顺带撞树"
             if (Math.random() < 0.45) {
               const gx = pickX(xs, -3, 3, 2.2);
-              w.gemsArr.push({ x: gx, z: zAt + 4 + Math.random() * 2, judged: false });
+              if (gx != null) w.gemsArr.push({ x: gx, z: zAt + 4 + Math.random() * 2, judged: false });
             }
           } else if (Math.random() < 0.8) {
             w.gemsArr.push({ x: -2.6 + Math.random() * 5.2, z: zAt + 1, judged: false });
@@ -587,7 +591,8 @@ export default function Ski3D() {
           if (!o.judged && z <= PZ) {
             o.judged = true;
             // 只在玩家身前判碰撞：已在身后的障碍（如异常生成）不伤人
-            if (z > -0.5 && w.invuln <= 0 && Math.abs(o.x - p.x) < o.r + 0.26) {
+            // 窗口放宽到 -1.2 与单帧最大位移（VMAX×dt上限≈1.3m）对齐，防低帧率时障碍单帧跨过判定平面漏扣
+            if (z > -1.2 && w.invuln <= 0 && Math.abs(o.x - p.x) < o.r + 0.26) {
               w.lives -= 1;
               w.combo = 1;
               w.invuln = INVULN;

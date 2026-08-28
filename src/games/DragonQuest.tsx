@@ -147,6 +147,13 @@ export default function DragonQuest() {
   const [monster, setMonster] = useState<Monster | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  // busy 的同步 ref 守卫：setBusy 后到重渲染完成前，state 闭包里的 busy 仍是旧值，
+  // 键盘 auto-repeat（约 30 次/秒）可在同一帧内双触发战斗动作，造成双倍反击/结算覆盖
+  const busyRef = useRef(false);
+  // phase 的实时快照：定时器链（反击延迟 450ms+）里的闭包 phase 已过期，
+  // 怪物死亡切幕后迟到的 monsterAttack 必须靠它拦截
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
   const [battleNo, setBattleNo] = useState(0);
   const [heroAnim, setHeroAnim] = useState<'idle' | 'attack' | 'hurt'>('idle');
   const [monsterAnim, setMonsterAnim] = useState<'idle' | 'attack' | 'hit' | 'dead'>('idle');
@@ -200,6 +207,7 @@ export default function DragonQuest() {
 
   /** 进入战斗 */
   const startBattle = (f: number, _p: PlayerState) => {
+    busyRef.current = false;
     setMonster(makeMonster(f));
     setBattleNo((n) => n + 1);
     setPhase('battle');
@@ -224,7 +232,8 @@ export default function DragonQuest() {
 
   /** 怪物回合（统一入口，从渲染闭包读取最新状态） */
   const monsterAttack = (dmgReduction = 1) => {
-    if (!monster) return;
+    // 战斗已结束（胜利/死亡/逃回城镇）时，定时器链里迟到的反击直接作废
+    if (phaseRef.current !== 'battle' || !monster) return;
     let dmg = Math.max(1, monster.atk + rand(2) - player.def);
     if (dmgReduction > 1) dmg = Math.max(1, Math.floor(dmg / dmgReduction));
     const newHp = player.hp - dmg;
@@ -247,11 +256,13 @@ export default function DragonQuest() {
       setPlayer((prev) => ({ ...prev, hp: prev.hp - dmg }));
     }
     setBusy(false);
+    busyRef.current = false;
   };
 
   /** 攻击 */
   const doAttack = () => {
-    if (busy || !monster || phase !== 'battle') return;
+    if (busy || busyRef.current || !monster || phaseRef.current !== 'battle') return;
+    busyRef.current = true;
     setBusy(true);
     sfx.move();
     pushLog('你挥剑斩向怪物！');
@@ -278,7 +289,7 @@ export default function DragonQuest() {
 
   /** 魔法（火球术 / 治疗术） */
   const doMagic = (kind: 'fire' | 'heal') => {
-    if (busy || !monster || phase !== 'battle') return;
+    if (busy || busyRef.current || !monster || phaseRef.current !== 'battle') return;
     if (kind === 'fire' && player.mp < 5) {
       toast('魔法值不足！', 'info');
       return;
@@ -287,6 +298,7 @@ export default function DragonQuest() {
       toast('魔法值不足！', 'info');
       return;
     }
+    busyRef.current = true;
     setBusy(true);
     // 函数式扣减 MP，避免与其他状态更新互相覆盖
     setPlayer((prev) => ({ ...prev, mp: prev.mp - (kind === 'fire' ? 5 : 4) }));
@@ -323,7 +335,8 @@ export default function DragonQuest() {
 
   /** 防御 */
   const doDefend = () => {
-    if (busy || !monster || phase !== 'battle') return;
+    if (busy || busyRef.current || !monster || phaseRef.current !== 'battle') return;
+    busyRef.current = true;
     setBusy(true);
     sfx.click();
     pushLog('你举盾防御，本回合伤害减半 🛡');
@@ -332,12 +345,13 @@ export default function DragonQuest() {
 
   /** 逃跑（Boss 战不可逃跑；成功则逃回城镇满血重来） */
   const doFlee = () => {
-    if (busy || !monster || phase !== 'battle') return;
+    if (busy || busyRef.current || !monster || phaseRef.current !== 'battle') return;
     if (monster.isBoss) {
       toast('恶龙挡住了去路，无法逃跑！', 'info');
       return;
     }
     if (Math.random() < 0.6) {
+      busyRef.current = false;
       sfx.flip();
       pushLog('你成功逃回了城镇！');
       toast('逃回城镇，体力完全恢复！', 'success');
@@ -345,6 +359,7 @@ export default function DragonQuest() {
       setPlayer((p) => ({ ...p, hp: p.maxHp, mp: p.maxMp }));
       setPhase('town');
     } else {
+      busyRef.current = true;
       sfx.mismatch();
       pushLog('逃跑失败！');
       setBusy(true);

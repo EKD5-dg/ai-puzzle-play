@@ -214,7 +214,11 @@ export default function PacMan() {
           setScore((s) => s + 50);
           g.frightTimer = 8000; // 毫秒
           g.ghosts.forEach((gh) => {
-            if (gh.mode === 'chase') gh.mode = 'fright';
+            // 重置计时：重复吃能量豆/复活后再恐惧都要从满时长起算，否则继承残值
+            if (gh.mode !== 'eyes') {
+              gh.mode = 'fright';
+              gh.timer = 0;
+            }
           });
           sfx.merge();
         }

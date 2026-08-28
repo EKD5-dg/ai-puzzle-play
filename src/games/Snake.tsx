@@ -51,6 +51,14 @@ export default function Snake() {
   const [score, setScore] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [status, setStatus] = useState<'ready' | 'playing' | 'paused' | 'over'>('ready');
+  // 切后台自动暂停：后台 setInterval 被节流为 1s/次，蛇会以约 1 格/秒继续爬，切回常已撞死
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') setStatus((s) => (s === 'playing' ? 'paused' : s));
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
   const best = useBestScore(metaSnake.id);
   const { toast } = useToast();
   const dirRef = useRef<Dir>('right');
@@ -80,7 +88,8 @@ export default function Snake() {
   // 游戏循环
   useEffect(() => {
     if (status !== 'playing') return;
-    const tick = 170 - (speed - 1) * 12;
+    // 速度下限 90ms/格（≈11 格/秒）：无下限的最高速接近不可反应区间
+    const tick = Math.max(90, 170 - (speed - 1) * 12);
     const t = window.setInterval(() => {
       const cur = snakeRef.current;
       const d = DIRS[dirRef.current];
@@ -253,7 +262,7 @@ export default function Snake() {
             </div>
           )}
         </div>
-        <p className="hint">方向键/WASD 转向 · 空格/滑动暂停 · 触屏滑动控制</p>
+        <p className="hint">方向键/WASD 转向 · 空格暂停/继续 · 触屏滑动控制</p>
       </div>
     </GameShell>
   );

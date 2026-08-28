@@ -138,14 +138,17 @@ export default function SpaceInvaders() {
         }
       }
 
-      // 玩家子弹
-      g.bullets.forEach((b) => (b.y -= 8));
+      // 玩家/外星人子弹：按 dt 归一化（乘 frame 因子），否则 120Hz 屏上弹速翻倍、节奏漂移
+      const frame = dt / 16.67;
+      g.bullets.forEach((b) => (b.y -= 8 * frame));
       g.bullets = g.bullets.filter((b) => b.y > -10);
       // 外星人子弹
-      g.enemyBullets.forEach((b) => (b.y += 3.5));
+      g.enemyBullets.forEach((b) => {
+        b.y += 3.5 * frame;
+      });
       g.enemyBullets = g.enemyBullets.filter((b) => b.y < H + 10);
       g.fireTimer += dt;
-      if (g.fireTimer > 900 - level * 60 && g.enemyBullets.length < 3) {
+      if (g.fireTimer > Math.max(240, 900 - level * 60) && g.enemyBullets.length < 3) {
         g.fireTimer = 0;
         const alive = g.invaders.filter((i) => i.alive);
         if (alive.length > 0) {
@@ -168,10 +171,11 @@ export default function SpaceInvaders() {
           }
         }
       }
-      // 外星人子弹 vs 炮台
+      // 外星人子弹 vs 炮台（判定盒收窄到炮台实体：尖端仅 8px 宽、塔身 20px，
+      // 旧 40px 全宽盒子会让擦着尖端旁飞过的子弹误判死亡）
       for (let i = g.enemyBullets.length - 1; i >= 0; i--) {
         const b = g.enemyBullets[i];
-        if (b.x > g.player.x && b.x < g.player.x + 40 && b.y > g.player.y && b.y < g.player.y + 24) {
+        if (b.x > g.player.x + 8 && b.x < g.player.x + 32 && b.y > g.player.y + 4 && b.y < g.player.y + 24) {
           g.enemyBullets.splice(i, 1);
           const nl = livesRef.current - 1;
           livesRef.current = nl;
@@ -179,9 +183,10 @@ export default function SpaceInvaders() {
           if (nl <= 0) {
             setStatus('over');
             sfx.lose();
-          } else {
-            sfx.mismatch();
+            // 玩家致死即结束：同帧清版不得用 win 覆盖 over（0 命显示胜利的竞态）
+            return;
           }
+          sfx.mismatch();
         }
       }
 

@@ -339,8 +339,10 @@ export default function Pong3D() {
         const py0 = p.y;
         p.x += (p.tx - p.x) * follow;
         p.y += (p.ty - p.y) * follow;
-        p.vx += ((p.x - px0) / Math.max(dt, 1e-4) - p.vx) * 0.45;
-        p.vy += ((p.y - py0) / Math.max(dt, 1e-4) - p.vy) * 0.45;
+        // 速度估计的平滑系数按 dt 归一（0.45 ≈ 60Hz 每帧系数，不归一会让高刷屏手感漂移）
+        const smooth = 1 - Math.exp(-36 * dt);
+        p.vx += ((p.x - px0) / Math.max(dt, 1e-4) - p.vx) * smooth;
+        p.vy += ((p.y - py0) / Math.max(dt, 1e-4) - p.vy) * smooth;
 
         const b = w.ball;
         if (w.phase === 'serve') {

@@ -108,7 +108,8 @@ function aiMove(board: Board, me: 1 | 2): number {
     const y = Math.floor(m / SIZE);
     const after = apply(board, x, y, me);
     const oppMoves = legalMoves(after, opp).length;
-    const score = WEIGHTS[y][x] * 2 + flips(board, x, y, me) * 4 + oppMoves * 3;
+    // 黑白棋核心策略是限制对方行动力：对方可下点越多该步越差，取负号
+    const score = WEIGHTS[y][x] * 2 + flips(board, x, y, me) * 4 - oppMoves * 3;
     if (score > bestScore) {
       bestScore = score;
       best = m;

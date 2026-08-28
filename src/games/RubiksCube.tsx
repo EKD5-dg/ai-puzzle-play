@@ -499,6 +499,21 @@ export default function RubiksCube() {
 
   // ============ 计时 ============
 
+  // 切后台时补偿计时起点：用时读的是墙钟，不补偿的话切走 5 分钟回来会全部计入"最快还原"
+  useEffect(() => {
+    let hiddenAt: number | null = null;
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = performance.now();
+      } else if (hiddenAt != null) {
+        startRef.current += performance.now() - hiddenAt;
+        hiddenAt = null;
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
   useEffect(() => {
     if (status !== 'playing') return;
     const t = window.setInterval(() => {

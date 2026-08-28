@@ -144,7 +144,9 @@ export default function Game2048() {
   const [dismissed, setDismissed] = useState(false);
   const [scorePop, setScorePop] = useState(0); // 触发分数动画
   const best = useBestScore(meta2048.id);
-  const touchRef = useRef<{ x: number; y: number } | null>(null);
+  // 触摸基准带 identifier：多指持机时 changedTouches[0] 可能是另一根手指，
+  // 用固定起点算滑动方向会产出错误移动（2048 移动不可逆，代价真实）
+  const touchRef = useRef<{ x: number; y: number; id: number } | null>(null);
   const { toast } = useToast();
 
   const doMove = useCallback(
@@ -206,15 +208,18 @@ export default function Game2048() {
   };
 
   const onTouchStart = (e: React.TouchEvent) => {
-    touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, id: e.touches[0].identifier };
   };
   const onTouchEnd = (e: React.TouchEvent) => {
-    if (!touchRef.current) return;
-    const dx = e.changedTouches[0].clientX - touchRef.current.x;
-    const dy = e.changedTouches[0].clientY - touchRef.current.y;
+    const start = touchRef.current;
+    if (!start) return;
+    const end = Array.from(e.changedTouches).find((t) => t.identifier === start.id);
+    if (!end) return;
+    touchRef.current = null;
+    const dx = end.clientX - start.x;
+    const dy = end.clientY - start.y;
     if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
     doMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up');
-    touchRef.current = null;
   };
 
   return (

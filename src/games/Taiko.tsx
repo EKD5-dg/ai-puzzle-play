@@ -357,7 +357,7 @@ export default function Taiko() {
           )}
         </div>
         <p className="hint">
-          🥁 F/J = 咚（红） · D/K = 咔（蓝） · 良 ±0.06s / 可 ±0.15s
+          🥁 F/J = 咚（红） · D/K = 咔（蓝） · 良 ±0.06s / 可 ±0.12s
         </p>
         <div className="tc-row">
           <TouchButtons

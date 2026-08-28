@@ -21,7 +21,7 @@ function emptyMoles(): MoleState[] {
 }
 
 export default function WhackMole() {
-  const [status, setStatus] = useState<'ready' | 'playing' | 'over'>('ready');
+  const [status, setStatus] = useState<'ready' | 'playing' | 'paused' | 'over'>('ready');
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(30);
   const [combo, setCombo] = useState(0);
@@ -34,6 +34,15 @@ export default function WhackMole() {
   const timeRef = useRef(30);
 
   timeRef.current = time;
+
+  // 切后台自动暂停：限时游戏后台照跑倒计时，切回时间已大量流逝
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') setStatus((s) => (s === 'playing' ? 'paused' : s));
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
   const start = useCallback(() => {
     setScore(0);
@@ -187,6 +196,14 @@ export default function WhackMole() {
               <p>敲普通地鼠 +10 · 金地鼠 +50 · 炸弹 -20 · 连击最高 ×5</p>
               <button className="btn btn-primary" onClick={start}>
                 开始游戏
+              </button>
+            </div>
+          )}
+          {status === 'paused' && (
+            <div className="arcade-overlay mole-overlay">
+              <h2>⏸ 已暂停</h2>
+              <button className="btn btn-primary" onClick={() => setStatus('playing')}>
+                继续
               </button>
             </div>
           )}

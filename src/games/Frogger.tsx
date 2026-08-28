@@ -149,7 +149,12 @@ export default function Frogger() {
       g.lanes.forEach((lane) => {
         if (lane.kind === 'safe') return;
         lane.items.forEach((it) => {
-          it.x += lane.dir * lane.speed * dt * 0.06;
+          const dx = lane.dir * lane.speed * dt * 0.06;
+          it.x += dx;
+          // 载运与浮木同帧同步位移：先按上一帧记录的乘骑关系搬青蛙，
+          // 消除"车道先动、青蛙判定后才补位移"的一帧滞后——该滞后会让
+          // 站在浮木拖尾边缘（重叠量<单帧位移）的青蛙在下一帧误判落水
+          if (f.onLog?.log === it) f.x += dx;
           if (it.x > W + 20) {
             it.x = -60;
             if (f.onLog?.log === it) f.x += -60 - (W + 20);
@@ -188,16 +193,15 @@ export default function Frogger() {
           }
         }
       } else if (lane.kind === 'river') {
-        // 找浮木
+        // 找浮木：本帧已在移动循环里同步载运过，这里只做成员判定记录引用
         let onLog: { log: { x: number; w: number }; dx: number } | null = null;
         for (const log of lane.items) {
           if (f.x + 20 > log.x && f.x + 8 < log.x + log.w && f.y > row * ROW_H && f.y < (row + 1) * ROW_H) {
-            onLog = { log, dx: lane.dir * lane.speed * dt * 0.06 };
+            onLog = { log, dx: 0 };
             break;
           }
         }
         if (onLog) {
-          f.x += onLog.dx;
           f.onLog = onLog;
         } else {
           // 落水
