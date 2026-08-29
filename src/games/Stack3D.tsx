@@ -312,9 +312,21 @@ export default function Stack3D() {
       }
       w.combo = 0;
       sfx.drop();
-      // 切后尺寸低于可玩下限：整塔判倒结算，避免细针塔死局
+      // 切后尺寸低于可玩下限：整塔判倒结算，避免细针塔死局。
+      // 保留块太小已无可玩性，连同它一起坠落，让"塔倒"视觉完整
       const remain = a === 'x' ? ks : nd;
       if (remain < MIN_SIZE) {
+        w.debris.push({
+          x0: nx - nw / 2,
+          x1: nx + nw / 2,
+          y0,
+          y1,
+          z0: nz - nd / 2,
+          z1: nz + nd / 2,
+          vx: 0,
+          vz: 0,
+          vy: 0,
+        });
         w.shakeAt = t;
         sfx.lose();
         statusRef.current = 'over';

@@ -171,11 +171,15 @@ export default function SpaceInvaders() {
           }
         }
       }
-      // 外星人子弹 vs 炮台（判定盒收窄到炮台实体：尖端仅 8px 宽、塔身 20px，
-      // 旧 40px 全宽盒子会让擦着尖端旁飞过的子弹误判死亡）
+      // 外星人子弹 vs 炮台（按行高分带：尖端/塔身窄、底座全宽，与绘制轮廓一致——
+      // 单一窄盒会让底座两翼成幽灵区，单一宽盒又会让尖端旁擦弹误死）
       for (let i = g.enemyBullets.length - 1; i >= 0; i--) {
         const b = g.enemyBullets[i];
-        if (b.x > g.player.x + 8 && b.x < g.player.x + 32 && b.y > g.player.y + 4 && b.y < g.player.y + 24) {
+        const inX =
+          b.y > g.player.y + 12
+            ? b.x > g.player.x && b.x < g.player.x + 40 // 底座两翼
+            : b.x > g.player.x + 8 && b.x < g.player.x + 32; // 尖端 + 塔身
+        if (inX && b.y > g.player.y + 4 && b.y < g.player.y + 24) {
           g.enemyBullets.splice(i, 1);
           const nl = livesRef.current - 1;
           livesRef.current = nl;

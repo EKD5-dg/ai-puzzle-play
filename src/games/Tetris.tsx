@@ -104,14 +104,6 @@ export default function Tetris() {
   const [flash, setFlash] = useState(0); // 消行闪光触发器
   const [flashing, setFlashing] = useState(false); // 消行动画播放中（避免整盘重建）
   const bagRef = useRef<string[]>(makeBag());
-  // 切后台自动暂停：后台 setInterval 被节流为 1s/次，方块会在后台持续下落，切回常已堆高甚至顶出
-  useEffect(() => {
-    const onVis = () => {
-      if (document.visibilityState === 'hidden' && !gameOverRef.current) setPaused(true);
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, []);
   const boardRef = useRef(board);
   const activeRef = useRef(active);
   /** nextType 实时镜像：lock 时用预览块作为下一个当前块 */
@@ -121,6 +113,14 @@ export default function Tetris() {
   const { toast } = useToast();
   const gameOverRef = useRef(false);
   const initRef = useRef(false);
+  // 切后台自动暂停：后台 setInterval 被节流为 1s/次，方块会在后台持续下落，切回常已堆高甚至顶出
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'hidden' && !gameOverRef.current) setPaused(true);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
   boardRef.current = board;
   activeRef.current = active;

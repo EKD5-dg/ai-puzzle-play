@@ -64,7 +64,7 @@ export default function Frogger() {
   const { toast } = useToast();
 
   const gameRef = useRef({
-    frog: { x: W / 2 - 14, y: H - ROW_H + 8, onLog: null as { log: { x: number; w: number }; dx: number } | null },
+    frog: { x: W / 2 - 14, y: H - ROW_H + 8, onLog: null as { log: { x: number; w: number } } | null },
     lanes: [] as Lane[],
     goals: Array(5).fill(false) as boolean[],
     deathTimer: 0,
@@ -155,12 +155,16 @@ export default function Frogger() {
           // 消除"车道先动、青蛙判定后才补位移"的一帧滞后——该滞后会让
           // 站在浮木拖尾边缘（重叠量<单帧位移）的青蛙在下一帧误判落水
           if (f.onLog?.log === it) f.x += dx;
+          // 回绕补偿用实际跳变量：it.x += dx 后可能越过边界不止一点点，
+          // 固定常数补偿会让青蛙相对浮木滑移、贴边时误判落水
           if (it.x > W + 20) {
+            const jump = -60 - it.x;
             it.x = -60;
-            if (f.onLog?.log === it) f.x += -60 - (W + 20);
+            if (f.onLog?.log === it) f.x += jump;
           } else if (it.x < -60) {
+            const jump = W + 20 - it.x;
             it.x = W + 20;
-            if (f.onLog?.log === it) f.x += W + 20 + 60;
+            if (f.onLog?.log === it) f.x += jump;
           }
         });
       });
@@ -194,10 +198,10 @@ export default function Frogger() {
         }
       } else if (lane.kind === 'river') {
         // 找浮木：本帧已在移动循环里同步载运过，这里只做成员判定记录引用
-        let onLog: { log: { x: number; w: number }; dx: number } | null = null;
+        let onLog: { log: { x: number; w: number } } | null = null;
         for (const log of lane.items) {
           if (f.x + 20 > log.x && f.x + 8 < log.x + log.w && f.y > row * ROW_H && f.y < (row + 1) * ROW_H) {
-            onLog = { log, dx: 0 };
+            onLog = { log };
             break;
           }
         }

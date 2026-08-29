@@ -147,6 +147,10 @@ export default function DragonQuest() {
   const [monster, setMonster] = useState<Monster | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  // player 的实时快照：治疗链 350ms 后调用的 monsterAttack 若读渲染闭包里的旧 hp，
+  // 会用"回血前"的 HP 判死（HP5→治疗后19→被打12→闭包算出-7 误杀），必须读最新值
+  const playerRef = useRef(player);
+  playerRef.current = player;
   // busy 的同步 ref 守卫：setBusy 后到重渲染完成前，state 闭包里的 busy 仍是旧值，
   // 键盘 auto-repeat（约 30 次/秒）可在同一帧内双触发战斗动作，造成双倍反击/结算覆盖
   const busyRef = useRef(false);
@@ -234,9 +238,10 @@ export default function DragonQuest() {
   const monsterAttack = (dmgReduction = 1) => {
     // 战斗已结束（胜利/死亡/逃回城镇）时，定时器链里迟到的反击直接作废
     if (phaseRef.current !== 'battle' || !monster) return;
-    let dmg = Math.max(1, monster.atk + rand(2) - player.def);
+    const cur = playerRef.current;
+    let dmg = Math.max(1, monster.atk + rand(2) - cur.def);
     if (dmgReduction > 1) dmg = Math.max(1, Math.floor(dmg / dmgReduction));
-    const newHp = player.hp - dmg;
+    const newHp = cur.hp - dmg;
     pushLog(`${monster.emoji} ${monster.name} 攻击了你，造成 ${dmg} 点伤害`);
     sfx.move();
     // 怪物前冲攻击动画 + 勇者受击
