@@ -373,7 +373,11 @@ export default function DragonQuest() {
       pushLog('你成功逃回了城镇！');
       toast('逃回城镇，体力完全恢复！', 'success');
       // 恢复满状态，保留等级/金币/击杀
-      setPlayer((p) => ({ ...p, hp: p.maxHp, mp: p.maxMp }));
+      const rested = { ...playerRef.current, hp: playerRef.current.maxHp, mp: playerRef.current.maxMp };
+      setPlayer(rested);
+      // 同步落盘：存档层数与城镇"再次出发（第 1 层）"一致，否则旧档会让"继续冒险"拿到深层进度配逃跑前的低 HP
+      saveGame(1, rested);
+      setSaveExists(true);
       setPhase('town');
     } else {
       busyRef.current = true;
@@ -382,6 +386,14 @@ export default function DragonQuest() {
       setBusy(true);
       later(() => monsterAttack(), 350);
     }
+  };
+
+  /** 从城镇再次出发：保留等级/金币，回到第 1 层 */
+  const leaveTown = () => {
+    setFloor(1);
+    setLog([]);
+    pushLog('你再次踏上了冒险之旅！');
+    startBattle(1, player);
   };
 
   /** 怪物死亡结算（胜利 / 升级 / 存档） */
@@ -449,27 +461,38 @@ export default function DragonQuest() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  // 键盘支持：1 攻击 2 火球 3 治疗 4 防御 5 逃跑
+  // 键盘支持：战斗中 1-5 行动，其余阶段 Enter/空格 触发当前主按钮
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (phase !== 'battle' || busy) return;
-      switch (e.key) {
-        case '1':
-          doAttack();
-          break;
-        case '2':
-          doMagic('fire');
-          break;
-        case '3':
-          doMagic('heal');
-          break;
-        case '4':
-          doDefend();
-          break;
-        case '5':
-          doFlee();
-          break;
+      if (phase === 'battle') {
+        if (busy) return;
+        switch (e.key) {
+          case '1':
+            doAttack();
+            break;
+          case '2':
+            doMagic('fire');
+            break;
+          case '3':
+            doMagic('heal');
+            break;
+          case '4':
+            doDefend();
+            break;
+          case '5':
+            doFlee();
+            break;
+        }
+        return;
       }
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      // 焦点在按钮上时交给浏览器原生激活（Enter/空格会点中它），避免与按钮 click 双触发
+      const el = e.target;
+      if (el instanceof HTMLElement && el.closest('button')) return;
+      e.preventDefault(); // 阻止空格滚动页面
+      if (phase === 'menu') (saveExists ? continueGame : newGame)();
+      else if (phase === 'town') leaveTown();
+      else if (phase === 'dead' || phase === 'victory') newGame();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -549,7 +572,11 @@ export default function DragonQuest() {
             </button>
             <div className="dq-help">
               <p>每层一个敌人，第 10 层是恶龙 Boss</p>
-              <p>快捷键：1 攻击 · 2 火球 · 3 治疗 · 4 防御 · 5 逃跑</p>
+              <p>任何行动后怪物必反击一次；防御让这次反击伤害减半</p>
+              <p>MP 只能靠升级或逃回城镇恢复 · 火球术 5 MP · 治疗术 4 MP</p>
+              <p>逃跑约 60% 成功（Boss 不可逃）：回城镇满血满 MP，但要从第 1 层重新出发</p>
+              <p>倒下会清空存档，最高层数纪录保留</p>
+              <p>快捷键：1 攻击 · 2 火球 · 3 治疗 · 4 防御 · 5 逃跑 · Enter/空格 确认主按钮</p>
             </div>
           </div>
         )}
@@ -633,15 +660,7 @@ export default function DragonQuest() {
             <p>
               当前 Lv.{player.level} · 金币 🪙 {player.gold} · 击杀 💀 {player.kills}
             </p>
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                setFloor(1);
-                setLog([]);
-                pushLog('你再次踏上了冒险之旅！');
-                startBattle(1, player);
-              }}
-            >
+            <button className="btn btn-primary" onClick={leaveTown}>
               ⚔️ 再次出发（第 1 层）
             </button>
           </div>

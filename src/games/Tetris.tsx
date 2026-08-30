@@ -167,7 +167,6 @@ export default function Tetris() {
       sfx.drop();
     }
     setScore((s) => s + LINE_SCORES[n] * level);
-    if (n > 0) setLevel((lv) => Math.min(15, lv + Math.floor(n / 2)));
     // 下一个当前块 = 预览块（7-bag 连续抽取），预览再抽下一个
     const next = spawn(nextTypeRef.current);
     setNextType(pullNext());
@@ -180,6 +179,11 @@ export default function Tetris() {
       setActive(next);
     }
   }, [level, pullNext, spawn, toast]);
+
+  // 等级按累计消行数定级：每 10 行 +1 级、封顶 15（按单次消行数升级会让只消单行永不升级）
+  useEffect(() => {
+    setLevel(Math.min(15, 1 + Math.floor(lines / 10)));
+  }, [lines]);
 
   // 初始化（幂等：StrictMode dev 下 effect 双执行不会重复抽块）
   useEffect(() => {
@@ -383,7 +387,7 @@ export default function Tetris() {
                 ))}
               </div>
             </div>
-            <button className="btn btn-ghost" onClick={() => setPaused((p) => !p)}>
+            <button className="btn btn-ghost" onClick={() => setPaused((p) => !p)} disabled={gameOver}>
               {paused ? '▶ 继续' : '⏸ 暂停'}
             </button>
             <div className="tetris-controls">
@@ -395,6 +399,7 @@ export default function Tetris() {
             </div>
           </div>
         </div>
+        <p className="hint">玩法：方块下落堆叠，某一行被完全填满即整行消除（一次最多四连消除）· 方块堆到顶部无法生成即结束</p>
         <p className="hint">← → 移动 · ↑ 旋转 · ↓ 加速下落 · 空格 硬降 · P 暂停</p>
       </div>
     </GameShell>

@@ -14,7 +14,6 @@ const H = 420;
 interface Bullet {
   x: number;
   y: number;
-  vy: number;
 }
 
 /** 外星人类型配色（模块级常量，避免每帧为每只重建数组） */
@@ -39,9 +38,10 @@ export default function SpaceInvaders() {
     bullets: [] as Bullet[],
     enemyBullets: [] as Bullet[],
     dir: 1,
-    downTimer: 0,
     fireTimer: 0,
     moveTimer: 0,
+    /** 受击后的无敌截止时刻（performance.now）：同帧多弹同中时只扣一条命 */
+    invulnUntil: 0,
   });
 
   // 静态背景层（黑底 + 预生成星星），每帧直接贴图
@@ -81,6 +81,7 @@ export default function SpaceInvaders() {
     gameRef.current.dir = 1;
     gameRef.current.moveTimer = 0;
     gameRef.current.fireTimer = 0; // 重置敌方开火计时，避免新一波开局立即出弹
+    gameRef.current.invulnUntil = 0; // 新一波不继承上一波残留的无敌时间
     void lv;
   }, []);
 
@@ -153,7 +154,7 @@ export default function SpaceInvaders() {
         const alive = g.invaders.filter((i) => i.alive);
         if (alive.length > 0) {
           const shooter = alive[Math.floor(Math.random() * alive.length)];
-          g.enemyBullets.push({ x: shooter.x + 16, y: shooter.y + 16, vy: 3.5 });
+          g.enemyBullets.push({ x: shooter.x + 16, y: shooter.y + 16 });
         }
       }
 
@@ -173,13 +174,15 @@ export default function SpaceInvaders() {
       }
       // 外星人子弹 vs 炮台（按行高分带：尖端/塔身窄、底座全宽，与绘制轮廓一致——
       // 单一窄盒会让底座两翼成幽灵区，单一宽盒又会让尖端旁擦弹误死）
+      // 受击后 1s 无敌（期间敌弹直接穿过）：否则同帧多颗敌弹各自扣命，3 发齐中可一帧清空生命
+      const invuln = now < g.invulnUntil;
       for (let i = g.enemyBullets.length - 1; i >= 0; i--) {
         const b = g.enemyBullets[i];
         const inX =
           b.y > g.player.y + 12
             ? b.x > g.player.x && b.x < g.player.x + 40 // 底座两翼
             : b.x > g.player.x + 8 && b.x < g.player.x + 32; // 尖端 + 塔身
-        if (inX && b.y > g.player.y + 4 && b.y < g.player.y + 24) {
+        if (!invuln && inX && b.y > g.player.y + 4 && b.y < g.player.y + 24) {
           g.enemyBullets.splice(i, 1);
           const nl = livesRef.current - 1;
           livesRef.current = nl;
@@ -190,6 +193,7 @@ export default function SpaceInvaders() {
             // 玩家致死即结束：同帧清版不得用 win 覆盖 over（0 命显示胜利的竞态）
             return;
           }
+          g.invulnUntil = now + 1000;
           sfx.mismatch();
         }
       }
@@ -220,11 +224,13 @@ export default function SpaceInvaders() {
         ctx.fillRect(inv.x + 8, inv.y + 4, 4, 4);
         ctx.fillRect(inv.x + 20, inv.y + 4, 4, 4);
       });
-      // 炮台
+      // 炮台（无敌期半透明闪烁，提示此刻中弹不掉命）
+      ctx.globalAlpha = invuln ? 0.45 : 1;
       ctx.fillStyle = '#00e676';
       ctx.fillRect(g.player.x, g.player.y + 12, 40, 8);
       ctx.fillRect(g.player.x + 10, g.player.y + 4, 20, 8);
       ctx.fillRect(g.player.x + 16, g.player.y, 8, 6);
+      ctx.globalAlpha = 1;
       // 子弹
       ctx.fillStyle = '#ffeb3b';
       g.bullets.forEach((b) => ctx.fillRect(b.x - 2, b.y - 10, 4, 12));
@@ -253,7 +259,7 @@ export default function SpaceInvaders() {
         if (status === 'ready' || status === 'over' || status === 'win') {
           startGame();
         } else if (gameRef.current.bullets.length < 2) {
-          gameRef.current.bullets.push({ x: gameRef.current.player.x + 20, y: gameRef.current.player.y - 10, vy: -8 });
+          gameRef.current.bullets.push({ x: gameRef.current.player.x + 20, y: gameRef.current.player.y - 10 });
           sfx.drop();
         }
       }
@@ -372,7 +378,7 @@ export default function SpaceInvaders() {
                 onPress: () => {
                   if (status === 'ready' || status === 'over' || status === 'win') startGame();
                   else if (gameRef.current.bullets.length < 2) {
-                    gameRef.current.bullets.push({ x: gameRef.current.player.x + 20, y: gameRef.current.player.y - 10, vy: -8 });
+                    gameRef.current.bullets.push({ x: gameRef.current.player.x + 20, y: gameRef.current.player.y - 10 });
                     sfx.drop();
                   }
                 },

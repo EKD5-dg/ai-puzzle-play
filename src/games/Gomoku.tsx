@@ -50,7 +50,7 @@ const LINE_WEIGHTS: Record<number, Record<number, number>> = {
   1: { 2: 10, 1: 2 },
 };
 
-/** 评估在 (x,y) 落 me 一子后的局面价值（进攻 + 0.9 倍防守，双向评分） */
+/** 评估在 (x,y) 落 me 一子后的局面价值（进攻 + 0.45 倍防守，双向评分） */
 function evaluate(board: Board, x: number, y: number, me: 1 | 2): number {
   const opp = me === 1 ? 2 : 1;
   // 进攻：模拟己方在此落子

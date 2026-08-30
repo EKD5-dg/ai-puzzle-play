@@ -55,6 +55,8 @@ export default function MemoryMatch() {
   const [started, setStarted] = useState(false);
   const lockRef = useRef(false);
   const timerRef = useRef<number | null>(null);
+  /** 计时起点时间戳（首次翻牌写入）：用真实时间差算用时，避免 setInterval 被后台节流少计 */
+  const startRef = useRef<number | null>(null);
   const mismatchTimerRef = useRef<number | null>(null);
   /** flipped 的实时镜像：连点第三张卡的防御守卫 */
   const flippedRef = useRef<number[]>([]);
@@ -64,12 +66,17 @@ export default function MemoryMatch() {
 
   // 计时（首次翻牌开始，胜利停止）
   useEffect(() => {
-    if (started && !won) {
-      timerRef.current = window.setInterval(() => setTime((t) => t + 1), 1000);
-      return () => {
-        if (timerRef.current) window.clearInterval(timerRef.current);
-      };
-    }
+    if (!started || won) return;
+    if (startRef.current === null) startRef.current = Date.now();
+    const start = startRef.current;
+    const tick = () => setTime(Math.floor((Date.now() - start) / 1000));
+    tick();
+    timerRef.current = window.setInterval(tick, 500);
+    return () => {
+      tick(); // 停止瞬间补一次，避免显示滞后一个刷新周期
+      if (timerRef.current) window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    };
   }, [started, won]);
 
   // 翻牌配对检测
@@ -122,6 +129,8 @@ export default function MemoryMatch() {
   }, [deck, won, moves, best, toast]);
 
   const startNew = (idx: number) => {
+    // 对局中途切换难度会清空当前盘面，先二次确认
+    if (started && !won && !window.confirm(`当前对局进行中，切换到${LEVELS[idx].label}将重新开始，确定吗？`)) return;
     if (mismatchTimerRef.current !== null) {
       window.clearTimeout(mismatchTimerRef.current);
       mismatchTimerRef.current = null;
@@ -132,6 +141,7 @@ export default function MemoryMatch() {
     flippedRef.current = [];
     setMoves(0);
     setTime(0);
+    startRef.current = null;
     setWon(false);
     setStarted(false);
     lockRef.current = false;
@@ -210,6 +220,7 @@ export default function MemoryMatch() {
             );
           })}
         </div>
+        <p className="hint">翻出相同图案即配对 · 步数越少纪录越好 · 三个难度分别保存纪录</p>
       </div>
     </GameShell>
   );

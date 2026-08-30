@@ -24,7 +24,7 @@ interface Lane {
 function buildLanes(level: number): Lane[] {
   const speedMul = 1 + (level - 1) * 0.25;
   const lanes: Lane[] = [];
-  // row0: 起点安全区；row1-4: 道路；row5: 安全岛；row6-9: 河流；row10: 安全区（目标）；row11: 目标线
+  // row0: 目标带（5 个家）；row1-4: 道路；row5: 安全岛；row6-9: 河流；row10-11: 起点侧安全区
   const defs = [
     { kind: 'safe', dir: 1 as const, speed: 0, items: [] },
     { kind: 'road', dir: 1 as const, speed: 2.4 * speedMul, items: [] },
@@ -84,7 +84,8 @@ export default function Frogger() {
       buildLanes(1).forEach((lane, ri) => {
         const y = ri * ROW_H;
         if (lane.kind === 'safe') {
-          bctx.fillStyle = ri === 11 ? '#1b3a2a' : '#1a2417';
+          // row0 才是终点带（目标洞画在 y=ROW_H/2），起点侧 safe 行用泥色
+          bctx.fillStyle = ri === 0 ? '#1b3a2a' : '#1a2417';
           bctx.fillRect(0, y, W, ROW_H);
         } else if (lane.kind === 'road') {
           bctx.fillStyle = '#241d16';

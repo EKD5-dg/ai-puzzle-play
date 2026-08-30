@@ -67,6 +67,8 @@ interface GameState {
   crates: Crate[];
   floaters: Floater[];
   endTimer: number;
+  /** 本次发射后的飞行时长（毫秒），用于超时兜底 */
+  birdMs: number;
 }
 
 /** 关卡模板：crates=[x,y,w,h] pigs=[x,y,r] */
@@ -195,6 +197,7 @@ export default function AngryBirds() {
     crates: [],
     floaters: [],
     endTimer: 0,
+    birdMs: 0,
   });
 
   const loadLevel = useCallback((lv: number) => {
@@ -274,6 +277,7 @@ export default function AngryBirds() {
 
       // 鸟飞行
       if (b.state === 'flying') {
+        gg.birdMs += dtMs;
         b.vy += GRAVITY * frame;
         b.vx *= Math.pow(0.996, frame);
         b.x += b.vx * frame;
@@ -291,6 +295,8 @@ export default function AngryBirds() {
           }
         }
         if (b.x < -80 || b.x > W + 80 || b.y > H + 40) b.state = 'gone';
+        // 超时兜底：坐标被污染（NaN）或反复弹跳时出界判定恒不成立，不能让回合永不结算
+        if (gg.birdMs > 8000) b.state = 'gone';
         if (b.state === 'flying') collideBird();
       }
 
@@ -319,7 +325,7 @@ export default function AngryBirds() {
         }
       }
 
-      // 飞行的猪（被击飞的猪 alive 保持 true，直到飞出屏幕才消失）
+      // 飞行的猪（被击飞的猪落地即判死，避免落在边角的猪再也打不到而卡关）
       for (const p of gg.pigs) {
         if (!p.flying) continue;
         p.vy += GRAVITY * frame;
@@ -331,6 +337,7 @@ export default function AngryBirds() {
             p.vx = 0;
             p.vy = 0;
             p.flying = false;
+            p.alive = false;
           } else {
             p.vy = 0;
             p.vx *= Math.pow(0.85, frame);
@@ -352,7 +359,7 @@ export default function AngryBirds() {
           const dx = p.x - nx;
           const dy = p.y - ny;
           if (dx * dx + dy * dy < p.r * p.r) {
-            p.flying = true; // 猪被撞飞（alive 保持 true 直到飞出屏幕）
+            p.flying = true; // 猪被撞飞（+10 即时计分，落地即消失）
             p.vx = c.vx * 0.5;
             p.vy = c.vy * 0.4 - 1.5;
             c.vx *= 0.55;
@@ -403,7 +410,7 @@ export default function AngryBirds() {
       const dy = p.y - b.y;
       const rr = p.r + BIRD_R;
       if (dx * dx + dy * dy < rr * rr) {
-        p.flying = true; // 猪被撞飞（alive 保持 true 直到飞出屏幕）
+        p.flying = true; // 猪被撞飞（+10 即时计分，落地即消失）
         p.vx = b.vx * 0.5 + (Math.random() - 0.5) * 2;
         p.vy = b.vy * 0.4 - 2;
         b.vx *= 0.55;
@@ -736,6 +743,8 @@ export default function AngryBirds() {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
+    // 画布未布局时宽高为 0，除法产生 NaN 会污染鸟坐标让回合永不结算：回退安全值（onDown 会因超距忽略输入）
+    if (!rect.width || !rect.height) return { x: 0, y: 0 };
     return {
       x: ((e.clientX - rect.left) * W) / rect.width,
       y: ((e.clientY - rect.top) * H) / rect.height,
@@ -799,6 +808,7 @@ export default function AngryBirds() {
     b.vx = -gg.pullX * PULL_K;
     b.vy = -gg.pullY * PULL_K;
     b.state = 'flying';
+    gg.birdMs = 0; // 每发鸟单独计飞行时长
     gg.pullX = 0;
     gg.pullY = 0;
     sfx.flip();

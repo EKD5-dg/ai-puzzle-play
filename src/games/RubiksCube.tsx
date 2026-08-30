@@ -228,6 +228,9 @@ const CX = W / 2;
 const CY = H / 2;
 const LIGHT: Vec3 = [0.387, 0.732, 0.56]; // 视空间中的固定光源方向（已归一化）
 
+/** 单层转动动画时长 ms：doMove 起转与主循环续转共用 */
+const ANIM_MS = 260;
+
 interface Anim {
   axis: 0 | 1 | 2;
   layer: -1 | 0 | 1;
@@ -275,8 +278,11 @@ function quadPath(ctx: CanvasRenderingContext2D, pts: [number, number][], _r: nu
 export default function RubiksCube() {
   const cubeRef = useRef<Cubie[]>(makeSolvedCube());
   const animRef = useRef<Anim | null>(null);
+  /** 转动动画期间收到的待执行指令（只留最后一条） */
+  const pendingRef = useRef<{ f: number; dir: 1 | -1 } | null>(null);
   const viewRef = useRef({ rx: -0.5, ry: -0.72 });
-  const draggingRef = useRef(false);
+  /** 正在拖视角的 pointerId，null 表示无拖拽 */
+  const dragIdRef = useRef<number | null>(null);
   const lastRef = useRef({ x: 0, y: 0 });
   const startRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -294,9 +300,14 @@ export default function RubiksCube() {
   // ============ 操作 ============
 
   const doMove = useCallback((faceIdx: number, dir: 1 | -1) => {
-    if (animRef.current) return;
+    if (statusRef.current === 'solved') return;
+    if (animRef.current) {
+      // 动画期间的输入不丢弃：排队一条，落定时立即执行（连续输入只保留最后一条）
+      pendingRef.current = { f: faceIdx, dir };
+      return;
+    }
     const face = FACES[faceIdx];
-    animRef.current = { axis: face.axis, layer: face.layer, dir, start: performance.now(), dur: 260 };
+    animRef.current = { axis: face.axis, layer: face.layer, dir, start: performance.now(), dur: ANIM_MS };
     sfx.move();
     if (statusRef.current === 'scrambled') {
       startRef.current = performance.now();
@@ -308,6 +319,7 @@ export default function RubiksCube() {
     cubeRef.current = makeSolvedCube();
     for (const { f, dir } of genScramble(22)) applyMoveInstant(cubeRef.current, f, dir);
     animRef.current = null;
+    pendingRef.current = null;
     setMoves(0);
     setElapsed(0);
     setNewRecord(false);
@@ -319,6 +331,7 @@ export default function RubiksCube() {
   const reset = useCallback(() => {
     cubeRef.current = makeSolvedCube();
     animRef.current = null;
+    pendingRef.current = null;
     setMoves(0);
     setElapsed(0);
     setNewRecord(false);
@@ -366,7 +379,21 @@ export default function RubiksCube() {
             if (isSolvedCube(cube)) {
               setElapsed(performance.now() - startRef.current);
               setStatus('solved');
+              pendingRef.current = null; // 已还原：丢弃排队转动，别在成功遮罩下继续转
             }
+          }
+          const next = pendingRef.current;
+          if (next) {
+            pendingRef.current = null;
+            const face = FACES[next.f];
+            animRef.current = {
+              axis: face.axis,
+              layer: face.layer,
+              dir: next.dir,
+              start: now,
+              dur: ANIM_MS,
+            };
+            sfx.move();
           }
         }
       }
@@ -579,21 +606,26 @@ export default function RubiksCube() {
   // ============ 触控 / 鼠标旋转视角 ============
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    draggingRef.current = true;
+    if (e.button !== 0) return; // 右键/中键不拖视角
+    if (dragIdRef.current !== null) return; // 多指时只跟随第一根手指
+    dragIdRef.current = e.pointerId;
     lastRef.current = { x: e.clientX, y: e.clientY };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!draggingRef.current) return;
+    if (dragIdRef.current !== e.pointerId) return;
     const dx = e.clientX - lastRef.current.x;
     const dy = e.clientY - lastRef.current.y;
     lastRef.current = { x: e.clientX, y: e.clientY };
     viewRef.current.ry += dx * 0.01;
     viewRef.current.rx = clamp(viewRef.current.rx + dy * 0.01, -1.3, 1.3);
   };
-  const onPointerUp = () => {
-    draggingRef.current = false;
+  const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (dragIdRef.current === e.pointerId) dragIdRef.current = null;
   };
+
+  /** index.css 无 .cube-btn:disabled 样式，禁用态用内联样式补上视觉区分 */
+  const solvedBtnStyle = status === 'solved' ? { opacity: 0.45, cursor: 'not-allowed' as const } : undefined;
 
   return (
     <GameShell
@@ -655,7 +687,14 @@ export default function RubiksCube() {
         </div>
         <div className="cube-controls">
           {FACES.map((f, i) => (
-            <button key={f.label} className="cube-btn" title={`${f.cn}层顺时针旋转`} onClick={() => doMove(i, 1)}>
+            <button
+              key={f.label}
+              className="cube-btn"
+              title={`${f.cn}层顺时针旋转`}
+              disabled={status === 'solved'}
+              style={solvedBtnStyle}
+              onClick={() => doMove(i, 1)}
+            >
               <span className="cube-btn-key">{f.label}</span>
               <span className="cube-btn-cn">{f.cn} ⟳</span>
             </button>
@@ -665,6 +704,8 @@ export default function RubiksCube() {
               key={`${f.label}'`}
               className="cube-btn cube-btn-prime"
               title={`${f.cn}层逆时针旋转`}
+              disabled={status === 'solved'}
+              style={solvedBtnStyle}
               onClick={() => doMove(i, -1)}
             >
               <span className="cube-btn-key">{f.label}′</span>

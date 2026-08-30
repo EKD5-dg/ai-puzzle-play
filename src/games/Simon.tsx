@@ -26,6 +26,8 @@ export default function Simon() {
   const best = useBestScore(metaSimon.id);
   const { toast } = useToast();
   const timers = useRef<number[]>([]);
+  /** inputIdx 的实时镜像：同一 tick 内连点时渲染闭包里的 inputIdx 已过期，判定必须读 ref */
+  const inputIdxRef = useRef(0);
 
   const clearTimers = () => {
     timers.current.forEach((t) => window.clearTimeout(t));
@@ -56,6 +58,7 @@ export default function Simon() {
               if (i === seq.length - 1) {
                 setPhase('input');
                 setInputIdx(0);
+                inputIdxRef.current = 0;
               }
             }, delay * 0.6),
           );
@@ -67,21 +70,25 @@ export default function Simon() {
 
   const press = (idx: number) => {
     if (phase !== 'input') return;
+    const cur = inputIdxRef.current;
+    inputIdxRef.current = cur + 1;
     SOUNDS[idx]();
     setLitIdx(idx);
     timers.current.push(window.setTimeout(() => setLitIdx(-1), 220));
-    if (sequence[inputIdx] !== idx) {
+    if (sequence[cur] !== idx) {
       sfx.lose();
       setPhase('over');
-      if (round > bestRound) {
-        setBestRound(round);
-        best.updateBest(round, (a, b) => a > b);
+      // round 在完成本轮时才 +1，失败时它是"正在尝试的轮次"，已完成轮数为 round - 1
+      const cleared = round - 1;
+      if (cleared > bestRound) {
+        setBestRound(cleared);
+        best.updateBest(cleared, (a, b) => a > b);
         sfx.record();
-        toast(`新纪录！${round} 轮`, 'record');
+        toast(`新纪录！${cleared} 轮`, 'record');
       }
       return;
     }
-    const next = inputIdx + 1;
+    const next = cur + 1;
     if (next >= sequence.length) {
       // 本轮完成
       const nr = round + 1;
@@ -125,6 +132,7 @@ export default function Simon() {
                 boxShadow: litIdx === i ? `0 0 30px ${c.glow}` : 'none',
               }}
               onClick={() => press(i)}
+              disabled={phase === 'show'}
               aria-label={c.name}
             />
           ))}
@@ -144,7 +152,7 @@ export default function Simon() {
             <div className="arcade-overlay simon-overlay">
               <h2>💀 记错了！</h2>
               <p>
-                坚持了 {round} 轮 · 最佳 {bestRound || best.value || '--'} 轮
+                完成 {round - 1} 轮 · 最佳 {bestRound || best.value || '--'} 轮
               </p>
               <button className="btn btn-primary" onClick={startGame}>
                 再来一局
@@ -152,7 +160,7 @@ export default function Simon() {
             </div>
           )}
         </div>
-        <p className="hint">四色按键各有专属音效 · 逐轮加快节奏</p>
+        <p className="hint">闪灯观看时按键变暗且不可点击 · 四色按键各有专属音效 · 逐轮加快节奏</p>
       </div>
     </GameShell>
   );

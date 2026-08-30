@@ -150,8 +150,17 @@ export default function Minesweeper() {
 
   const reveal = (r: number, c: number) => {
     if (status !== 'playing') return;
-    // 首次点击：重建棋盘确保安全
-    const g = firstClick ? grid : buildGrid(level.rows, level.cols, level.mines, r, c);
+    // 首次点击：重建棋盘确保安全，并把首点前已插的旗按位置迁移过去（新格落在雷上则取消该旗）
+    let g = grid;
+    if (!firstClick) {
+      const rebuilt = buildGrid(level.rows, level.cols, level.mines, r, c);
+      grid.forEach((row, rr) =>
+        row.forEach((cell, cc) => {
+          if (cell.state === 'flagged' && !rebuilt[rr][cc].mine) rebuilt[rr][cc].state = 'flagged';
+        }),
+      );
+      g = rebuilt;
+    }
     const target = g[r][c];
     if (target.state !== 'hidden') return;
     if (target.mine) {

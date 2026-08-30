@@ -48,15 +48,18 @@ export default function DigitMemory() {
     setPhase('show');
   }, []);
 
-  // 显示阶段：2 秒后进入输入
+  /** 展示时长随位数缩放：3 位 2.2 秒起，每多一位 +0.5 秒，最长 6 秒 */
+  const showMs = Math.min(6000, 700 + len * 500);
+
+  // 显示阶段：到时进入输入
   useEffect(() => {
     if (phase !== 'show') return;
     const t = window.setTimeout(() => {
       sfx.flip();
       setPhase('input');
-    }, 2200);
+    }, showMs);
     return () => window.clearTimeout(t);
-  }, [phase]);
+  }, [phase, showMs]);
 
   /** 输入完成后的统一判定（仅由 ✓ 按钮或回车手动触发） */
   const finishInput = (next: string) => {
@@ -77,10 +80,13 @@ export default function DigitMemory() {
       clearTransition();
       sfx.lose();
       setPhase('over');
-      const isNew = best.updateBest(len - 1, (a, b) => a > b);
-      if (isNew) {
-        sfx.record();
-        toast(`新纪录！记住 ${len - 1} 位数字`, 'record');
+      // 位数口径：len - 1 为已成功复现的最长位数；首轮（len=3）即败时一轮都没记住，不写纪录
+      if (len > 3) {
+        const isNew = best.updateBest(len - 1, (a, b) => a > b);
+        if (isNew) {
+          sfx.record();
+          toast(`新纪录！记住 ${len - 1} 位数字`, 'record');
+        }
       }
     }
   };
@@ -153,7 +159,7 @@ export default function DigitMemory() {
         <div className="digit-screen">
           {phase === 'show' && (
             <>
-              <span className="digit-label">记住这组数字：</span>
+              <span className="digit-label">记住这组数字（{(showMs / 1000).toFixed(1)} 秒）：</span>
               <span className="digit-num">{answer}</span>
             </>
           )}
@@ -178,7 +184,7 @@ export default function DigitMemory() {
             <div className="arcade-overlay digit-overlay">
               <h2>💀 记错了！</h2>
               <p>
-                正确答案 {answer} · 你记住了 {len - 1} 位
+                正确答案 {answer} · 你记住了 {len > 3 ? len - 1 : 0} 位
               </p>
               <button className="btn btn-primary" onClick={startGame}>
                 再来一局
@@ -200,7 +206,7 @@ export default function DigitMemory() {
             ))}
           </div>
         )}
-        <p className="hint">实体键盘 0-9 也可输入 · 数字显示 2 秒后隐藏 · 输满位数点 ✓（或回车）提交，⌫ 可修改</p>
+        <p className="hint">实体键盘 0-9 也可输入 · 显示时长随位数增加（3 位 2.2 秒起，最长 6 秒）· 输满位数点 ✓（或回车）提交，⌫ 可修改</p>
       </div>
     </GameShell>
   );

@@ -74,10 +74,14 @@ export default function ColorSequence() {
     if (sequence[inputIdx] !== idx) {
       sfx.lose();
       setPhase('over');
-      const isNew = best.updateBest(round, (a, b) => a > b);
-      if (isNew) {
-        sfx.record();
-        toast(`新纪录！${round} 轮`, 'record');
+      // round 在完成本轮时才 +1，失败时已完成轮数为 round - 1；首轮即败不写纪录
+      const cleared = round - 1;
+      if (cleared > 0) {
+        const isNew = best.updateBest(cleared, (a, b) => a > b);
+        if (isNew) {
+          sfx.record();
+          toast(`新纪录！${cleared} 轮`, 'record');
+        }
       }
       return;
     }
@@ -141,7 +145,7 @@ export default function ColorSequence() {
             <div className="arcade-overlay cseq-overlay">
               <h2>💀 记错了！</h2>
               <p>
-                坚持了 {round} 轮 · 最佳 {best.value ?? '--'} 轮
+                完成 {round - 1} 轮 · 最佳 {best.value ?? '--'} 轮
               </p>
               <button className="btn btn-primary" onClick={startGame}>
                 再来一局

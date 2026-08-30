@@ -108,7 +108,8 @@ function processPortrait(img: HTMLImageElement, tolerance: number, pixelSize: nu
         }
       }
     }
-    if (maxX <= minX || maxY <= minY) return null;
+    // 仅空包围盒（无任何不透明像素）才算抠图失败；1px 宽/高的内容仍然有效
+    if (maxX < minX || maxY < minY) return null;
     const bw = maxX - minX + 1;
     const bh = maxY - minY + 1;
 
@@ -177,6 +178,13 @@ export function Portrait({ src, className, tolerance = DEFAULT_TOLERANCE, pixelS
 
   useEffect(() => {
     let cancelled = false;
+    const cached = dataUrlCache.get(cacheKey(src, tolerance, pixelSize));
+    if (cached) {
+      // 命中缓存直接同步回填，不经过 null，避免切怪时闪一帧空占位
+      setDataUrl(cached);
+      setFailed(false);
+      return;
+    }
     // 清除上一个 src 的立绘，避免切换怪物时旧图残留
     setDataUrl(null);
     setFailed(false);

@@ -1,7 +1,8 @@
 /**
  * 触屏控件：虚拟方向键 + 动作按钮组。
- * 仅在触屏设备（pointer: coarse）显示，桌面自动隐藏。
+ * 仅在存在触屏指针的设备（any-pointer: coarse）显示，纯桌面自动隐藏。
  */
+import { useRef } from 'react';
 import type { CSSProperties } from 'react';
 
 interface DpadProps {
@@ -11,12 +12,21 @@ interface DpadProps {
 }
 
 export function TouchDpad({ onDir, size = 56 }: DpadProps) {
+  /** 最近一次 pointerdown 的方向与时刻：用于识别其后的合成 click，避免双触发 */
+  const lastPointerRef = useRef<{ dir: string; at: number }>({ dir: '', at: 0 });
   const btn = (label: string, dir: 'up' | 'down' | 'left' | 'right', style: CSSProperties) => (
     <button
       className="tc-btn"
       style={{ width: size, height: size, ...style }}
       onPointerDown={(e) => {
         e.preventDefault();
+        lastPointerRef.current = { dir, at: Date.now() };
+        onDir(dir);
+      }}
+      onClick={() => {
+        // pointerdown 已处理过的同一方向 click 直接跳过；键盘激活（Enter/空格）只发 click，走这里兜底
+        const last = lastPointerRef.current;
+        if (last.dir === dir && Date.now() - last.at < 700) return;
         onDir(dir);
       }}
       aria-label={dir}

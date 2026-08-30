@@ -637,6 +637,8 @@ export default function Ski3D() {
               sfx.match();
               if (w.combo > 1) toast(`💎 宝石 ×${w.combo} 连击！里程 +${jump}m`, 'success');
               w.gemsArr.splice(i, 1);
+              // 已移除本颗：不 continue 会让下方越界回收再 splice 一次，误删新占位的那颗
+              continue;
             }
           }
           if (z < -0.5 || z > FAR * 1.2) {

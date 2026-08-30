@@ -12,12 +12,13 @@ const HOLES = 9;
 interface MoleState {
   visible: boolean;
   kind: 'normal' | 'gold' | 'bomb';
-  timer: number;
+  /** 消失时刻（performance.now 时间戳）：tick 计数在浏览器节流时会被拉长 */
+  until: number;
 }
 
 function emptyMoles(): MoleState[] {
   // Array.from 生成独立对象（fill 会让 9 个洞共享同一引用）
-  return Array.from({ length: HOLES }, () => ({ visible: false, kind: 'normal' as const, timer: 0 }));
+  return Array.from({ length: HOLES }, () => ({ visible: false, kind: 'normal' as const, until: 0 }));
 }
 
 export default function WhackMole() {
@@ -32,6 +33,8 @@ export default function WhackMole() {
   const comboRef = useRef(0);
   const maxComboRef = useRef(0);
   const timeRef = useRef(30);
+  /** 本轮截止时刻（performance.now）：倒计时以墙钟为准，不靠 tick 累减 */
+  const endTimeRef = useRef(0);
 
   timeRef.current = time;
 
@@ -56,20 +59,21 @@ export default function WhackMole() {
     setStatus('playing');
   }, []);
 
-  // 倒计时
+  // 倒计时（按真实时间计算：setInterval 被节流时 tick 累减会与墙钟漂移）
   useEffect(() => {
     if (status !== 'playing') return;
+    // 暂停恢复后从剩余秒数续算（time 是整秒，误差 <1s）
+    endTimeRef.current = performance.now() + timeRef.current * 1000;
     const t = window.setInterval(() => {
-      if (timeRef.current <= 1) {
-        timeRef.current = 0;
-        setTime(0);
+      const left = Math.max(0, Math.ceil((endTimeRef.current - performance.now()) / 1000));
+      if (left === timeRef.current) return;
+      timeRef.current = left;
+      setTime(left);
+      if (left <= 0) {
         setStatus('over');
         sfx.win();
-        return;
       }
-      timeRef.current -= 1;
-      setTime(timeRef.current);
-    }, 1000);
+    }, 200);
     return () => window.clearInterval(t);
   }, [status]);
 
@@ -77,11 +81,13 @@ export default function WhackMole() {
   useEffect(() => {
     if (status !== 'playing') return;
     const spawn = () => {
+      // now 在 updater 外取一次：updater 需保持纯函数（StrictMode 下会双执行）
+      const now = performance.now();
       setMoles((prev) => {
-        const next = prev.map((m) => ({ ...m, timer: m.timer - 1 }));
-        // 消失
+        const next = [...prev];
+        // 消失（按到期时间戳判定，存活时长不再受 tick 节流影响）
         next.forEach((m, i) => {
-          if (m.visible && m.timer <= 0) next[i] = { visible: false, kind: 'normal', timer: 0 };
+          if (m.visible && m.until <= now) next[i] = { visible: false, kind: 'normal', until: 0 };
         });
         // 生成新地鼠（最多同时 2 只）；存活时长：普通 ≈4.2s / 金 ≈3.1s / 炸弹 ≈4.7s
         const visibleCount = next.filter((m) => m.visible).length;
@@ -91,7 +97,8 @@ export default function WhackMole() {
             const idx = empty[Math.floor(Math.random() * empty.length)];
             const roll = Math.random();
             const kind = roll < 0.08 ? 'gold' : roll < 0.14 ? 'bomb' : 'normal';
-            next[idx] = { visible: true, kind, timer: kind === 'normal' ? 16 : kind === 'gold' ? 12 : 18 };
+            const life = kind === 'normal' ? 4160 : kind === 'gold' ? 3120 : 4680;
+            next[idx] = { visible: true, kind, until: now + life };
           }
         }
         return next;
@@ -108,7 +115,7 @@ export default function WhackMole() {
     // 状态计算与副作用统一放在 updater 之外（StrictMode 下 updater 双执行会导致双倍结算）
     setMoles((prev) => {
       const next = [...prev];
-      next[i] = { visible: false, kind: 'normal', timer: 0 };
+      next[i] = { visible: false, kind: 'normal', until: 0 };
       return next;
     });
     if (m.kind === 'normal') {
@@ -168,8 +175,12 @@ export default function WhackMole() {
             <span>{metaMole.bestScoreLabel}</span>
             <strong>{best.value ?? 0}</strong>
           </div>
-          <button className="btn btn-primary" onClick={start}>
-            🔄 开始
+          {/* 游玩中变身"暂停"：常驻的开始按钮会误点清分（重开入口在 ready/over 覆盖层） */}
+          <button
+            className="btn btn-primary"
+            onClick={() => (status === 'playing' ? setStatus('paused') : start())}
+          >
+            {status === 'playing' ? '⏸ 暂停' : '🔄 开始'}
           </button>
         </>
       }

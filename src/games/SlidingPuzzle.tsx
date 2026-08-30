@@ -56,6 +56,8 @@ export default function SlidingPuzzle() {
   const [board, setBoard] = useState<Board>(() => shuffleBoard(LEVELS[1].size));
   const [moves, setMoves] = useState(0);
   const [won, setWon] = useState(false);
+  // 窄屏（≤640px）缩小方块尺寸，避免棋盘溢出 375px 视口
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 640);
   const best = useBestScore(metaSliding.id);
   const { toast } = useToast();
 
@@ -97,8 +99,13 @@ export default function SlidingPuzzle() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [won]);
 
-  // 窄屏（≤640px）缩小方块尺寸，避免棋盘溢出 375px 视口
-  const narrow = typeof window !== 'undefined' && window.innerWidth <= 640;
+  // 转屏/改窗口只动视口不动状态，需订阅 resize 重新计算 narrow
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth <= 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   const tileSize = size === 5 ? (narrow ? 58 : 72) : size === 4 ? (narrow ? 78 : 92) : narrow ? 94 : 108;
   const pad = 3; // 内边距偏移
 

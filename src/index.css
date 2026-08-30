@@ -1398,7 +1398,7 @@ code {
   }
 }
 
-/* ============ 触屏控件（仅触屏设备显示） ============ */
+/* ============ 触屏控件（设备上存在触屏指针即显示；any-pointer 可覆盖主指针为 fine 的触屏笔记本） ============ */
 .tc-dpad {
   display: none;
   grid-template-columns: repeat(3, 1fr);
@@ -1444,10 +1444,16 @@ code {
   border-color: transparent;
 }
 
-@media (pointer: coarse) {
+@media (any-pointer: coarse) {
   .tc-dpad,
   .tc-buttons {
     display: grid;
+  }
+
+  /* .tc-buttons 没有列模板：grid 默认隐式单列会把动作按钮竖排堆叠，改为按列铺开 */
+  .tc-buttons {
+    grid-auto-flow: column;
+    justify-content: center;
   }
 
   .tc-row {
@@ -2235,6 +2241,15 @@ code {
 
 .simon-key:active {
   transform: scale(0.94);
+}
+
+/* 观看阶段：未点亮的键压暗提示"只需看"（闪烁键保持原亮度，否则序列看不清）；点击已由 disabled 拦掉，光标明示不可点 */
+.simon-board.showing .simon-key {
+  cursor: not-allowed;
+}
+
+.simon-board.showing .simon-key:not(.lit) {
+  filter: brightness(0.55) saturate(0.8);
 }
 
 .simon-center {

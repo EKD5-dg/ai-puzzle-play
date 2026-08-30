@@ -70,7 +70,7 @@ export default function Sokoban() {
     let goals = 0;
     lv.grid.forEach((row) =>
       row.forEach((c) => {
-        if (c === 'box' || c === 'boxOnGoal') boxes++;
+        if (c === 'box') boxes++; // 只数还没上目标的箱子，否则「剩余」全程不变
         if (c === 'goal' || c === 'boxOnGoal' || c === 'playerOnGoal') goals++;
       }),
     );
@@ -229,7 +229,7 @@ export default function Sokoban() {
     sfx.flip();
   };
 
-  const { boxes: totalBoxes, goals: totalGoals } = totalMoves(state);
+  const { boxes: remainingBoxes, goals: totalGoals } = totalMoves(state);
   const cell = 52;
 
   return (
@@ -248,7 +248,7 @@ export default function Sokoban() {
           </div>
           <div className="stat-box">
             <span>剩余</span>
-            <strong>{totalBoxes}/{totalGoals}</strong>
+            <strong>{remainingBoxes}/{totalGoals}</strong>
           </div>
           <div className="stat-box">
             <span>{metaSokoban.bestScoreLabel}</span>
@@ -302,7 +302,7 @@ export default function Sokoban() {
             )),
           )}
         </div>
-        <p className="hint">方向键 / WASD 移动 · Z 撤销 · R 重开 · 推箱数 {pushes}</p>
+        <p className="hint">方向键 / WASD 移动 · Z 撤销 · R 重开 · 触屏可用屏幕方向键 · 推箱数 {pushes}</p>
         <div className="tc-row">
           <TouchDpad onDir={(d) => move(d)} />
         </div>

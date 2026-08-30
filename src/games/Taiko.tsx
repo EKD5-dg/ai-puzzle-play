@@ -12,6 +12,8 @@ const W = 520;
 const H = 220;
 const JUDGE_X = 100;
 const TRAVEL_SEC = 3.2;
+/** 谱面首个音符时刻（秒）：节拍音也以此为相位基准，保证 tick 与击打点同相 */
+const CHART_START = 2.2;
 
 type NoteType = 'red' | 'blue';
 interface Note {
@@ -45,7 +47,7 @@ function makeChart(song: SongDef): Note[] {
     seed = (seed * 1103515245 + 12345) % 2147483648;
     return seed / 2147483648;
   };
-  let t = 2.2;
+  let t = CHART_START;
   while (t < song.seconds - 0.5) {
     const type: NoteType = rand() < song.blueChance ? 'blue' : 'red';
     notes.push({ type, time: t, judged: 0 });
@@ -70,6 +72,8 @@ export default function Taiko() {
     notes: [] as Note[],
     startTime: 0,
     running: false,
+    /** 已播出节拍音的拍序号（-1 表示本局未播）：防止同一拍重复触发 */
+    lastBeat: -1,
     fx: [] as Array<{ x: number; text: string; color: string; t: number }>,
   });
   /** 连击镜像（hit 在键盘/触屏回调中读取最新值） */
@@ -101,6 +105,7 @@ export default function Taiko() {
     gameRef.current.startTime = performance.now();
     gameRef.current.running = true;
     gameRef.current.fx = [];
+    gameRef.current.lastBeat = -1;
     comboRef.current = 0;
     setScore(0);
     setCombo(0);
@@ -161,6 +166,15 @@ export default function Taiko() {
       const ctx = cv?.getContext('2d');
       if (!cv || !ctx) return;
       const elapsed = (now - g.startTime) / 1000;
+
+      // 节拍音：文案称"跟随鼓点"，按当前 bpm 每拍一次轻击
+      // 相位对齐首音符时刻（谱面从 2.2s 起排），否则 tick 与击打点错拍反而干扰
+      // 用 > 而非 !==：切后台补偿会让 elapsed 短暂回退，回退时不应重复出声
+      const beatIdx = Math.floor((elapsed - CHART_START) / (60 / g.song.bpm));
+      if (beatIdx > g.lastBeat) {
+        g.lastBeat = beatIdx;
+        sfx.click();
+      }
 
       // Miss 检测
       for (const n of g.notes) {

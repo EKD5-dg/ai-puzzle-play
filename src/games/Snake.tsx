@@ -132,9 +132,10 @@ export default function Snake() {
         e.preventDefault();
         if (statusRef.current === 'ready') start();
         // 禁止 180° 掉头（以"上次 tick 应用的方向"为基准，同 tick 双按键也无法绕过）
+        // 蛇身仅 1 节时掉头不可能撞自己，放行任意方向（否则 ready 首按 ← 被守卫吞掉）
         const cur = lastAppliedRef.current;
         const opp: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
-        if (opp[cur] !== d) {
+        if (opp[cur] !== d || snakeRef.current.length <= 1) {
           dirRef.current = d;
         }
         return;
@@ -158,7 +159,8 @@ export default function Snake() {
       Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
     const cur = lastAppliedRef.current;
     const opp: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
-    if (opp[cur] !== d) {
+    // 与键盘分支一致：蛇身仅 1 节时允许掉头
+    if (opp[cur] !== d || snakeRef.current.length <= 1) {
       dirRef.current = d;
     }
   };

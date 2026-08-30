@@ -148,7 +148,8 @@ export default function Sudoku() {
   const [generating, setGenerating] = useState(false);
   /** 生成任务编号：快速连点新一局时丢弃过期任务 */
   const genRef = useRef(0);
-  const best = useBestScore(metaSudoku.id);
+  /** 最佳时间按难度细分（简单档记录不再压住困难档），云端键同步带后缀 */
+  const best = useBestScore(`${metaSudoku.id}:${levelIdx}`);
   const { toast } = useToast();
 
   const startNew = (idx: number) => {

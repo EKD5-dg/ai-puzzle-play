@@ -145,7 +145,8 @@ function newWorld(): World {
     gems: picked.map((idx) => ({ x: (idx % GRID) + 0.5, y: ((idx / GRID) | 0) + 0.5, taken: false })),
     portalX: GRID - 1.5,
     portalY: GRID - 1.5,
-    open: false,
+    // 候选格不足的极端情况：没有宝石可收集就直接开门，否则该局永远无法通关
+    open: picked.length === 0,
     px: 1.5,
     py: 1.5,
     ang: 0,
@@ -321,7 +322,9 @@ export default function Maze3D() {
   const { toast } = useToast();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const worldRef = useRef<World>(newWorld());
+  // 懒初始化：useRef(newWorld()) 的实参每次渲染都会求值，HUD 10Hz 刷新会白建迷宫 + BFS
+  const worldRef = useRef<World>(null as unknown as World);
+  if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   const mapOnRef = useRef(true);
   /** 键盘输入态（帧循环读取，避免重渲染） */
@@ -390,11 +393,17 @@ export default function Maze3D() {
       keysRef.current = { fwd: false, back: false, strafeL: false, strafeR: false, turnL: false, turnR: false };
       if (statusRef.current === 'playing') setStatus('paused');
     };
+    // 移动端锁屏/切 App 只发 visibilitychange 不发 blur，需单独兜底
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') clear();
+    };
     window.addEventListener('blur', clear);
+    document.addEventListener('visibilitychange', onVis);
     return () => {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
       window.removeEventListener('blur', clear);
+      document.removeEventListener('visibilitychange', onVis);
     };
   }, [start]);
 
@@ -405,7 +414,7 @@ export default function Maze3D() {
     const rect = e.currentTarget.getBoundingClientRect();
     const kx = RW / rect.width;
     const ky = RH / rect.height;
-    return { x: (e.clientX - rect.left) * kx, y: (e.clientY - rect.top) * ky, w: rect.width };
+    return { x: (e.clientX - rect.left) * kx, y: (e.clientY - rect.top) * ky };
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -421,6 +430,12 @@ export default function Maze3D() {
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // 非游玩态丢掉拖拽状态：暂停/胜利后仍能转视角既不合理，
+    // 也会在恢复时把跨暂停期的位移一次性累加上（lastX 已过期）
+    if (statusRef.current !== 'playing') {
+      lookRef.current = null;
+      return;
+    }
     const stick = stickRef.current;
     if (stick && e.pointerId === stick.id) {
       const p = toCanvas(e);
@@ -442,8 +457,8 @@ export default function Maze3D() {
       const p = toCanvas(e);
       const dx = p.x - look.lastX;
       look.lastX = p.x;
-      // 拖过整幅画布 ≈ 转 130°
-      worldRef.current.ang += (dx / p.w) * 2.3;
+      // 拖过整幅画布 ≈ 转 130°（dx 已是内部像素，须按渲染宽度 RW 折算，与 CSS 宽度无关）
+      worldRef.current.ang += (dx / RW) * 2.3;
     }
   };
 
@@ -900,7 +915,9 @@ export default function Maze3D() {
             🎲 换一座迷宫
           </button>
         </div>
-        <p className="hint">集齐宝石开启传送门 · 小地图只显示你探索过的区域</p>
+        <p className="hint">
+          集齐宝石开启传送门 · 小地图只显示你探索过的区域 · 鼠标拖拽只能转向，前进/后退请用键盘 W/S（或 ↑/↓）
+        </p>
       </div>
     </GameShell>
   );
