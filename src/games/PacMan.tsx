@@ -36,6 +36,14 @@ const TILE = 26;
 
 const GHOST_COLORS = ['#ff1744', '#ff9f1a', '#4dd0e1', '#ff6ec7'];
 
+/** 每只幽灵的追逐目标偏移（格）：经典差异化性格，同时打破多幽灵同格时决策完全一致造成的同步叠影 */
+const CHASE_OFFSETS: Array<[number, number]> = [
+  [0, 0],
+  [0, -2],
+  [-2, 0],
+  [2, 0],
+];
+
 export default function PacMan() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<'ready' | 'playing' | 'over' | 'win'>('ready');
@@ -126,13 +134,17 @@ export default function PacMan() {
       const maze = initMaze();
       gameRef.current.maze = maze;
       gameRef.current.player = { x: 9 * TILE + TILE / 2, y: 7.5 * TILE, dir: 'left', nextDir: 'left', speed: 2.6, invincible: 2500 };
-      // 出生点全部落在开阔格（房门下方口袋 + 房门本身），幽灵可按格子寻路法正常出发
-      gameRef.current.ghosts = [
-        { x: 9 * TILE + TILE / 2, y: 9.5 * TILE, dir: 'up', color: GHOST_COLORS[0], mode: 'chase', timer: 0, delay: 90, tx: 0, ty: 0, released: false },
-        { x: 8 * TILE + TILE / 2, y: 9.5 * TILE, dir: 'up', color: GHOST_COLORS[1], mode: 'chase', timer: 0, delay: 180, tx: 0, ty: 0, released: false },
-        { x: 10 * TILE + TILE / 2, y: 9.5 * TILE, dir: 'up', color: GHOST_COLORS[2], mode: 'chase', timer: 0, delay: 270, tx: 0, ty: 0, released: false },
-        { x: 9 * TILE + TILE / 2, y: 8.5 * TILE, dir: 'up', color: GHOST_COLORS[3], mode: 'chase', timer: 0, delay: 360, tx: 0, ty: 0, released: false },
-      ];
+      // 出生点全部落在开阔格（房门下方口袋 + 房门本身），幽灵可按格子寻路法正常出发；
+      // delay 为毫秒（按 dt 扣减），低帧率设备出房节奏与高帧率一致
+      gameRef.current.ghosts = [0, 1200, 2400, 3600].map((delay, i) => {
+        const [x, y] = [
+          [9 * TILE + TILE / 2, 9.5 * TILE],
+          [8 * TILE + TILE / 2, 9.5 * TILE],
+          [10 * TILE + TILE / 2, 9.5 * TILE],
+          [9 * TILE + TILE / 2, 8.5 * TILE],
+        ][i];
+        return { x, y, dir: 'up', color: GHOST_COLORS[i], mode: 'chase' as const, timer: 0, delay, tx: x, ty: y, released: false };
+      });
       gameRef.current.frightTimer = 0;
       // 幽灵速度随关卡提升但封顶 2.85（玩家 2.6），保证高关卡仍可玩
       gameRef.current.ghostSpeed = Math.min(2.85, 2 + (lv - 1) * 0.25);
@@ -231,10 +243,10 @@ export default function PacMan() {
 
       // 幽灵移动：整格寻路——只在格子中心落位决策，且只走向已通过碰撞检查的相邻格心，
       // 消除旧实现“中心±1.5px窗口 + 帧间直线位移无碰撞校验”导致的幽灵随机穿墙
-      g.ghosts.forEach((gh) => {
-        // 出房延迟：分批放出，避免开局围杀
+      g.ghosts.forEach((gh, gi) => {
+        // 出房延迟（毫秒）：分批放出，避免开局围杀
         if (gh.delay > 0) {
-          gh.delay--;
+          gh.delay -= dt;
           return;
         }
         if (gh.mode === 'fright') {
@@ -286,8 +298,9 @@ export default function PacMan() {
             gh.dir = bestD;
             if (Math.floor(gh.y / TILE) === 7) gh.released = true;
           } else {
-            // 追逐：选朝玩家的方向（曼哈顿距离最小）
-            const target = gh.mode === 'fright' ? { x: COLS * TILE - p.x, y: p.y } : p;
+            // 追逐：选朝目标点的方向（曼哈顿距离最小）；每只幽灵带差异化偏移
+            const off = CHASE_OFFSETS[gi % CHASE_OFFSETS.length];
+            const target = gh.mode === 'fright' ? { x: COLS * TILE - p.x, y: p.y } : { x: p.x + off[0] * TILE, y: p.y + off[1] * TILE };
             let bestD = options[0];
             let bestDist = Infinity;
             for (const d of options) {
@@ -344,7 +357,12 @@ export default function PacMan() {
             const t = window.setTimeout(() => {
               gh.x = 9 * TILE + TILE / 2;
               gh.y = 9.5 * TILE;
+              gh.dir = 'up';
+              gh.tx = gh.x;
+              gh.ty = gh.y;
               gh.mode = 'chase';
+              gh.timer = 0;
+              gh.delay = 600;
               gh.released = false;
             }, 1200);
             gameTimersRef.current.push(t);
@@ -361,7 +379,8 @@ export default function PacMan() {
               p.dir = 'left';
               p.nextDir = 'left';
               p.invincible = 2000;
-              // 幽灵回到出生口袋（不开阔格，避免叠门/卡死）
+              // 幽灵回到出生口袋（不开阔格，避免叠门/卡死）；完整重置状态并错峰再出房，
+              // 否则残留的 dir/目标会让幽灵斜穿墙，且同时出房会挤成同步叠影
               const respawn: Array<[number, number]> = [
                 [9 * TILE + TILE / 2, 9.5 * TILE],
                 [8 * TILE + TILE / 2, 9.5 * TILE],
@@ -371,8 +390,15 @@ export default function PacMan() {
               g.ghosts.forEach((gg, i) => {
                 gg.x = respawn[i][0];
                 gg.y = respawn[i][1];
+                gg.dir = 'up';
+                gg.tx = gg.x;
+                gg.ty = gg.y;
+                gg.mode = 'chase';
+                gg.timer = 0;
+                gg.delay = i * 800;
                 gg.released = false;
               });
+              g.frightTimer = 0;
               sfx.mismatch();
             }
             break;

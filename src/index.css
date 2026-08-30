@@ -441,6 +441,8 @@ code {
   flex-direction: column;
   align-items: center;
   touch-action: none;
+  user-select: none;
+  cursor: grab;
 }
 
 .g2048-grid {

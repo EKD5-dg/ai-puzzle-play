@@ -147,6 +147,7 @@ export default function Game2048() {
   // 触摸基准带 identifier：多指持机时 changedTouches[0] 可能是另一根手指，
   // 用固定起点算滑动方向会产出错误移动（2048 移动不可逆，代价真实）
   const touchRef = useRef<{ x: number; y: number; id: number } | null>(null);
+  const mouseRef = useRef<{ x: number; y: number } | null>(null);
   const { toast } = useToast();
 
   const doMove = useCallback(
@@ -210,16 +211,27 @@ export default function Game2048() {
   const onTouchStart = (e: React.TouchEvent) => {
     touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, id: e.touches[0].identifier };
   };
+  const swipe = (dx: number, dy: number) => {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    doMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up');
+  };
   const onTouchEnd = (e: React.TouchEvent) => {
     const start = touchRef.current;
     if (!start) return;
     const end = Array.from(e.changedTouches).find((t) => t.identifier === start.id);
     if (!end) return;
     touchRef.current = null;
-    const dx = end.clientX - start.x;
-    const dy = end.clientY - start.y;
-    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
-    doMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up');
+    swipe(end.clientX - start.x, end.clientY - start.y);
+  };
+  const onMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    mouseRef.current = { x: e.clientX, y: e.clientY };
+  };
+  const onMouseUp = (e: React.MouseEvent) => {
+    const start = mouseRef.current;
+    mouseRef.current = null;
+    if (!start) return;
+    swipe(e.clientX - start.x, e.clientY - start.y);
   };
 
   return (
@@ -242,7 +254,7 @@ export default function Game2048() {
         </>
       }
     >
-      <div className="g2048" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div className="g2048" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onMouseDown={onMouseDown} onMouseUp={onMouseUp}>
         <div className="g2048-grid" style={{ gridTemplateColumns: `repeat(${SIZE}, 1fr)` }}>
           {board.map((v, i) => (
             <div key={i} className="g2048-cell" style={{ background: v ? tileColor(v) : 'rgba(238,228,218,0.35)', color: v ? tileTextColor(v) : 'transparent' }}>
@@ -264,7 +276,8 @@ export default function Game2048() {
             </button>
           </div>
         )}
-        <p className="hint">使用 ↑ ↓ ← → 或 W A S D 移动，手机可滑动</p>
+        <p className="hint">玩法：朝一个方向滑动，所有数字块整体滑过去；两个相同数字相撞会合并翻倍（2+2=4、4+4=8…），目标是合出 2048！</p>
+        <p className="hint">操作：方向键 / WASD，或用鼠标在棋盘上按住拖动、手机手指滑动</p>
       </div>
     </GameShell>
   );
