@@ -59,7 +59,7 @@ export default function MemoryMatch() {
   /** flipped 的实时镜像：连点第三张卡的防御守卫 */
   const flippedRef = useRef<number[]>([]);
   flippedRef.current = flipped;
-  const best = useBestScore(metaMemory.id);
+  const best = useBestScore(`${metaMemory.id}:${levelIdx}`);
   const { toast } = useToast();
 
   // 计时（首次翻牌开始，胜利停止）

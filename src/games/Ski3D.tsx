@@ -1123,6 +1123,9 @@ export default function Ski3D() {
             onPointerMove={updateAim}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
+            onPointerLeave={() => {
+              if (activePtrRef.current == null) worldRef.current.aim = null;
+            }}
           />
           {status === 'ready' && (
             <div className="s3d-overlay">

@@ -233,7 +233,8 @@ export default function Frogger() {
           }
           respawn();
         } else {
-          f.y = ROW_H + 6;
+          // 目标位已被占：回起点（不能推回第 1 行，那是车流带）
+          respawn();
         }
       }
 

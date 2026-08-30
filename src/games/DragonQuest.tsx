@@ -168,13 +168,25 @@ export default function DragonQuest() {
 
   /** 飘字定时器句柄（卸载时清理，避免对已卸载组件 setState） */
   const floaterTimersRef = useRef<number[]>([]);
-  useEffect(
-    () => () => {
+  /** 战斗链定时器句柄 + 挂载守卫：中途离页后迟到回调不得再结算音效/弹层/抹档 */
+  const chainTimersRef = useRef<number[]>([]);
+  const mountedRef = useRef(true);
+  const later = (fn: () => void, ms: number) => {
+    const t = window.setTimeout(() => {
+      if (mountedRef.current) fn();
+    }, ms);
+    chainTimersRef.current.push(t);
+  };
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
       floaterTimersRef.current.forEach((t) => window.clearTimeout(t));
       floaterTimersRef.current = [];
-    },
-    [],
-  );
+      chainTimersRef.current.forEach((t) => window.clearTimeout(t));
+      chainTimersRef.current = [];
+    };
+  }, []);
 
   /** 伤害飘字（monster=怪物受击，hero=勇者受击） */
   const addFloater = useCallback((text: string, kind: 'hero' | 'monster') => {
@@ -246,9 +258,9 @@ export default function DragonQuest() {
     sfx.move();
     // 怪物前冲攻击动画 + 勇者受击
     setMonsterAnim('attack');
-    window.setTimeout(() => setMonsterAnim('idle'), 560);
+    later(() => setMonsterAnim('idle'), 560);
     setHeroAnim('hurt');
-    window.setTimeout(() => setHeroAnim('idle'), 380);
+    later(() => setHeroAnim('idle'), 380);
     addFloater(`-${dmg}`, 'hero');
     if (newHp <= 0) {
       sfx.lose();
@@ -273,7 +285,7 @@ export default function DragonQuest() {
     pushLog('你挥剑斩向怪物！');
     setHeroAnim('attack');
     const dmg = Math.max(1, player.atk + rand(3) - monster.def);
-    window.setTimeout(() => {
+    later(() => {
       sfx.merge();
       setHeroAnim('idle');
       const newHp = monster.hp - dmg;
@@ -282,9 +294,9 @@ export default function DragonQuest() {
       if (newHp > 0) {
         // 阶段 2：怪物受击动画结束后，短暂僵直停顿再进入阶段 3 反击
         setMonsterAnim('hit');
-        window.setTimeout(() => {
+        later(() => {
           setMonsterAnim('idle');
-          window.setTimeout(() => monsterAttack(), 450); // 受击僵直
+          later(() => monsterAttack(), 450); // 受击僵直
         }, 320);
       } else {
         setMonsterAnim('dead');
@@ -312,7 +324,7 @@ export default function DragonQuest() {
       pushLog('你施放了火球术！🔥');
       setHeroAnim('attack');
       const dmg = Math.max(1, 10 + player.level * 2 + rand(3) - Math.floor(monster.def / 2));
-      window.setTimeout(() => {
+      later(() => {
         setHeroAnim('idle');
         const newHp = monster.hp - dmg;
         setMonster({ ...monster, hp: newHp });
@@ -320,9 +332,9 @@ export default function DragonQuest() {
         if (newHp > 0) {
           // 阶段 2：受击动画结束后短暂僵直再反击
           setMonsterAnim('hit');
-          window.setTimeout(() => {
+          later(() => {
             setMonsterAnim('idle');
-            window.setTimeout(() => monsterAttack(), 450); // 受击僵直
+            later(() => monsterAttack(), 450); // 受击僵直
           }, 320);
         } else {
           setMonsterAnim('dead');
@@ -334,7 +346,7 @@ export default function DragonQuest() {
       pushLog(`你施放了治疗术，恢复了 ${Math.min(player.maxHp, before + 12 + player.level * 2) - before} 点生命 ✨`);
       // 函数式恢复 HP（不覆盖 MP 扣减）
       setPlayer((prev) => ({ ...prev, hp: Math.min(prev.maxHp, prev.hp + 12 + prev.level * 2) }));
-      window.setTimeout(() => monsterAttack(), 350);
+      later(() => monsterAttack(), 350);
     }
   };
 
@@ -345,7 +357,7 @@ export default function DragonQuest() {
     setBusy(true);
     sfx.click();
     pushLog('你举盾防御，本回合伤害减半 🛡');
-    window.setTimeout(() => monsterAttack(2), 350);
+    later(() => monsterAttack(2), 350);
   };
 
   /** 逃跑（Boss 战不可逃跑；成功则逃回城镇满血重来） */
@@ -368,7 +380,7 @@ export default function DragonQuest() {
       sfx.mismatch();
       pushLog('逃跑失败！');
       setBusy(true);
-      window.setTimeout(() => monsterAttack(), 350);
+      later(() => monsterAttack(), 350);
     }
   };
 

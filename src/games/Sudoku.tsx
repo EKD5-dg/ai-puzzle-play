@@ -228,6 +228,7 @@ export default function Sudoku() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (won) return;
+      if (e.ctrlKey || e.altKey || e.metaKey) return; // Ctrl+1~9 切浏览器标签页不应误填
       if (e.key >= '1' && e.key <= '9') {
         inputNumber(Number(e.key));
       } else if (e.key === 'Delete' || e.key === 'Backspace') {

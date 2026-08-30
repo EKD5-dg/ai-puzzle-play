@@ -371,7 +371,7 @@ export default function Tetris() {
               <span>下一个</span>
               <div
                 className="tetris-preview"
-                style={{ gridTemplateColumns: `repeat(4, 22px)` }}
+                style={{ gridTemplateColumns: `repeat(${SHAPES[nextType].shape[0].length}, 22px)` }}
               >
                 {SHAPES[nextType].shape.flat().map((v, i) => (
                   <div

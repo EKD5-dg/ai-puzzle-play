@@ -151,6 +151,17 @@ export default function Snake() {
 
   // 触屏滑动（记录手指 id：多指时只响应最初那根手指）
   const touchRef = useRef<{ x: number; y: number; id: number } | null>(null);
+  const mouseRef = useRef<{ x: number; y: number } | null>(null);
+  const applySwipe = (dx: number, dy: number) => {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) return;
+    const d: Dir =
+      Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
+    const cur = lastAppliedRef.current;
+    const opp: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
+    if (opp[cur] !== d) {
+      dirRef.current = d;
+    }
+  };
   const onTouchStart = (e: React.TouchEvent) => {
     if (touchRef.current) return; // 忽略第二根手指，避免污染滑动基准
     const t = e.touches[0];
@@ -163,16 +174,18 @@ export default function Snake() {
     const t = Array.from(e.changedTouches).find((t) => t.identifier === base.id);
     if (!t) return; // 抬起的不是被追踪的那根手指
     touchRef.current = null; // 先清基准：短按（<20px）也要释放，否则后续触摸全部被忽略
-    const dx = t.clientX - base.x;
-    const dy = t.clientY - base.y;
-    if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) return;
-    const d: Dir =
-      Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
-    const cur = lastAppliedRef.current;
-    const opp: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
-    if (opp[cur] !== d) {
-      dirRef.current = d;
-    }
+    applySwipe(t.clientX - base.x, t.clientY - base.y);
+  };
+  const onMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    mouseRef.current = { x: e.clientX, y: e.clientY };
+    if (statusRef.current === 'ready') start();
+  };
+  const onMouseUp = (e: React.MouseEvent) => {
+    const base = mouseRef.current;
+    mouseRef.current = null;
+    if (!base) return;
+    applySwipe(e.clientX - base.x, e.clientY - base.y);
   };
 
   // 记录最高分
@@ -214,7 +227,7 @@ export default function Snake() {
         </>
       }
     >
-      <div className="snake" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div className="snake" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onMouseDown={onMouseDown} onMouseUp={onMouseUp}>
         <div
           className="snake-board"
           style={{ gridTemplateColumns: `repeat(${COLS}, var(--snake-cell, ${cell}px))` }}

@@ -106,13 +106,14 @@ export default function Minesweeper() {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (status === 'playing') {
+    // 首次翻开后才走时：开局摆姿势的时间不计入最佳时间
+    if (status === 'playing' && firstClick) {
       timerRef.current = window.setInterval(() => setTime((t) => t + 1), 1000);
     }
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
     };
-  }, [status]);
+  }, [status, firstClick]);
 
   // 通关时记录最佳时间
   useEffect(() => {
@@ -186,6 +187,7 @@ export default function Minesweeper() {
 
   // 触屏长按插旗（preventDefault 抑制 Android 原生长按 contextmenu，避免旗子插上又被取消）
   const longPressRef = useRef<{ timer: number | null; firedAt: number }>({ timer: null, firedAt: 0 });
+  const panRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const clearLongPress = () => {
     if (longPressRef.current.timer !== null) {
       window.clearTimeout(longPressRef.current.timer);
@@ -195,8 +197,8 @@ export default function Minesweeper() {
   // 卸载时清理长按定时器
   useEffect(() => clearLongPress, []);
   const touchStart = (e: React.TouchEvent, r: number, c: number) => {
-    e.preventDefault();
     clearLongPress();
+    panRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, moved: false };
     longPressRef.current.firedAt = 0;
     longPressRef.current.timer = window.setTimeout(() => {
       longPressRef.current.timer = null;
@@ -205,7 +207,22 @@ export default function Minesweeper() {
       sfx.flip();
     }, 420);
   };
+  // 移动超阈值视为滚动棋盘：取消长按且松手不翻开，保留浏览器原生横向滚动
+  const touchMove = (e: React.TouchEvent) => {
+    const p = panRef.current;
+    if (!p || p.moved) return;
+    if (Math.hypot(e.touches[0].clientX - p.x, e.touches[0].clientY - p.y) > 10) {
+      p.moved = true;
+      clearLongPress();
+    }
+  };
   const touchEnd = (e: React.TouchEvent, r: number, c: number) => {
+    const wasPan = panRef.current?.moved;
+    panRef.current = null;
+    if (wasPan) {
+      clearLongPress();
+      return; // 滚动手势：不翻开，也无需抑制 click（浏览器已按滚动处理）
+    }
     e.preventDefault(); // 阻止合成 click，避免与 touchEnd 的 reveal 冲突
     clearLongPress();
     // 短按（未触发长按）则翻开
@@ -288,6 +305,7 @@ export default function Minesweeper() {
                   flag(e, r, c);
                 }}
                 onTouchStart={(e) => touchStart(e, r, c)}
+                onTouchMove={touchMove}
                 onTouchEnd={(e) => touchEnd(e, r, c)}
                 onTouchCancel={touchCancel}
               >

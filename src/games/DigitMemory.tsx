@@ -58,7 +58,7 @@ export default function DigitMemory() {
     return () => window.clearTimeout(t);
   }, [phase]);
 
-  /** 输入完成后的统一判定（数字键输满自动触发，✓ 按钮手动触发） */
+  /** 输入完成后的统一判定（仅由 ✓ 按钮或回车手动触发） */
   const finishInput = (next: string) => {
     // 过渡定时器挂起期间拦截重复提交（连点 ✓ / 自动判定后手点）
     if (transitionRef.current !== null) return;
@@ -89,9 +89,7 @@ export default function DigitMemory() {
     if (phase !== 'input') return;
     if (input.length >= answer.length) return;
     sfx.click();
-    const next = input + d;
-    setInput(next);
-    if (next.length === answer.length) finishInput(next);
+    setInput(input + d);
   };
 
   /** 确认当前输入（输满时可用） */
@@ -116,9 +114,10 @@ export default function DigitMemory() {
         e.preventDefault(); // 阻止页面后退
         backspace();
       }
-      if (e.key === 'Enter' && (phase === 'start' || phase === 'over')) {
+      if (e.key === 'Enter') {
         e.preventDefault();
-        startGame();
+        if (phase === 'input') submit();
+        else if (phase === 'start' || phase === 'over') startGame();
       }
       if (e.key === ' ') {
         e.preventDefault(); // 阻止页面滚动（所有阶段）
@@ -201,7 +200,7 @@ export default function DigitMemory() {
             ))}
           </div>
         )}
-        <p className="hint">实体键盘 0-9 也可输入 · 数字显示 2 秒后隐藏</p>
+        <p className="hint">实体键盘 0-9 也可输入 · 数字显示 2 秒后隐藏 · 输满位数点 ✓（或回车）提交，⌫ 可修改</p>
       </div>
     </GameShell>
   );

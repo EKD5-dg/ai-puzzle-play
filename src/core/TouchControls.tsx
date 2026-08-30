@@ -53,6 +53,8 @@ export function TouchButtons({ items }: ButtonGroupProps) {
             e.preventDefault();
             it.onRelease?.();
           }}
+          onPointerCancel={() => it.onRelease?.()}
+          onLostPointerCapture={() => it.onRelease?.()}
           onPointerLeave={() => it.onRelease?.()}
         >
           {it.label}

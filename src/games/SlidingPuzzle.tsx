@@ -15,31 +15,39 @@ const LEVELS = [
 
 type Board = number[]; // 0 代表空格
 
-/** 通过多次合法滑动生成可解局面 */
+/** 目标布局：1..N-1 顺序排列，空格在右下角（玩家常识布局） */
+function goalBoard(size: number): Board {
+  const total = size * size;
+  return Array.from({ length: total }, (_, i) => (i + 1) % total);
+}
+
+/** 从目标态沿真实空格做随机合法滑动打乱——每步都是可逆的合法移动，生成的局面必然可解 */
 function shuffleBoard(size: number): Board {
   const total = size * size;
-  const board: Board = Array.from({ length: total }, (_, i) => i);
+  const board = goalBoard(size);
   let blank = total - 1;
-  let lastDir = '';
+  let lastBlank = -1;
   for (let step = 0; step < total * 60; step++) {
-    const dirs: Array<[number, string]> = [];
     const r = Math.floor(blank / size);
     const c = blank % size;
-    if (r > 0) dirs.push([blank - size, 'u']);
-    if (r < size - 1) dirs.push([blank + size, 'd']);
-    if (c > 0) dirs.push([blank - 1, 'l']);
-    if (c < size - 1) dirs.push([blank + 1, 'r']);
-    const choices = dirs.filter(([, d]) => d !== (lastDir === 'u' ? 'd' : lastDir === 'd' ? 'u' : lastDir === 'l' ? 'r' : lastDir === 'r' ? 'l' : ''));
-    const [target, d] = choices[Math.floor(Math.random() * choices.length)] ?? dirs[0];
+    const neighbors: number[] = [];
+    if (r > 0) neighbors.push(blank - size);
+    if (r < size - 1) neighbors.push(blank + size);
+    if (c > 0) neighbors.push(blank - 1);
+    if (c < size - 1) neighbors.push(blank + 1);
+    const choices = neighbors.filter((n) => n !== lastBlank);
+    const target = choices[Math.floor(Math.random() * choices.length)];
     [board[blank], board[target]] = [board[target], board[blank]];
+    lastBlank = blank;
     blank = target;
-    lastDir = d;
   }
+  // 极小概率洗回原样时重洗一次
+  if (isSolved(board)) return shuffleBoard(size);
   return board;
 }
 
 function isSolved(board: Board): boolean {
-  return board.every((v, i) => v === i);
+  return board.every((v, i) => v === goalBoard(Math.round(Math.sqrt(board.length)))[i]);
 }
 
 export default function SlidingPuzzle() {
@@ -151,7 +159,7 @@ export default function SlidingPuzzle() {
             ) : null,
           )}
         </div>
-        <p className="hint">点击空格旁边的数字方块进行滑动</p>
+        <p className="hint">玩法：点击空格旁边的数字方块滑动它，把 1~{size * size - 1} 按顺序排好、空格回到右下角即通关</p>
       </div>
     </GameShell>
   );

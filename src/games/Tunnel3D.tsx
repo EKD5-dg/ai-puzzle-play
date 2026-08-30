@@ -349,8 +349,8 @@ export default function Tunnel3D() {
       const rr = Math.max(2, RR * s);
       const hue = ring.hue;
       const seg = 40;
-      // 缺口角随前进自转：剩余深度越小转得越多 → 接近时持续旋转
-      const gapA = ring.gap + ring.spin * (FAR - z);
+      // 缺口角随接近进度自转：spin 语义=全程总转角(rad)，剩余深度越浅转得越多
+      const gapA = ring.gap + (ring.spin * (FAR - z)) / FAR;
       // 外圈辉光打底
       ctx.strokeStyle = fogA('255,255,255', 0.16, fog);
       ctx.lineWidth = Math.max(1.5, s * 0.16);
@@ -502,7 +502,9 @@ export default function Tunnel3D() {
 
         // ---- 生成：前方阈值到达时铺一批障碍（环 + 陨石 + 核心） ----
         while (w.dist >= w.nextSpawn) {
-          const zAt = Math.max(w.nextSpawn, w.dist) + FAR * 0.8;
+          // 核心跳里程后游标追平，避免多批障碍叠在同一 z 成死墙
+          w.nextSpawn = Math.max(w.nextSpawn, w.dist);
+          const zAt = w.nextSpawn + FAR * 0.8;
           const diff = clamp(w.dist / 2500, 0, 1);
           // 能量环：必出，难度越高缺口越窄、转得越快
           const halfDeg = (GAP_DEG_EARLY - (GAP_DEG_EARLY - GAP_DEG_LATE) * diff) / 2;
@@ -553,8 +555,8 @@ export default function Tunnel3D() {
           const z = rg.z - w.dist;
           if (!rg.judged && z <= 0) {
             rg.judged = true;
-            if (z > -0.6 && w.invuln <= 0) {
-              const gapA = rg.gap + rg.spin * (FAR - (rg.z - w.dist));
+            if (z > -1.2 && w.invuln <= 0) {
+              const gapA = rg.gap + (rg.spin * (FAR - (rg.z - w.dist))) / FAR;
               // 穿环瞬间贴墙也算撞（缺口外且几乎贴壁）
               const outsideGap = Math.abs(angDiff(pAng, gapA)) > rg.half - 0.06;
               if (outsideGap) {
@@ -582,7 +584,7 @@ export default function Tunnel3D() {
           const z = rk.z - w.dist;
           if (!rk.judged && z <= 0) {
             rk.judged = true;
-            if (z > -0.6 && w.invuln <= 0) {
+            if (z > -1.2 && w.invuln <= 0) {
               const wob = rk.a + Math.sin(t * 1.2 + rk.seed * 9) * 0.04;
               const rx = Math.cos(wob) * rk.r;
               const ry = Math.sin(wob) * rk.r;
@@ -625,6 +627,7 @@ export default function Tunnel3D() {
               sfx.match();
               if (w.combo > 1) toast(`✨ 能量核心 ×${w.combo} 连击！里程 +${jump}m`, 'success');
               w.coreArr.splice(i, 1);
+              continue;
             }
           }
           if (z < -0.5 || z > FAR * 1.2) w.coreArr.splice(i, 1);
