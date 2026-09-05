@@ -1161,7 +1161,7 @@ export default function Tactics3D() {
         if (w.sel.moved) {
           // 移动后必须了结行动：只认攻击目标
           if (u && u.side === 1 && w.attackSet.has(u.id)) strike(su, u, false, 'playerAct');
-          else if (u && u.side === 1) toastRef.current('超出攻击范围：先移动到射程之内', 'info');
+          else if (u && u.side === 1) toastRef.current('目标在射程之外：取消可撤回移动，或选防御 / 待机', 'info');
           return;
         }
         if (u && u.side === 0) {
@@ -1628,6 +1628,11 @@ export default function Tactics3D() {
         ctx.fill();
         // 攻击目标高亮
         if (w.attackSet.has(u.id)) fillDiamond(sx, sy, 'rgba(255,70,90,0.30)');
+      } else if (w.attackSet.has(u.id)) {
+        // 幽灵层补画攻击菱形：常态层的菱形会被前景地块盖住，被遮挡的可攻击目标也要保留"能打"标记
+        ctx.globalAlpha = 0.5;
+        fillDiamond(sx, sy, 'rgba(255,70,90,0.30)');
+        ctx.globalAlpha = 1;
       }
       // 队伍/状态环（幽灵层同样绘制：被遮挡的单位靠它定位）
       const pulse = 2.4 + Math.sin(now / 140) * 0.9;
@@ -1643,8 +1648,12 @@ export default function Tactics3D() {
         ctx.lineWidth = 2.4;
       } else if (u.acted && u.side === 0) {
         ctx.strokeStyle = 'rgba(170,180,200,0.45)';
+      } else if (u.side === 1) {
+        // 敌方常态圈调暗收细：与 attackSet 的脉冲攻击圈拉开层级，避免"有红圈=能打"的误读
+        ctx.strokeStyle = 'rgba(255,95,115,0.38)';
+        ctx.lineWidth = 1.6;
       } else {
-        ctx.strokeStyle = u.side === 0 ? 'rgba(90,160,255,0.75)' : 'rgba(255,95,115,0.75)';
+        ctx.strokeStyle = 'rgba(90,160,255,0.75)';
       }
       ctx.globalAlpha = ghost ? 0.45 : 1;
       ctx.beginPath();
