@@ -1143,8 +1143,11 @@ export default function Tactics3D() {
       if (statusRef.current !== 'playing' || w.over || w.phase !== 'player' || w.busy) return;
       const hit = hitTest(mx, my);
       if (!hit) {
-        if (w.sel) clearSel(false);
-        else if (w.inspect != null) {
+        if (w.sel) {
+          // 移动后未了结行动时点画布空白：与棋盘内一致，保持选中等待攻击/防御/待机/取消，
+          // 否则"选择→移动→点空白→再选择"可绕过行动锁定无限移动
+          if (!w.sel.moved) clearSel(false);
+        } else if (w.inspect != null) {
           w.inspect = null;
           w.danger = null;
           bump();
@@ -1158,6 +1161,7 @@ export default function Tactics3D() {
         if (w.sel.moved) {
           // 移动后必须了结行动：只认攻击目标
           if (u && u.side === 1 && w.attackSet.has(u.id)) strike(su, u, false, 'playerAct');
+          else if (u && u.side === 1) toastRef.current('超出攻击范围：先移动到射程之内', 'info');
           return;
         }
         if (u && u.side === 0) {
@@ -1297,6 +1301,32 @@ export default function Tactics3D() {
 
     // ---- 定时队列 ----
 
+    /** 胜负判定（幂等）：延迟 checkEnd 与敌方阶段收尾（endEnemy）共用。
+     *  必须先于 endEnemy 的回合自增执行——最后一击若来自敌方阶段中的反击，
+     *  否则回合数会先 +1 再结算，"最少回合"纪录被虚增 1。 */
+    function judgeEnd(): void {
+      const w = wq();
+      if (w.over) return;
+      if (alive(1).length === 0) {
+        w.over = true;
+        sfx.win();
+        const isNew = bestRef.current.updateBest(w.turn, (a, b) => a < b);
+        setStatus('won');
+        if (isNew) {
+          sfx.record();
+          toastRef.current(`🏆 新纪录！仅 ${w.turn} 回合全歼敌军`, 'record');
+        } else {
+          toastRef.current(`🏆 大获全胜！用时 ${w.turn} 回合`, 'success');
+        }
+      } else if (alive(0).length === 0) {
+        w.over = true;
+        sfx.lose();
+        setStatus('lost');
+        toastRef.current('💀 全军覆没……调整战术再来一局', 'info');
+      }
+      if (w.over) bump();
+    }
+
     function processQueue(now: number) {
       const w = wq();
       if (w.queue.length > 1) w.queue.sort((a, b) => a.at - b.at);
@@ -1378,7 +1408,7 @@ export default function Tactics3D() {
           case 'enemyGo': {
             const u = s.attId != null ? byId(s.attId) : undefined;
             const t = s.defId != null ? byId(s.defId) : undefined;
-            if (u && !u.dead && t && !t.dead) w.queue.push({ at: now + 40, type: 'dmg', attId: u.id, defId: t.id, counter: false, done: 'enemyNext' });
+            if (u && !u.dead && t && !t.dead) w.queue.push({ at: now + 40, type: 'dmg', attId: u.id, defId: t.id, origin: u.id, counter: false, done: 'enemyNext' });
             else w.queue.push({ at: now + 80, type: 'nextEnemy' });
             break;
           }
@@ -1408,6 +1438,8 @@ export default function Tactics3D() {
           }
           case 'endEnemy': {
             if (w.phase !== 'enemy' || w.over) break;
+            judgeEnd();
+            if (w.over) break;
             w.phase = 'player';
             w.turn++;
             for (const h of alive(0)) {
@@ -1419,25 +1451,7 @@ export default function Tactics3D() {
             break;
           }
           case 'checkEnd': {
-            if (w.over) break;
-            if (alive(1).length === 0) {
-              w.over = true;
-              sfx.win();
-              const isNew = bestRef.current.updateBest(w.turn, (a, b) => a < b);
-              setStatus('won');
-              if (isNew) {
-                sfx.record();
-                toastRef.current(`🏆 新纪录！仅 ${w.turn} 回合全歼敌军`, 'record');
-              } else {
-                toastRef.current(`🏆 大获全胜！用时 ${w.turn} 回合`, 'success');
-              }
-            } else if (alive(0).length === 0) {
-              w.over = true;
-              sfx.lose();
-              setStatus('lost');
-              toastRef.current('💀 全军覆没……调整战术再来一局', 'info');
-            }
-            bump();
+            judgeEnd();
             break;
           }
         }
