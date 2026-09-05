@@ -18,9 +18,18 @@ export function GameShell({ meta, stats, onBack, children }: GameShellProps) {
   return (
     <div className="game-page">
       <header className="game-header">
-        <button className="btn btn-ghost" onClick={onBack}>
-          ← 返回大厅
-        </button>
+        <div className="game-header-top">
+          <button className="btn btn-ghost" onClick={onBack}>
+            ← 返回大厅
+          </button>
+          <a
+            className="btn btn-ghost game-feedback-link"
+            href="mailto:1846460160@qq.com?subject=PuzzlePlay%20%E9%97%AE%E9%A2%98%E5%8F%8D%E9%A6%88"
+            title="通过邮件反馈问题或建议"
+          >
+            ✉ 问题反馈
+          </a>
+        </div>
         <div className="game-title-row">
           <span className="game-icon" aria-hidden>
             {meta.icon}

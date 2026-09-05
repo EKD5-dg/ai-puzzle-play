@@ -510,12 +510,21 @@ export default function App() {
           )}
 
           <footer className="lobby-footer">
-            <button
-              className="btn donate-footer-btn"
-              onClick={() => window.dispatchEvent(new CustomEvent('pp:donate-open'))}
-            >
-              ☕ 请作者喝杯咖啡
-            </button>
+            <div className="footer-actions">
+              <button
+                className="btn donate-footer-btn"
+                onClick={() => window.dispatchEvent(new CustomEvent('pp:donate-open'))}
+              >
+                ☕ 请作者喝杯咖啡
+              </button>
+              <a
+                className="btn feedback-mail-btn"
+                href="mailto:1846460160@qq.com?subject=PuzzlePlay%20%E9%97%AE%E9%A2%98%E5%8F%8D%E9%A6%88"
+                title="通过邮件反馈问题或建议"
+              >
+                ✉ 问题反馈请联系邮箱：1846460160@qq.com
+              </a>
+            </div>
             <details className="dev-guide">
               <summary>🛠 开发者指南：如何新增游戏？</summary>
               <p>
