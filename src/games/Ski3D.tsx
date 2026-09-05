@@ -281,23 +281,23 @@ export default function Ski3D() {
     /** 远雾混合：k=0 原色，k→1 融入雪白 */
     const fogged = (rgb: string, k: number) => `rgba(${rgb},${(1 - k * 0.82).toFixed(3)})`;
 
-    /** 雪松：渐变树干 + 三层下垂针叶（含底部阴影、中央体积高亮、层间雪盖） */
-    const drawPine = (bx: number, by: number, h: number, tw: number, fog: number) => {
+    /** 雪松画笔：渐变树干 + 三层下垂针叶（含底部阴影、中央体积高亮、层间雪盖），画到指定上下文 */
+    const paintPine = (g: CanvasRenderingContext2D, bx: number, by: number, h: number, tw: number, fog: number) => {
       const trunkH = h * 0.2;
       const trunkW = tw * 0.16;
       // 树干（左亮右暗渐变）
-      const tg = ctx.createLinearGradient(bx - trunkW, 0, bx + trunkW, 0);
+      const tg = g.createLinearGradient(bx - trunkW, 0, bx + trunkW, 0);
       tg.addColorStop(0, fogged('134,88,48', fog));
       tg.addColorStop(0.55, fogged('96,64,34', fog));
       tg.addColorStop(1, fogged('54,36,20', fog));
-      ctx.fillStyle = tg;
-      ctx.beginPath();
-      ctx.moveTo(bx - trunkW, by);
-      ctx.lineTo(bx - trunkW * 0.7, by - trunkH);
-      ctx.lineTo(bx + trunkW * 0.7, by - trunkH);
-      ctx.lineTo(bx + trunkW, by);
-      ctx.closePath();
-      ctx.fill();
+      g.fillStyle = tg;
+      g.beginPath();
+      g.moveTo(bx - trunkW, by);
+      g.lineTo(bx - trunkW * 0.7, by - trunkH);
+      g.lineTo(bx + trunkW * 0.7, by - trunkH);
+      g.lineTo(bx + trunkW, by);
+      g.closePath();
+      g.fill();
 
       // 三层针叶（底→顶逐层收窄）
       const baseYs = [by - trunkH, by - h * 0.42, by - h * 0.64];
@@ -309,55 +309,55 @@ export default function Ski3D() {
         const hw = halfWs[l];
         const sag = (aY - bY) * 0.16; // 底缘下垂
         // 主体
-        ctx.fillStyle = fogged('45,96,60', fog);
-        ctx.beginPath();
-        ctx.moveTo(bx - hw, bY);
-        ctx.quadraticCurveTo(bx, bY + sag, bx + hw, bY);
-        ctx.lineTo(bx, aY);
-        ctx.closePath();
-        ctx.fill();
+        g.fillStyle = fogged('45,96,60', fog);
+        g.beginPath();
+        g.moveTo(bx - hw, bY);
+        g.quadraticCurveTo(bx, bY + sag, bx + hw, bY);
+        g.lineTo(bx, aY);
+        g.closePath();
+        g.fill();
         // 底部深色阴影带
-        ctx.strokeStyle = fogged('27,64,42', fog);
-        ctx.lineWidth = Math.max(1, tw * 0.05);
-        ctx.beginPath();
-        ctx.moveTo(bx - hw, bY);
-        ctx.quadraticCurveTo(bx, bY + sag, bx + hw, bY);
-        ctx.stroke();
+        g.strokeStyle = fogged('27,64,42', fog);
+        g.lineWidth = Math.max(1, tw * 0.05);
+        g.beginPath();
+        g.moveTo(bx - hw, bY);
+        g.quadraticCurveTo(bx, bY + sag, bx + hw, bY);
+        g.stroke();
         // 中央体积高亮
-        ctx.fillStyle = fogged('72,124,84', fog);
-        ctx.beginPath();
-        ctx.moveTo(bx - hw * 0.12, bY);
-        ctx.quadraticCurveTo(bx, bY + sag * 0.5, bx + hw * 0.12, bY);
-        ctx.lineTo(bx, aY);
-        ctx.closePath();
-        ctx.fill();
+        g.fillStyle = fogged('72,124,84', fog);
+        g.beginPath();
+        g.moveTo(bx - hw * 0.12, bY);
+        g.quadraticCurveTo(bx, bY + sag * 0.5, bx + hw * 0.12, bY);
+        g.lineTo(bx, aY);
+        g.closePath();
+        g.fill();
         // 两侧雪盖（沿上缘）
-        ctx.fillStyle = fogged('242,249,254', fog);
-        ctx.beginPath();
-        ctx.moveTo(bx, aY);
-        ctx.lineTo(bx - hw, bY);
-        ctx.quadraticCurveTo(bx - hw * 0.55, (aY + bY) / 2, bx - hw * 0.14, aY + (bY - aY) * 0.3);
-        ctx.closePath();
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(bx, aY);
-        ctx.lineTo(bx + hw, bY);
-        ctx.quadraticCurveTo(bx + hw * 0.55, (aY + bY) / 2, bx + hw * 0.14, aY + (bY - aY) * 0.3);
-        ctx.closePath();
-        ctx.fill();
+        g.fillStyle = fogged('242,249,254', fog);
+        g.beginPath();
+        g.moveTo(bx, aY);
+        g.lineTo(bx - hw, bY);
+        g.quadraticCurveTo(bx - hw * 0.55, (aY + bY) / 2, bx - hw * 0.14, aY + (bY - aY) * 0.3);
+        g.closePath();
+        g.fill();
+        g.beginPath();
+        g.moveTo(bx, aY);
+        g.lineTo(bx + hw, bY);
+        g.quadraticCurveTo(bx + hw * 0.55, (aY + bY) / 2, bx + hw * 0.14, aY + (bY - aY) * 0.3);
+        g.closePath();
+        g.fill();
       }
       // 顶部雪尖
-      ctx.fillStyle = fogged('248,251,254', fog);
-      ctx.beginPath();
-      ctx.moveTo(bx - tw * 0.14, by - h * 0.93);
-      ctx.lineTo(bx + tw * 0.14, by - h * 0.93);
-      ctx.lineTo(bx, by - h);
-      ctx.closePath();
-      ctx.fill();
+      g.fillStyle = fogged('248,251,254', fog);
+      g.beginPath();
+      g.moveTo(bx - tw * 0.14, by - h * 0.93);
+      g.lineTo(bx + tw * 0.14, by - h * 0.93);
+      g.lineTo(bx, by - h);
+      g.closePath();
+      g.fill();
     };
 
-    /** 雪人：渐变立体三球 + 树枝手臂 + 围巾 + 针织帽 + 脸部细节 + 纽扣 */
-    const drawSnowman = (bx: number, by: number, u: number, fog: number) => {
+    /** 雪人画笔：渐变立体三球 + 树枝手臂 + 围巾 + 针织帽 + 脸部细节 + 纽扣 */
+    const paintSnowman = (g: CanvasRenderingContext2D, bx: number, by: number, u: number, fog: number) => {
       // 三个雪球（左亮右暗径向渐变）
       const balls: Array<[number, number]> = [
         [by - u * 0.42, u * 0.52],
@@ -365,98 +365,98 @@ export default function Ski3D() {
         [by - u * 1.6, u * 0.26],
       ];
       for (const [cy, r] of balls) {
-        const g = ctx.createRadialGradient(bx - r * 0.35, cy - r * 0.4, r * 0.08, bx, cy, r);
-        g.addColorStop(0, fogged('255,255,255', fog));
-        g.addColorStop(0.72, fogged('238,245,251', fog));
-        g.addColorStop(1, fogged('198,213,229', fog));
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(bx, cy, r, 0, Math.PI * 2);
-        ctx.fill();
+        const grad = g.createRadialGradient(bx - r * 0.35, cy - r * 0.4, r * 0.08, bx, cy, r);
+        grad.addColorStop(0, fogged('255,255,255', fog));
+        grad.addColorStop(0.72, fogged('238,245,251', fog));
+        grad.addColorStop(1, fogged('198,213,229', fog));
+        g.fillStyle = grad;
+        g.beginPath();
+        g.arc(bx, cy, r, 0, Math.PI * 2);
+        g.fill();
       }
 
       // 树枝手臂（从中球伸出，带分叉）
-      ctx.strokeStyle = fogged('112,76,44', fog);
-      ctx.lineCap = 'round';
-      ctx.lineWidth = Math.max(1.2, u * 0.04);
+      g.strokeStyle = fogged('112,76,44', fog);
+      g.lineCap = 'round';
+      g.lineWidth = Math.max(1.2, u * 0.04);
       for (const dir of [-1, 1]) {
         const shx = bx + dir * u * 0.32;
         const shy = by - u * 1.08;
         const elx = bx + dir * u * 0.66;
         const ely = by - u * 0.92;
-        ctx.beginPath();
-        ctx.moveTo(shx, shy);
-        ctx.lineTo(elx, ely);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(elx, ely);
-        ctx.lineTo(elx + dir * u * 0.14, ely - u * 0.12);
-        ctx.stroke();
+        g.beginPath();
+        g.moveTo(shx, shy);
+        g.lineTo(elx, ely);
+        g.stroke();
+        g.beginPath();
+        g.moveTo(elx, ely);
+        g.lineTo(elx + dir * u * 0.14, ely - u * 0.12);
+        g.stroke();
       }
 
       // 围巾（绕脖 + 垂带）
       const neckY = by - u * 1.36;
-      ctx.fillStyle = fogged('226,74,66', fog);
-      ctx.beginPath();
-      ctx.ellipse(bx, neckY, u * 0.3, u * 0.1, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(bx + u * 0.05, neckY);
-      ctx.quadraticCurveTo(bx + u * 0.22, neckY + u * 0.1, bx + u * 0.14, neckY + u * 0.32);
-      ctx.lineTo(bx + u * 0.08, neckY + u * 0.3);
-      ctx.quadraticCurveTo(bx + u * 0.1, neckY + u * 0.08, bx - u * 0.02, neckY);
-      ctx.closePath();
-      ctx.fill();
+      g.fillStyle = fogged('226,74,66', fog);
+      g.beginPath();
+      g.ellipse(bx, neckY, u * 0.3, u * 0.1, 0, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.moveTo(bx + u * 0.05, neckY);
+      g.quadraticCurveTo(bx + u * 0.22, neckY + u * 0.1, bx + u * 0.14, neckY + u * 0.32);
+      g.lineTo(bx + u * 0.08, neckY + u * 0.3);
+      g.quadraticCurveTo(bx + u * 0.1, neckY + u * 0.08, bx - u * 0.02, neckY);
+      g.closePath();
+      g.fill();
 
       // 针织帽（蓝色帽体 + 白色折边 + 毛球）
       const headY = by - u * 1.6;
       const headR = u * 0.26;
-      ctx.fillStyle = fogged('58,120,224', fog);
-      ctx.beginPath();
-      ctx.moveTo(bx - headR * 0.92, headY - u * 0.08);
-      ctx.quadraticCurveTo(bx - headR * 0.6, headY - u * 0.34, bx, headY - u * 0.36);
-      ctx.quadraticCurveTo(bx + headR * 0.6, headY - u * 0.34, bx + headR * 0.92, headY - u * 0.08);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = fogged('236,242,250', fog);
-      ctx.beginPath();
-      ctx.ellipse(bx, headY - u * 0.08, headR * 0.95, u * 0.07, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = fogged('250,251,253', fog);
-      ctx.beginPath();
-      ctx.arc(bx, headY - u * 0.42, u * 0.07, 0, Math.PI * 2);
-      ctx.fill();
+      g.fillStyle = fogged('58,120,224', fog);
+      g.beginPath();
+      g.moveTo(bx - headR * 0.92, headY - u * 0.08);
+      g.quadraticCurveTo(bx - headR * 0.6, headY - u * 0.34, bx, headY - u * 0.36);
+      g.quadraticCurveTo(bx + headR * 0.6, headY - u * 0.34, bx + headR * 0.92, headY - u * 0.08);
+      g.closePath();
+      g.fill();
+      g.fillStyle = fogged('236,242,250', fog);
+      g.beginPath();
+      g.ellipse(bx, headY - u * 0.08, headR * 0.95, u * 0.07, 0, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = fogged('250,251,253', fog);
+      g.beginPath();
+      g.arc(bx, headY - u * 0.42, u * 0.07, 0, Math.PI * 2);
+      g.fill();
 
       // 脸：眼睛、胡萝卜鼻、微笑
-      ctx.fillStyle = fogged('34,38,46', fog);
-      ctx.beginPath();
-      ctx.arc(bx - u * 0.09, headY - u * 0.02, u * 0.032, 0, Math.PI * 2);
-      ctx.arc(bx + u * 0.09, headY - u * 0.02, u * 0.032, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = fogged('242,142,42', fog);
-      ctx.beginPath();
-      ctx.moveTo(bx, headY);
-      ctx.lineTo(bx - u * 0.05, headY + u * 0.12);
-      ctx.lineTo(bx + u * 0.05, headY + u * 0.12);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = fogged('52,58,66', fog);
-      ctx.lineWidth = Math.max(1, u * 0.025);
-      ctx.beginPath();
-      ctx.arc(bx, headY + u * 0.06, u * 0.12, Math.PI * 0.15, Math.PI * 0.85);
-      ctx.stroke();
+      g.fillStyle = fogged('34,38,46', fog);
+      g.beginPath();
+      g.arc(bx - u * 0.09, headY - u * 0.02, u * 0.032, 0, Math.PI * 2);
+      g.arc(bx + u * 0.09, headY - u * 0.02, u * 0.032, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = fogged('242,142,42', fog);
+      g.beginPath();
+      g.moveTo(bx, headY);
+      g.lineTo(bx - u * 0.05, headY + u * 0.12);
+      g.lineTo(bx + u * 0.05, headY + u * 0.12);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = fogged('52,58,66', fog);
+      g.lineWidth = Math.max(1, u * 0.025);
+      g.beginPath();
+      g.arc(bx, headY + u * 0.06, u * 0.12, Math.PI * 0.15, Math.PI * 0.85);
+      g.stroke();
 
       // 纽扣
-      ctx.fillStyle = fogged('52,58,66', fog);
+      g.fillStyle = fogged('52,58,66', fog);
       for (const sy of [by - u * 0.98, by - u * 0.8, by - u * 0.62]) {
-        ctx.beginPath();
-        ctx.arc(bx, sy, u * 0.035, 0, Math.PI * 2);
-        ctx.fill();
+        g.beginPath();
+        g.arc(bx, sy, u * 0.035, 0, Math.PI * 2);
+        g.fill();
       }
     };
 
-    /** 岩石：不规则五边形棱角 + 左亮右暗受光 + 落地阴影 + 顶部积雪 */
-    const drawRock = (bx: number, by: number, w: number, fog: number, seed: number) => {
+    /** 岩石画笔：不规则五边形棱角 + 左亮右暗受光 + 落地阴影 + 顶部积雪 */
+    const paintRock = (g: CanvasRenderingContext2D, bx: number, by: number, w: number, fog: number, seed: number) => {
       const h = w * (0.5 + seed * 0.3); // 高度
       const dx = (seed - 0.5) * w * 0.6; // 顶点横向偏移（不规则感）
       const L = { x: bx - w, y: by }; // 左下
@@ -466,53 +466,199 @@ export default function Ski3D() {
       const R = { x: bx + w, y: by }; // 右下
 
       // 落地阴影
-      ctx.fillStyle = 'rgba(60,80,110,0.22)';
-      ctx.beginPath();
-      ctx.ellipse(bx, by, w * 1.05, w * 0.18, 0, 0, Math.PI * 2);
-      ctx.fill();
+      g.fillStyle = 'rgba(60,80,110,0.22)';
+      g.beginPath();
+      g.ellipse(bx, by, w * 1.05, w * 0.18, 0, 0, Math.PI * 2);
+      g.fill();
 
       // 主体（中灰）
-      ctx.fillStyle = fogged('104,110,124', fog);
-      ctx.beginPath();
-      ctx.moveTo(L.x, L.y);
-      ctx.lineTo(LS.x, LS.y);
-      ctx.lineTo(P.x, P.y);
-      ctx.lineTo(RS.x, RS.y);
-      ctx.lineTo(R.x, R.y);
-      ctx.closePath();
-      ctx.fill();
+      g.fillStyle = fogged('104,110,124', fog);
+      g.beginPath();
+      g.moveTo(L.x, L.y);
+      g.lineTo(LS.x, LS.y);
+      g.lineTo(P.x, P.y);
+      g.lineTo(RS.x, RS.y);
+      g.lineTo(R.x, R.y);
+      g.closePath();
+      g.fill();
 
       // 左侧受光面（较亮）
-      ctx.fillStyle = fogged('150,158,172', fog);
-      ctx.beginPath();
-      ctx.moveTo(L.x, L.y);
-      ctx.lineTo(LS.x, LS.y);
-      ctx.lineTo(P.x, P.y);
-      ctx.lineTo((P.x + L.x) / 2, by - h * 0.22);
-      ctx.closePath();
-      ctx.fill();
+      g.fillStyle = fogged('150,158,172', fog);
+      g.beginPath();
+      g.moveTo(L.x, L.y);
+      g.lineTo(LS.x, LS.y);
+      g.lineTo(P.x, P.y);
+      g.lineTo((P.x + L.x) / 2, by - h * 0.22);
+      g.closePath();
+      g.fill();
 
       // 右侧背光面（较暗）
-      ctx.fillStyle = fogged('70,76,90', fog);
-      ctx.beginPath();
-      ctx.moveTo(P.x, P.y);
-      ctx.lineTo(RS.x, RS.y);
-      ctx.lineTo(R.x, R.y);
-      ctx.lineTo((P.x + R.x) / 2, by - h * 0.26);
-      ctx.closePath();
-      ctx.fill();
+      g.fillStyle = fogged('70,76,90', fog);
+      g.beginPath();
+      g.moveTo(P.x, P.y);
+      g.lineTo(RS.x, RS.y);
+      g.lineTo(R.x, R.y);
+      g.lineTo((P.x + R.x) / 2, by - h * 0.26);
+      g.closePath();
+      g.fill();
 
       // 顶部积雪
-      ctx.strokeStyle = fogged('240,247,253', fog);
-      ctx.lineWidth = Math.max(2, w * 0.13);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(LS.x, LS.y);
-      ctx.lineTo(P.x, P.y);
-      ctx.lineTo(RS.x, RS.y);
-      ctx.stroke();
+      g.strokeStyle = fogged('240,247,253', fog);
+      g.lineWidth = Math.max(2, w * 0.13);
+      g.lineCap = 'round';
+      g.lineJoin = 'round';
+      g.beginPath();
+      g.moveTo(LS.x, LS.y);
+      g.lineTo(P.x, P.y);
+      g.lineTo(RS.x, RS.y);
+      g.stroke();
     };
+
+    // ============ 离屏预渲染 ============
+    // 松树/雪人/岩石/宝石与天空、地面、远山全部一次性烘成离屏画布，每帧只做
+    // 约百次 drawImage。原先每帧 2000+ 次路径构建与 ~50 个渐变创建会周期性
+    // 撑爆画布命令缓冲，触发同步冲刷（实测主线程长任务 60~1800ms，即"一卡一卡"）。
+    const FOG_LEVELS = 8;
+    const fogIdx = (fog: number) => clamp(Math.round(fog * (FOG_LEVELS - 1)), 0, FOG_LEVELS - 1);
+
+    const mkCanvas = (w: number, h: number) => {
+      const c = document.createElement('canvas');
+      c.width = Math.ceil(w * dpr);
+      c.height = Math.ceil(h * dpr);
+      const g = c.getContext('2d')!;
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { c, g };
+    };
+
+    // —— 雪松精灵：规范 h=340 / tw=100，运行时按目标 h、tw 非均匀缩放 ——
+    const PINE_H = 340;
+    const PINE_TW = 100;
+    const pineSprites = Array.from({ length: FOG_LEVELS }, (_, i) => {
+      const { c, g } = mkCanvas(PINE_TW * 2.2, 360);
+      paintPine(g, PINE_TW * 1.1, 344, PINE_H, PINE_TW, i / (FOG_LEVELS - 1));
+      return c;
+    });
+    const blitPine = (bx: number, by: number, hPx: number, twPx: number, fog: number) => {
+      const k = hPx / PINE_H;
+      ctx.drawImage(pineSprites[fogIdx(fog)], bx - twPx * 1.1, by - 344 * k, twPx * 2.2, 360 * k);
+    };
+
+    // —— 雪人精灵：规范 u=120 ——
+    const SNOW_U = 120;
+    const snowSprites = Array.from({ length: FOG_LEVELS }, (_, i) => {
+      const { c, g } = mkCanvas(SNOW_U * 1.7, SNOW_U * 2.35);
+      paintSnowman(g, SNOW_U * 0.85, SNOW_U * 2.2, SNOW_U, i / (FOG_LEVELS - 1));
+      return c;
+    });
+    const blitSnowman = (bx: number, by: number, uPx: number, fog: number) => {
+      ctx.drawImage(snowSprites[fogIdx(fog)], bx - uPx * 0.85, by - uPx * 2.2, uPx * 1.7, uPx * 2.35);
+    };
+
+    // —— 岩石精灵：形状按 seed 量化 4 档 × 雾 8 档 ——
+    const ROCK_W = 90;
+    const rockSprites = Array.from({ length: 4 }, (_, v) => {
+      const seed = (v + 0.5) / 4;
+      return Array.from({ length: FOG_LEVELS }, (_, i) => {
+        const { c, g } = mkCanvas(ROCK_W * 2.2, 100);
+        paintRock(g, ROCK_W * 1.1, 80, ROCK_W, i / (FOG_LEVELS - 1), seed);
+        return c;
+      });
+    });
+    const blitRock = (bx: number, by: number, wPx: number, fog: number, seed: number) => {
+      const v = Math.min(3, Math.floor(seed * 4));
+      ctx.drawImage(rockSprites[v][fogIdx(fog)], bx - wPx * 1.1, by - wPx * (80 / 90), wPx * 2.2, wPx * (100 / 90));
+    };
+
+    // —— 宝石精灵：光晕+菱形+描边+高光+反光，规范 r=40；闪光星芒仍实时绘制 ——
+    const GEM_R = 40;
+    const gemSprites = Array.from({ length: FOG_LEVELS }, (_, i) => {
+      const fog = i / (FOG_LEVELS - 1);
+      const { c, g } = mkCanvas(GEM_R * 5.6, GEM_R * 5.6);
+      const cx = GEM_R * 2.8;
+      const glow = g.createRadialGradient(cx, cx, GEM_R * 0.3, cx, cx, GEM_R * 2.6);
+      glow.addColorStop(0, `rgba(120,240,255,${(0.5 - fog * 0.4).toFixed(3)})`);
+      glow.addColorStop(1, 'rgba(120,240,255,0)');
+      g.fillStyle = glow;
+      g.beginPath();
+      g.arc(cx, cx, GEM_R * 2.6, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = fogged('94,225,255', fog);
+      g.beginPath();
+      g.moveTo(cx, cx - GEM_R * 1.3);
+      g.lineTo(cx + GEM_R, cx);
+      g.lineTo(cx, cx + GEM_R * 1.3);
+      g.lineTo(cx - GEM_R, cx);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = `rgba(50,160,200,${(0.85 - fog * 0.5).toFixed(3)})`;
+      g.lineWidth = Math.max(0.8, GEM_R * 0.1);
+      g.stroke();
+      g.fillStyle = `rgba(255,255,255,${(0.7 - fog * 0.45).toFixed(3)})`;
+      g.beginPath();
+      g.moveTo(cx, cx - GEM_R * 1.3);
+      g.lineTo(cx + GEM_R * 0.55, cx - GEM_R * 0.4);
+      g.lineTo(cx - GEM_R * 0.55, cx - GEM_R * 0.4);
+      g.closePath();
+      g.fill();
+      g.fillStyle = `rgba(60,180,220,${(0.5 - fog * 0.35).toFixed(3)})`;
+      g.beginPath();
+      g.moveTo(cx - GEM_R * 0.5, cx + GEM_R * 0.32);
+      g.lineTo(cx + GEM_R * 0.5, cx + GEM_R * 0.32);
+      g.lineTo(cx, cx + GEM_R * 0.9);
+      g.closePath();
+      g.fill();
+      return c;
+    });
+    const blitGem = (cx: number, cy: number, rPx: number, fog: number) => {
+      ctx.drawImage(gemSprites[fogIdx(fog)], cx - rPx * 2.8, cy - rPx * 2.8, rPx * 5.6, rPx * 5.6);
+    };
+
+    // —— 天空+太阳（整幅） ——
+    const bgSky = mkCanvas(RW + 16, HOR + 8);
+    {
+      const g = bgSky.g;
+      const sky = g.createLinearGradient(0, 8, 0, HOR + 8);
+      sky.addColorStop(0, '#2c4c8a');
+      sky.addColorStop(1, '#bcd8f2');
+      g.fillStyle = sky;
+      g.fillRect(0, 0, RW + 16, HOR + 8);
+      const sun = g.createRadialGradient(RW * 0.76 + 8, HOR * 0.42 + 8, 4, RW * 0.76 + 8, HOR * 0.42 + 8, 46);
+      sun.addColorStop(0, 'rgba(255,244,214,0.95)');
+      sun.addColorStop(1, 'rgba(255,244,214,0)');
+      g.fillStyle = sun;
+      g.fillRect(RW * 0.76 - 46 + 8, HOR * 0.42 - 46 + 8, 92, 92);
+    }
+
+    // —— 雪坡地面（整幅） ——
+    const bgGround = mkCanvas(RW + 16, RH - HOR + 8);
+    {
+      const g = bgGround.g;
+      const snow = g.createLinearGradient(0, 0, 0, RH - HOR);
+      snow.addColorStop(0, '#dbe9f7');
+      snow.addColorStop(1, '#f4f9ff');
+      g.fillStyle = snow;
+      g.fillRect(0, 0, RW + 16, RH - HOR + 8);
+    }
+
+    // —— 远山两层剪影（含视差余量，运行时按 camX 平移贴图） ——
+    const RIDGE_M = 32;
+    const RIDGE_H = 72;
+    const mkRidge = (pts: number[], top: string, bottom: string) => {
+      const { c, g } = mkCanvas(RW + RIDGE_M * 2, RIDGE_H);
+      const grad = g.createLinearGradient(0, RIDGE_H - 80, 0, RIDGE_H);
+      grad.addColorStop(0, top);
+      grad.addColorStop(1, bottom);
+      g.fillStyle = grad;
+      g.beginPath();
+      g.moveTo(0, RIDGE_H);
+      pts.forEach((x, i) => g.lineTo(x + RIDGE_M, RIDGE_H - [26, 44, 30, 58, 34, 48, 24][i % 7] - (i % 2 ? 0 : 10)));
+      g.lineTo(RW + RIDGE_M * 2, RIDGE_H);
+      g.closePath();
+      g.fill();
+      return c;
+    };
+    const ridgeFar = mkRidge([-30, 20, 90, 150, 210, 280, 350, 420, 470, 520], 'rgba(196,214,240,0.85)', 'rgba(126,160,204,0.7)');
+    const ridgeNear = mkRidge([-40, 0, 70, 140, 230, 300, 380, 460, 530], 'rgba(150,178,220,0.9)', 'rgba(90,120,170,0.85)');
 
     let raf = 0;
     let last = performance.now();
@@ -688,40 +834,11 @@ export default function Ski3D() {
       ctx.save();
       if (shakeK > 0) ctx.translate((Math.random() - 0.5) * 7 * shakeK, (Math.random() - 0.5) * 5 * shakeK);
 
-      // 天空
-      const sky = ctx.createLinearGradient(0, 0, 0, HOR);
-      sky.addColorStop(0, '#2c4c8a');
-      sky.addColorStop(1, '#bcd8f2');
-      ctx.fillStyle = sky;
-      ctx.fillRect(-8, -8, RW + 16, HOR + 8);
-      // 太阳
-      const sun = ctx.createRadialGradient(RW * 0.76, HOR * 0.42, 4, RW * 0.76, HOR * 0.42, 46);
-      sun.addColorStop(0, 'rgba(255,244,214,0.95)');
-      sun.addColorStop(1, 'rgba(255,244,214,0)');
-      ctx.fillStyle = sun;
-      ctx.fillRect(RW * 0.76 - 46, HOR * 0.42 - 46, 92, 92);
-      // 远山两层剪影（顶部偏亮带雪感 → 底部略深，轻微反向视差，配合相机横向跟随）
-      const ridge = (pts: number[], top: string, bottom: string, parallax: number) => {
-        const g = ctx.createLinearGradient(0, HOR - 80, 0, HOR);
-        g.addColorStop(0, top);
-        g.addColorStop(1, bottom);
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.moveTo(-8, HOR);
-        pts.forEach((x, i) => ctx.lineTo(x - camX * parallax, HOR - [26, 44, 30, 58, 34, 48, 24][i % 7] - (i % 2 ? 0 : 10)));
-        ctx.lineTo(RW + 8, HOR);
-        ctx.closePath();
-        ctx.fill();
-      };
-      ridge([-30, 20, 90, 150, 210, 280, 350, 420, 470, 520], 'rgba(196,214,240,0.85)', 'rgba(126,160,204,0.7)', 4);
-      ridge([-40, 0, 70, 140, 230, 300, 380, 460, 530], 'rgba(150,178,220,0.9)', 'rgba(90,120,170,0.85)', 8);
-
-      // 雪坡地面
-      const snow = ctx.createLinearGradient(0, HOR, 0, RH);
-      snow.addColorStop(0, '#dbe9f7');
-      snow.addColorStop(1, '#f4f9ff');
-      ctx.fillStyle = snow;
-      ctx.fillRect(-8, HOR, RW + 16, RH - HOR + 8);
+      // 天空+太阳、远山两层（视差平移）、雪坡地面：预渲染贴图一次绘制
+      ctx.drawImage(bgSky.c, -8, -8, RW + 16, HOR + 8);
+      ctx.drawImage(ridgeFar, -RIDGE_M - camX * 4, HOR - RIDGE_H, RW + RIDGE_M * 2, RIDGE_H);
+      ctx.drawImage(ridgeNear, -RIDGE_M - camX * 8, HOR - RIDGE_H, RW + RIDGE_M * 2, RIDGE_H);
+      ctx.drawImage(bgGround.c, -8, HOR, RW + 16, RH - HOR + 8);
 
       // 滑道侧边线（近宽远窄）
       ctx.strokeStyle = 'rgba(120,160,210,0.55)';
@@ -761,10 +878,7 @@ export default function Ski3D() {
           z: s.z,
           draw: () => {
             const b = proj(s.x, 0, s.z, camX);
-            const fog = clamp(s.z / FAR, 0, 1);
-            const h = 1.9 * s.s * b.s;
-            const tw = 0.55 * s.s * b.s;
-            drawPine(b.x, b.y, h, tw, fog);
+            blitPine(b.x, b.y, 1.9 * s.s * b.s, 0.55 * s.s * b.s, clamp(s.z / FAR, 0, 1));
           },
         });
       }
@@ -778,16 +892,12 @@ export default function Ski3D() {
             const b = proj(o.x, 0, z, camX);
             const fog = clamp(z / FAR, 0, 1);
             if (o.type === 'tree') {
-              const h = (1.7 + o.seed * 0.5) * b.s;
-              const tw = (0.62 + o.seed * 0.2) * b.s;
-              drawPine(b.x, b.y, h, tw, fog);
+              blitPine(b.x, b.y, (1.7 + o.seed * 0.5) * b.s, (0.62 + o.seed * 0.2) * b.s, fog);
             } else if (o.type === 'rock') {
-              const rw2 = (0.58 + o.seed * 0.28) * b.s;
-              drawRock(b.x, b.y, rw2, fog, o.seed);
+              blitRock(b.x, b.y, (0.58 + o.seed * 0.28) * b.s, fog, o.seed);
             } else {
               // 雪人
-              const u = b.s * (0.85 + o.seed * 0.2);
-              drawSnowman(b.x, b.y, u, fog);
+              blitSnowman(b.x, b.y, b.s * (0.85 + o.seed * 0.2), fog);
             }
           },
         });
@@ -803,43 +913,7 @@ export default function Ski3D() {
             const c = proj(g.x, hover, z, camX);
             const fog = clamp(z / FAR, 0, 1);
             const r = Math.max(1.2, 0.18 * c.s);
-            // 光晕
-            const glow = ctx.createRadialGradient(c.x, c.y, r * 0.3, c.x, c.y, r * 2.6);
-            glow.addColorStop(0, `rgba(120,240,255,${(0.5 - fog * 0.4).toFixed(3)})`);
-            glow.addColorStop(1, 'rgba(120,240,255,0)');
-            ctx.fillStyle = glow;
-            ctx.beginPath();
-            ctx.arc(c.x, c.y, r * 2.6, 0, Math.PI * 2);
-            ctx.fill();
-            // 菱形宝石
-            ctx.fillStyle = fogged('94,225,255', fog);
-            ctx.beginPath();
-            ctx.moveTo(c.x, c.y - r * 1.3);
-            ctx.lineTo(c.x + r, c.y);
-            ctx.lineTo(c.x, c.y + r * 1.3);
-            ctx.lineTo(c.x - r, c.y);
-            ctx.closePath();
-            ctx.fill();
-            // 描边
-            ctx.strokeStyle = `rgba(50,160,200,${(0.85 - fog * 0.5).toFixed(3)})`;
-            ctx.lineWidth = Math.max(0.8, r * 0.1);
-            ctx.stroke();
-            // 顶面高光
-            ctx.fillStyle = `rgba(255,255,255,${(0.7 - fog * 0.45).toFixed(3)})`;
-            ctx.beginPath();
-            ctx.moveTo(c.x, c.y - r * 1.3);
-            ctx.lineTo(c.x + r * 0.55, c.y - r * 0.4);
-            ctx.lineTo(c.x - r * 0.55, c.y - r * 0.4);
-            ctx.closePath();
-            ctx.fill();
-            // 底部小反光
-            ctx.fillStyle = `rgba(60,180,220,${(0.5 - fog * 0.35).toFixed(3)})`;
-            ctx.beginPath();
-            ctx.moveTo(c.x - r * 0.5, c.y + r * 0.32);
-            ctx.lineTo(c.x + r * 0.5, c.y + r * 0.32);
-            ctx.lineTo(c.x, c.y + r * 0.9);
-            ctx.closePath();
-            ctx.fill();
+            blitGem(c.x, c.y, r, fog);
             // 闪光星芒
             const sp = Math.max(0, 0.5 + 0.5 * Math.sin(t * 6 + g.x * 5));
             if (sp > 0.4) {
