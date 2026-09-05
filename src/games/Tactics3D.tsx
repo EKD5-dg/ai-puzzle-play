@@ -1600,7 +1600,7 @@ export default function Tactics3D() {
       if (w.danger && w.danger.has(ti)) fillDiamond(sx, sy, 'rgba(255,80,95,0.20)');
     }
 
-    function drawUnit(u: Unit, now: number, pos: { x: number; y: number; h: number; z: number }, w: World) {
+    function drawUnit(u: Unit, now: number, pos: { x: number; y: number; h: number; z: number }, w: World, ghost = false) {
       const [vx, vy] = rotPt(pos.x, pos.y, w.rot);
       const sx = OX + (vx - vy) * TW2;
       const sy = OY + (vx + vy) * TH2 - (pos.h + pos.z) * BH;
@@ -1610,7 +1610,7 @@ export default function Tactics3D() {
         const p = Math.min(1, (now - u.deadT) / 600);
         alpha = 1 - p;
         sink = p * 6;
-      } else if (u.side === 0 && u.acted && w.phase === 'player') {
+      } else if (!ghost && u.side === 0 && u.acted && w.phase === 'player') {
         alpha = 0.55;
       }
       // 受击抖动
@@ -1620,14 +1620,16 @@ export default function Tactics3D() {
         const p = (now - hit.t0) / hit.dur;
         shx = Math.sin(p * Math.PI * 6) * 3 * (1 - p);
       }
-      // 影子
-      ctx.fillStyle = 'rgba(8,10,18,0.35)';
-      ctx.beginPath();
-      ctx.ellipse(sx, sy + 2 + sink, 20, 8, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // 攻击目标高亮
-      if (w.attackSet.has(u.id)) fillDiamond(sx, sy, 'rgba(255,70,90,0.30)');
-      // 队伍/状态环
+      if (!ghost) {
+        // 影子
+        ctx.fillStyle = 'rgba(8,10,18,0.35)';
+        ctx.beginPath();
+        ctx.ellipse(sx, sy + 2 + sink, 20, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // 攻击目标高亮
+        if (w.attackSet.has(u.id)) fillDiamond(sx, sy, 'rgba(255,70,90,0.30)');
+      }
+      // 队伍/状态环（幽灵层同样绘制：被遮挡的单位靠它定位）
       const pulse = 2.4 + Math.sin(now / 140) * 0.9;
       ctx.lineWidth = 2;
       if (w.sel?.id === u.id) {
@@ -1644,6 +1646,7 @@ export default function Tactics3D() {
       } else {
         ctx.strokeStyle = u.side === 0 ? 'rgba(90,160,255,0.75)' : 'rgba(255,95,115,0.75)';
       }
+      ctx.globalAlpha = ghost ? 0.45 : 1;
       ctx.beginPath();
       ctx.ellipse(sx, sy + 2 + sink, 23, 10, 0, 0, Math.PI * 2);
       ctx.stroke();
@@ -1651,7 +1654,7 @@ export default function Tactics3D() {
       const img = sprites[u.kind];
       const bob = !u.walk && !u.lunge && !u.dead ? Math.sin(now / 1000 * 2.6 + u.id * 1.9) * 1.5 : 0;
       const dy = sy - img.height + 2 - bob + sink;
-      ctx.globalAlpha = alpha;
+      ctx.globalAlpha = ghost ? 0.45 * alpha : alpha;
       if (u.side === 1) {
         ctx.save();
         ctx.translate(sx, 0);
@@ -1662,7 +1665,7 @@ export default function Tactics3D() {
         ctx.drawImage(img, sx - img.width / 2 + shx, dy);
       }
       ctx.globalAlpha = 1;
-      // 血条
+      // 血条（幽灵层以不透明重绘：被地形遮挡的单位血条始终完整可读）
       const ratio = u.hp / u.maxHp;
       const bw = 30;
       const bx = sx - bw / 2;
@@ -1751,6 +1754,16 @@ export default function Tactics3D() {
         if (it.u) drawUnit(it.u, now, posMap.get(it.u.id)!, w);
         else drawTile(it.x!, it.y!, it.vx!, it.vy!, w);
       }
+      // 可读性覆盖：被地形遮挡的单位以半透明"幽灵"透出（对未被遮挡的单位是同像素重绘，无视觉变化），
+      // 血条以不透明置顶——避免"单位沉入地块/只剩武器一角/血条漂浮"的困惑
+      const ghostUnits = w.units
+        .filter((u) => !u.dead && posMap.has(u.id))
+        .sort((a, b) => {
+          const [ax, ay] = rotPt(posMap.get(a.id)!.x, posMap.get(a.id)!.y, w.rot);
+          const [bx2, by2] = rotPt(posMap.get(b.id)!.x, posMap.get(b.id)!.y, w.rot);
+          return ax + ay - (bx2 + by2);
+        });
+      for (const gu of ghostUnits) drawUnit(gu, now, posMap.get(gu.id)!, w, true);
       drawEffects(now, w);
       raf = requestAnimationFrame(loop);
     };
