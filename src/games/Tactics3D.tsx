@@ -31,6 +31,8 @@ const CLIMB_COST = 2;
 const HEIGHT_BONUS = 0.25;
 /** 反击伤害倍率 */
 const COUNTER_MULT = 0.75;
+/** 瞄准倍率：艾文待机蓄力后下次攻击的伤害倍数（移动解除） */
+const AIM_MULT = 1.5;
 /** 地形类型 */
 const T_PLAIN = 0;
 const T_HILL = 1;
@@ -81,6 +83,8 @@ interface Unit {
   gy: number;
   acted: boolean;
   defending: boolean;
+  /** 艾文·瞄准：待机蓄力，下次攻击伤害提升，移动即解除 */
+  aiming: boolean;
   dead: boolean;
   deadT: number;
   walk: { path: Array<[number, number]>; t0: number } | null;
@@ -277,6 +281,7 @@ function mkUnit(id: number, kind: Kind, gx: number, gy: number): Unit {
     gy,
     acted: false,
     defending: false,
+    aiming: false,
     dead: false,
     deadT: 0,
     walk: null,
@@ -999,13 +1004,15 @@ export default function Tactics3D() {
       return true;
     }
 
-    function calcDmg(att: Unit, def: Unit, counter: boolean): { dmg: number; hi: boolean } {
+    function calcDmg(att: Unit, def: Unit, counter: boolean, aimed = false): { dmg: number; hi: boolean } {
       const w = wq();
       const hA = terrainH(w.t[idx(att.gx, att.gy)]);
       const hD = terrainH(w.t[idx(def.gx, def.gy)]);
       const mult = Math.max(0.75, Math.min(1.5, 1 + HEIGHT_BONUS * (hA - hD)));
-      const raw = att.atk * (counter ? COUNTER_MULT : 1) * mult * (counter ? 1 : 0.92 + Math.random() * 0.16);
-      const guard = def.def * (def.defending ? 1.5 : 1);
+      let raw = att.atk * (counter ? COUNTER_MULT : 1) * mult * (counter ? 1 : 0.92 + Math.random() * 0.16);
+      if (aimed) raw *= AIM_MULT;
+      // 铁壁：罗兰防御时减伤翻倍（其余单位 1.5 倍）
+      const guard = def.def * (def.defending ? (def.kind === 'knight' ? 2 : 1.5) : 1);
       return { dmg: Math.max(1, Math.round(raw - guard)), hi: mult > 1.05 };
     }
 
@@ -1108,6 +1115,7 @@ export default function Tactics3D() {
       const w = wq();
       const path = chainTo(w.moveMap!, idx(x, y));
       if (path.length === 0) return;
+      u.aiming = false; // 瞄准期间移动即解除
       w.busy = true;
       w.moveMap = null;
       startWalk(u, path, { type: 'moveDone', id: u.id });
@@ -1217,7 +1225,12 @@ export default function Tactics3D() {
       u.defending = true;
       u.acted = true;
       const now = performance.now();
-      w.effects.push({ kind: 'text', x: u.gx, y: u.gy, text: '防御', color: '#8fd0ff', t0: now, dur: 800 });
+      if (u.kind === 'knight') {
+        w.effects.push({ kind: 'text', x: u.gx, y: u.gy, text: '铁壁', color: '#8fd0ff', t0: now, dur: 800 });
+        toastRef.current('🛡 铁壁：受到的伤害大减，并替相邻友军承受反击', 'info');
+      } else {
+        w.effects.push({ kind: 'text', x: u.gx, y: u.gy, text: '防御', color: '#8fd0ff', t0: now, dur: 800 });
+      }
       w.sel = null;
       w.moveMap = null;
       w.attackSet = new Set();
@@ -1230,6 +1243,11 @@ export default function Tactics3D() {
       if (statusRef.current !== 'playing' || w.phase !== 'player' || w.busy || !w.sel) return;
       const u = byId(w.sel.id)!;
       u.acted = true;
+      if (u.kind === 'archer' && !u.aiming) {
+        u.aiming = true;
+        w.effects.push({ kind: 'text', x: u.gx, y: u.gy, text: '瞄准', color: '#ffd75e', t0: performance.now(), dur: 800 });
+        toastRef.current('🎯 瞄准：下次攻击伤害 +50%，移动后解除', 'info');
+      }
       w.sel = null;
       w.moveMap = null;
       w.attackSet = new Set();
@@ -1280,7 +1298,7 @@ export default function Tactics3D() {
           if (d > u.rng) continue;
           if (d > 1 && losBlocked(tx, ty, th, h.gx, h.gy)) continue;
           const mult = Math.max(0.75, Math.min(1.5, 1 + HEIGHT_BONUS * (th - hH)));
-          const dmg = Math.max(1, Math.round(u.atk * mult) - Math.round(h.def * (h.defending ? 1.5 : 1)));
+          const dmg = Math.max(1, Math.round(u.atk * mult) - Math.round(h.def * (h.defending ? (h.kind === 'knight' ? 2 : 1.5) : 1)));
           const canCtr = cheby(tx, ty, h.gx, h.gy) <= h.rng && (h.rng === 1 || !losBlocked(h.gx, h.gy, hH, tx, ty));
           const cMult = Math.max(0.75, Math.min(1.5, 1 + HEIGHT_BONUS * (hH - th)));
           const ctr = canCtr ? Math.max(1, Math.round(h.atk * COUNTER_MULT * cMult) - Math.round(u.def)) : 0;
@@ -1361,7 +1379,9 @@ export default function Tactics3D() {
               finish(s.done ?? 'playerAct', s.origin ?? s.attId ?? 0, now);
               break;
             }
-            const { dmg, hi } = calcDmg(att, def, !!s.counter);
+            const aimed = !s.counter && att.side === 0 && att.aiming;
+            if (aimed) att.aiming = false;
+            const { dmg, hi } = calcDmg(att, def, !!s.counter, aimed);
             def.hp = Math.max(0, def.hp - dmg);
             w.effects.push({
               kind: 'dmg',
@@ -1378,6 +1398,24 @@ export default function Tactics3D() {
               w.hiTip = true;
               toastRef.current('⛰ 高地加成：站位比目标每高一层，伤害 +25%', 'info');
             }
+            // 莉拉·溅射：法师的非反击攻击波及目标周围 1 格的敌人
+            if (att.kind === 'mage' && !s.counter) {
+              const splash = Math.round(att.atk * 0.4);
+              for (const e of alive(1)) {
+                if (e.id === def.id || cheby(e.gx, e.gy, def.gx, def.gy) > 1) continue;
+                e.hp = Math.max(0, e.hp - splash);
+                w.effects.push({ kind: 'dmg', x: e.gx, y: e.gy, text: `${splash}`, color: '#c9a2ff', t0: now, dur: 850 });
+                w.effects.push({ kind: 'hit', x: e.gx, y: e.gy, unitId: e.id, t0: now, dur: 260 });
+                if (e.hp <= 0) {
+                  e.dead = true;
+                  e.deadT = now;
+                  w.effects.push({ kind: 'poof', x: e.gx, y: e.gy, t0: now, dur: 620 });
+                  sfx.mismatch();
+                  toastRef.current(`✨ 溅射击败 ${e.name}！`, 'success');
+                  w.queue.push({ at: now + 560, type: 'checkEnd' });
+                }
+              }
+            }
             if (def.hp <= 0) {
               def.dead = true;
               def.deadT = now;
@@ -1388,7 +1426,13 @@ export default function Tactics3D() {
               w.queue.push({ at: now + 560, type: 'checkEnd' });
               finish(s.done ?? 'playerAct', s.origin ?? s.attId ?? 0, now + 120);
             } else if (!s.counter && canCounter(def, att)) {
-              w.queue.push({ at: now + 360, type: 'dmg', attId: def.id, defId: att.id, origin: s.origin ?? s.attId, counter: true, done: s.done });
+              // 罗兰·铁壁护卫：相邻友军遭反击时由他代为承受
+              const protector = alive(0).find(
+                (k) => k.defending && k.kind === 'knight' && k.id !== att.id && cheby(k.gx, k.gy, att.gx, att.gy) <= 1,
+              );
+              const counterTarget = protector && canCounter(def, protector) ? protector : att;
+              if (counterTarget !== att) toastRef.current(`🛡 ${protector!.name} 替 ${att.name} 承受了反击`, 'info');
+              w.queue.push({ at: now + 360, type: 'dmg', attId: def.id, defId: counterTarget.id, origin: s.origin ?? s.attId, counter: true, done: s.done });
             } else {
               finish(s.done ?? 'playerAct', s.origin ?? s.attId ?? 0, now + 140);
             }
@@ -1688,6 +1732,10 @@ export default function Tactics3D() {
         ctx.font = '11px system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('🛡', sx, by - 4);
+      } else if (u.aiming) {
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🎯', sx, by - 4);
       }
     }
 
@@ -1813,6 +1861,17 @@ export default function Tactics3D() {
   const insUnit = w.inspect != null ? w.units.find((u) => u.id === w.inspect && !u.dead) : null;
   const canCmd = status === 'playing' && w.phase === 'player' && !w.busy && !!w.sel;
   const canEnd = status === 'playing' && w.phase === 'player' && !w.busy;
+  // 专属指令：按钮随选中角色变形，信息栏同步说明
+  const defLabel = selUnit?.kind === 'knight' ? '🛡 铁壁' : '🛡 防御';
+  const waitLabel = selUnit?.kind === 'archer' ? '🎯 瞄准' : '⏳ 待机';
+  const skillTip =
+    selUnit?.kind === 'knight'
+      ? ' · 🛡 铁壁=减伤翻倍+替邻友军挡反击'
+      : selUnit?.kind === 'archer'
+        ? ' · 🎯 瞄准=下次攻击+50%，移动解除'
+        : selUnit?.kind === 'mage'
+          ? ' · ✨ 溅射=攻击波及目标邻格'
+          : '';
 
   let info: string;
   if (status !== 'playing') info = '';
@@ -1820,8 +1879,8 @@ export default function Tactics3D() {
     info = `${insUnit.name}　HP ${insUnit.hp}/${insUnit.maxHp} · 攻 ${insUnit.atk} · 防 ${insUnit.def} · 移 ${insUnit.mov} · 程 ${insUnit.rng} —— ⚠ 红色区域为其威胁范围`;
   else if (selUnit && w.sel)
     info = w.sel.moved
-      ? `${selUnit.name} HP ${selUnit.hp}/${selUnit.maxHp} —— 点红圈敌人攻击；或选 防御 / 待机 / 取消`
-      : `${selUnit.name} HP ${selUnit.hp}/${selUnit.maxHp} —— 点蓝格移动；红圈敌人可直接攻击`;
+      ? `${selUnit.name} HP ${selUnit.hp}/${selUnit.maxHp} —— 点红圈敌人攻击；或选 防御 / 待机 / 取消${skillTip}`
+      : `${selUnit.name} HP ${selUnit.hp}/${selUnit.maxHp} —— 点蓝格移动；红圈敌人可直接攻击${skillTip}`;
   else info = '点选我方英雄下达指令 · 点敌方单位查看威胁范围';
 
   return (
@@ -1861,6 +1920,8 @@ export default function Tactics3D() {
                 指挥骑士、游侠、法师三位英雄，在等距 3D 战场上全歼兽人军团！
                 <br />
                 占高地伤害 +25% · 巨岩与高地平台会挡住远程 · 攻击残血敌人会招到反击
+                <br />
+                专属指令：罗兰「铁壁」减伤+护卫 · 艾文「瞄准」蓄力一击 · 莉拉「溅射」法术波及
               </p>
               <p className="tc3d-keys">点选英雄 → 蓝格移动 → 点红圈敌人攻击 · 点敌方单位可查看威胁范围</p>
               <p className="tc3d-keys">🔄 旋转视角（快捷键 R）· Esc 取消指令 · 全歼敌人，回合越少评价越好</p>
@@ -1897,10 +1958,10 @@ export default function Tactics3D() {
             🔄 旋转视角
           </button>
           <button className="btn btn-ghost" disabled={!canCmd} onClick={() => handlersRef.current?.defend()}>
-            🛡 防御
+            {defLabel}
           </button>
           <button className="btn btn-ghost" disabled={!canCmd} onClick={() => handlersRef.current?.wait()}>
-            ⏳ 待机
+            {waitLabel}
           </button>
           <button className="btn btn-ghost" disabled={!canCmd} onClick={() => handlersRef.current?.cancel()}>
             ↩ 取消
