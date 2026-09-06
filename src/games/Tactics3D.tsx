@@ -322,8 +322,10 @@ function newWorld(): World {
 
 /** 单位实时绘制位置（含步行动画插值与跳跃弧线、突刺位移） */
 function unitPos(w: World, u: Unit, now: number): { x: number; y: number; h: number; z: number } {
-  let x = u.gx + 0.5;
-  let y = u.gy + 0.5;
+  // 单位锚点 = 瓦片菱形面的中心（与 drawTile/hitTest 的面中心同一投影约定）。
+  // 旧的 +0.5（格方格中心约定）会让脚踩在菱形前顶点上，看起来"没站在格子中间"
+  let x = u.gx;
+  let y = u.gy;
   let h = terrainH(w.t[idx(u.gx, u.gy)]);
   let z = 0;
   if (u.walk) {
@@ -332,8 +334,8 @@ function unitPos(w: World, u: Unit, now: number): { x: number; y: number; h: num
     const f = Math.min(1, Math.max(0, p - i));
     const [ax, ay] = i === 0 ? [u.gx, u.gy] : u.walk.path[i - 1];
     const [bx, by] = u.walk.path[i];
-    x = ax + 0.5 + (bx - ax) * f;
-    y = ay + 0.5 + (by - ay) * f;
+    x = ax + (bx - ax) * f;
+    y = ay + (by - ay) * f;
     const hA = terrainH(w.t[idx(ax, ay)]);
     const hB = terrainH(w.t[idx(bx, by)]);
     h = hA + (hB - hA) * f;
@@ -1752,7 +1754,7 @@ export default function Tactics3D() {
       ctx.textAlign = 'center';
       for (const e of w.effects) {
         const p = (now - e.t0) / e.dur;
-        const [vx, vy] = rotPt(e.x + 0.5, e.y + 0.5, w.rot);
+        const [vx, vy] = rotPt(e.x, e.y, w.rot);
         const sx = OX + (vx - vy) * TW2;
         const sy = OY + (vx + vy) * TH2 - terrainH(w.t[idx(e.x, e.y)]) * BH;
         if (e.kind === 'dmg' || e.kind === 'text') {
