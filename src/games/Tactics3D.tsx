@@ -1243,10 +1243,11 @@ export default function Tactics3D() {
       if (statusRef.current !== 'playing' || w.phase !== 'player' || w.busy || !w.sel) return;
       const u = byId(w.sel.id)!;
       u.acted = true;
-      if (u.kind === 'archer' && !u.aiming) {
+      if (u.kind === 'archer') {
+        const again = u.aiming;
         u.aiming = true;
         w.effects.push({ kind: 'text', x: u.gx, y: u.gy, text: '瞄准', color: '#ffd75e', t0: performance.now(), dur: 800 });
-        toastRef.current('🎯 瞄准：下次攻击伤害 +50%，移动后解除', 'info');
+        toastRef.current(again ? '🎯 瞄准维持中：下次攻击伤害 +50%' : '🎯 瞄准：下次攻击伤害 +50%，移动后解除', 'info');
       }
       w.sel = null;
       w.moveMap = null;
@@ -1731,14 +1732,18 @@ export default function Tactics3D() {
       ctx.fill();
       ctx.fillStyle = ratio > 0.5 ? '#57df76' : ratio > 0.25 ? '#f2c14e' : '#f25f5f';
       ctx.fillRect(bx, by, Math.max(0, bw * ratio), 4);
-      if (u.defending) {
+      // 状态徽标：防御与瞄准可并存（艾文蓄力后次回合防御），并排绘制
+      if (u.defending || u.aiming) {
         ctx.font = '11px system-ui, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('🛡', sx, by - 4);
-      } else if (u.aiming) {
-        ctx.font = '11px system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('🎯', sx, by - 4);
+        if (u.defending && u.aiming) {
+          ctx.fillText('🛡', sx - 8, by - 4);
+          ctx.fillText('🎯', sx + 8, by - 4);
+        } else if (u.defending) {
+          ctx.fillText('🛡', sx, by - 4);
+        } else {
+          ctx.fillText('🎯', sx, by - 4);
+        }
       }
     }
 
@@ -1871,7 +1876,9 @@ export default function Tactics3D() {
     selUnit?.kind === 'knight'
       ? ' · 🛡 铁壁=减伤翻倍+替邻友军挡反击'
       : selUnit?.kind === 'archer'
-        ? ' · 🎯 瞄准=下次攻击+50%，移动解除'
+        ? selUnit.aiming
+          ? ' · 🎯 瞄准中：下次攻击+50%（移动解除）'
+          : ' · 🎯 瞄准=下次攻击+50%，移动解除'
         : selUnit?.kind === 'mage'
           ? ' · ✨ 溅射=攻击波及目标邻格'
           : '';
