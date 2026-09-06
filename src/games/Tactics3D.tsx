@@ -1793,15 +1793,18 @@ export default function Tactics3D() {
       }
     }
 
-    let raf = 0;
-    const loop = (now: number) => {
-      const w = wq();
-      processQueue(now);
-      w.effects = w.effects.filter((e) => now - e.t0 < e.dur);
+    // 复用跨帧缓冲，避免每帧新建 Map/数组加重 GC 抖动（Firefox minor GC 停顿更明显）
+    const posMap = new Map<number, { x: number; y: number; h: number; z: number }>();
+    const items: Array<{ d: number; k: number; u?: Unit; x?: number; y?: number; vx?: number; vy?: number }> = [];
+    const occTiles: Array<{ d: number; sx: number; top: number }> = [];
+    const occUnits: Array<{ id: number; d: number; sx: number; sy: number; hw: number; ih: number }> = [];
+    const occluded = new Set<number>();
+
+    function drawFrame(now: number, w: World) {
       ctx.drawImage(bg, 0, 0);
       // 画家算法：瓦片与单位按视图深度排序，同深度瓦片在前
-      const posMap = new Map<number, { x: number; y: number; h: number; z: number }>();
-      const items: Array<{ d: number; k: number; u?: Unit; x?: number; y?: number; vx?: number; vy?: number }> = [];
+      posMap.clear();
+      items.length = 0;
       for (let y = 0; y < N; y++)
         for (let x = 0; x < N; x++) {
           const [vx, vy] = rotPt(x, y, w.rot);
@@ -1815,14 +1818,74 @@ export default function Tactics3D() {
         items.push({ d: vx + vy, k: 1, u });
       }
       items.sort((a, b) => a.d - b.d || a.k - b.k);
+      // 遮挡预检：只有站在前景高地形/前方单位身后的单位才需要幽灵补画，
+      // 未被遮挡单位的二次重绘是同像素 no-op，纯浪费（高亮状态的单位除外，见 ghostUnits）
+      occTiles.length = 0;
+      for (let y = 0; y < N; y++)
+        for (let x = 0; x < N; x++) {
+          const h = terrainH(w.t[idx(x, y)]);
+          if (!h) continue;
+          const [vx, vy] = rotPt(x, y, w.rot);
+          const d = vx + vy;
+          occTiles.push({ d, sx: OX + (vx - vy) * TW2, top: OY + d * TH2 - h * BH - TH2 });
+        }
+      occUnits.length = 0;
+      for (const u of w.units) {
+        if (u.dead || !posMap.has(u.id)) continue;
+        const pos = posMap.get(u.id)!;
+        const [vx, vy] = rotPt(pos.x, pos.y, w.rot);
+        const img = sprites[u.kind];
+        occUnits.push({
+          id: u.id,
+          d: vx + vy,
+          sx: OX + (vx - vy) * TW2,
+          sy: OY + (vx + vy) * TH2 - (pos.h + pos.z) * BH,
+          hw: img.width / 2,
+          ih: img.height,
+        });
+      }
+      occluded.clear();
+      for (const b of occUnits) {
+        let hit = false;
+        for (const t of occTiles) {
+          const dt = t.d - b.d;
+          if (dt >= 1 && dt <= 8 && Math.abs(t.sx - b.sx) < TW && t.top < b.sy + 12) {
+            hit = true;
+            break;
+          }
+        }
+        if (!hit)
+          for (const f of occUnits) {
+            if (
+              f.d <= b.d ||
+              Math.abs(f.sx - b.sx) >= f.hw + b.hw ||
+              f.sy + 12 <= b.sy - b.ih ||
+              b.sy + 12 <= f.sy - f.ih
+            )
+              continue;
+            hit = true;
+            break;
+          }
+        if (hit) occluded.add(b.id);
+      }
       for (const it of items) {
         if (it.u) drawUnit(it.u, now, posMap.get(it.u.id)!, w);
         else drawTile(it.x!, it.y!, it.vx!, it.vy!, w);
       }
-      // 可读性覆盖：被地形遮挡的单位以半透明"幽灵"透出（对未被遮挡的单位是同像素重绘，无视觉变化），
-      // 血条以不透明置顶——避免"单位沉入地块/只剩武器一角/血条漂浮"的困惑
+      // 可读性覆盖：被遮挡的单位以半透明"幽灵"透出、血条不透明置顶——避免"单位沉入地块/
+      // 只剩武器一角/血条漂浮"的困惑。带高亮/变暗状态的单位保留双层绘制（半透明层叠加
+      // 会改变合成透明度，跳过会有可见色差），只有纯静态单位不再整帧重画
       const ghostUnits = w.units
-        .filter((u) => !u.dead && posMap.has(u.id))
+        .filter(
+          (u) =>
+            !u.dead &&
+            posMap.has(u.id) &&
+            (occluded.has(u.id) ||
+              (u.side === 0 && u.acted && w.phase === 'player') ||
+              w.attackSet.has(u.id) ||
+              w.sel?.id === u.id ||
+              w.inspect === u.id)
+        )
         .sort((a, b) => {
           const [ax, ay] = rotPt(posMap.get(a.id)!.x, posMap.get(a.id)!.y, w.rot);
           const [bx2, by2] = rotPt(posMap.get(b.id)!.x, posMap.get(b.id)!.y, w.rot);
@@ -1830,6 +1893,25 @@ export default function Tactics3D() {
         });
       for (const gu of ghostUnits) drawUnit(gu, now, posMap.get(gu.id)!, w, true);
       drawEffects(now, w);
+    }
+
+    let raf = 0;
+    let lastDraw = 0;
+    const loop = (now: number) => {
+      const w = wq();
+      processQueue(now);
+      if (w.effects.length > 0) w.effects = w.effects.filter((e) => now - e.t0 < e.dur);
+      // 帧率分档：有动画/调度全速渲染；只有脉冲圈时 ~30fps；纯待机呼吸 ~11fps。
+      // Firefox 对 canvas 每帧全量重绘的合成开销明显高于 Chrome，静止时段降频是主要省帧手段
+      const animating =
+        w.queue.length > 0 ||
+        w.effects.length > 0 ||
+        w.units.some((u) => u.walk || u.lunge || (u.dead && now - u.deadT < 650));
+      const minGap = animating ? 0 : w.sel || w.attackSet.size > 0 || w.inspect != null ? 33 : 90;
+      if (now - lastDraw >= minGap) {
+        lastDraw = now;
+        drawFrame(now, w);
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);

@@ -928,51 +928,53 @@ code {
   overflow: hidden;
 }
 
+/* 用径向渐变预"糊"好光斑（原 filter:blur(60px) 的等效观感：元素放大 1.5 倍、
+   中心不变，颜色在内侧 42% 处截止后高斯式衰减到透明）。
+   Firefox 的 WebRender 会对 scale 动画逐帧重光栅化滤镜层，blur+scale 是全站掉帧元凶；
+   渐变无滤镜、动画只留 translate，合成器只需搬贴图，零逐帧成本。 */
 .blob {
   position: absolute;
-  border-radius: 50%;
-  filter: blur(60px);
   opacity: 0.3;
   animation: blobFloat 22s ease-in-out infinite alternate;
-  will-change: transform, opacity;
+  will-change: transform;
 }
 
 .blob-1 {
-  width: 420px;
-  height: 420px;
-  background: #7c5cff;
-  top: -120px;
-  left: -80px;
+  width: 630px;
+  height: 630px;
+  background: radial-gradient(circle closest-side, rgba(124, 92, 255, 1) 0%, rgba(124, 92, 255, 1) 42%, rgba(124, 92, 255, 0) 100%);
+  top: -225px;
+  left: -185px;
 }
 
 .blob-2 {
-  width: 360px;
-  height: 360px;
-  background: #00d4ff;
-  bottom: -100px;
-  right: -60px;
+  width: 540px;
+  height: 540px;
+  background: radial-gradient(circle closest-side, rgba(0, 212, 255, 1) 0%, rgba(0, 212, 255, 1) 42%, rgba(0, 212, 255, 0) 100%);
+  bottom: -190px;
+  right: -150px;
   animation-delay: -6s;
 }
 
 .blob-3 {
-  width: 300px;
-  height: 300px;
-  background: #ff6b9d;
-  top: 40%;
-  left: 55%;
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle closest-side, rgba(255, 107, 157, 1) 0%, rgba(255, 107, 157, 1) 42%, rgba(255, 107, 157, 0) 100%);
+  top: calc(40% - 75px);
+  left: calc(55% - 75px);
   opacity: 0.18;
   animation-delay: -12s;
 }
 
 @keyframes blobFloat {
   0% {
-    transform: translate(0, 0) scale(1);
+    transform: translate(0, 0);
   }
   50% {
-    transform: translate(40px, -30px) scale(1.08);
+    transform: translate(40px, -30px);
   }
   100% {
-    transform: translate(-30px, 24px) scale(0.95);
+    transform: translate(-30px, 24px);
   }
 }
 
