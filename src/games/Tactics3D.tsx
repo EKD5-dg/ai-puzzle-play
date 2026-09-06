@@ -1398,10 +1398,10 @@ export default function Tactics3D() {
               w.hiTip = true;
               toastRef.current('⛰ 高地加成：站位比目标每高一层，伤害 +25%', 'info');
             }
-            // 莉拉·溅射：法师的非反击攻击波及目标周围 1 格的敌人
+            // 莉拉·溅射：法师的非反击攻击波及目标周围 1 格的敌方单位（按攻击方阵营推导，防御性写法）
             if (att.kind === 'mage' && !s.counter) {
               const splash = Math.round(att.atk * 0.4);
-              for (const e of alive(1)) {
+              for (const e of alive(att.side === 0 ? 1 : 0)) {
                 if (e.id === def.id || cheby(e.gx, e.gy, def.gx, def.gy) > 1) continue;
                 e.hp = Math.max(0, e.hp - splash);
                 w.effects.push({ kind: 'dmg', x: e.gx, y: e.gy, text: `${splash}`, color: '#c9a2ff', t0: now, dur: 850 });
@@ -1426,10 +1426,13 @@ export default function Tactics3D() {
               w.queue.push({ at: now + 560, type: 'checkEnd' });
               finish(s.done ?? 'playerAct', s.origin ?? s.attId ?? 0, now + 120);
             } else if (!s.counter && canCounter(def, att)) {
-              // 罗兰·铁壁护卫：相邻友军遭反击时由他代为承受
-              const protector = alive(0).find(
-                (k) => k.defending && k.kind === 'knight' && k.id !== att.id && cheby(k.gx, k.gy, att.gx, att.gy) <= 1,
-              );
+              // 罗兰·铁壁护卫：我方单位遭反击时由相邻防御中的骑士代为承受。
+              // 必须限定 att.side === 0——敌方阶段英雄反击时 att 是敌方单位，不应重定向
+              const protector = att.side === 0
+                ? alive(0).find(
+                    (k) => k.defending && k.kind === 'knight' && k.id !== att.id && cheby(k.gx, k.gy, att.gx, att.gy) <= 1,
+                  )
+                : undefined;
               const counterTarget = protector && canCounter(def, protector) ? protector : att;
               if (counterTarget !== att) toastRef.current(`🛡 ${protector!.name} 替 ${att.name} 承受了反击`, 'info');
               w.queue.push({ at: now + 360, type: 'dmg', attId: def.id, defId: counterTarget.id, origin: s.origin ?? s.attId, counter: true, done: s.done });
