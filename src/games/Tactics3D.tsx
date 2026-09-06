@@ -1682,7 +1682,8 @@ export default function Tactics3D() {
         fillDiamond(sx, sy, 'rgba(255,70,90,0.30)');
         ctx.globalAlpha = 1;
       }
-      // 队伍/状态环（幽灵层同样绘制：被遮挡的单位靠它定位）
+      // 队伍/状态环（幽灵层同样绘制：被遮挡的单位靠它定位）。
+      // 21×9 且锚在格心：完整落在 64×32 菱形内——旧的 23×10 下弧会越过前排瓦片边缘垂进虚空
       const pulse = 2.4 + Math.sin(now / 140) * 0.9;
       ctx.lineWidth = 2;
       if (w.sel?.id === u.id) {
@@ -1705,7 +1706,7 @@ export default function Tactics3D() {
       }
       ctx.globalAlpha = ghost ? 0.45 : 1;
       ctx.beginPath();
-      ctx.ellipse(sx, sy + 2 + sink, 23, 10, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx, sy + 1 + sink, 21, 9, 0, 0, Math.PI * 2);
       ctx.stroke();
       // 精灵
       const img = sprites[u.kind];
