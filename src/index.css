@@ -3700,3 +3700,85 @@ html {
     font-size: 12px;
   }
 }
+
+/* ============ 3D 台球（Pool3D） ============ */
+
+.pl3d {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.pl3d-stage {
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+}
+
+.pl3d-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  background: #12152a;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: crosshair;
+}
+
+.pl3d-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(10, 13, 26, 0.88);
+  border-radius: var(--radius);
+  z-index: 5;
+  text-align: center;
+  padding: 16px;
+  cursor: auto;
+}
+
+.pl3d-overlay h2 {
+  font-size: 24px;
+}
+
+.pl3d-overlay p {
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.pl3d-keys {
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+
+.pl3d-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pl3d-lives {
+  color: #34d399;
+  letter-spacing: 2px;
+}
+
+@media (max-width: 640px) {
+  .pl3d-overlay h2 {
+    font-size: 20px;
+  }
+
+  .pl3d-keys {
+    font-size: 11.5px;
+  }
+}

@@ -28,6 +28,7 @@ import {
   metaStack3D,
   metaTunnel3D,
   metaTactics3D,
+  metaPool3D,
 } from './gameMetas';
 
 /**
@@ -65,6 +66,7 @@ export const games: GameDefinition[] = [
   { meta: metaStack3D, component: lazy(() => import('../games/Stack3D')) },
   { meta: metaTunnel3D, component: lazy(() => import('../games/Tunnel3D')) },
   { meta: metaTactics3D, component: lazy(() => import('../games/Tactics3D')) },
+  { meta: metaPool3D, component: lazy(() => import('../games/Pool3D')) },
 ];
 
 /** 按 id 查找游戏 */

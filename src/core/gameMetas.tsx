@@ -359,6 +359,18 @@ export const metaTactics3D: GameMeta = {
   higherIsBetter: false,
 };
 
+export const metaPool3D: GameMeta = {
+  id: 'pool-3d',
+  title: '3D 台球',
+  description: '俯视球桌清台得分：瞄准蓄力击球，一杆多球连击加成！',
+  icon: '🎱',
+  difficulty: '中等',
+  category: '经典',
+  tags: ['3D', '物理', '街机'],
+  bestScoreLabel: '最高分',
+  higherIsBetter: true,
+};
+
 /** 成绩比较方向权威表：false=成绩越小越好（步数/时间类）。由各 meta 派生，云同步服务端也内置了同样白名单（functions/api/sync.js），新增"成绩取小"的游戏需两处同步 */
 export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
   [
@@ -389,6 +401,7 @@ export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
     metaStack3D,
     metaTunnel3D,
     metaTactics3D,
+    metaPool3D,
   ].map((m) => [m.id, m.higherIsBetter]),
 );
 
