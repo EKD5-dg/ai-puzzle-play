@@ -29,6 +29,7 @@ import {
   metaTunnel3D,
   metaTactics3D,
   metaPool3D,
+  metaBowling3D,
 } from './gameMetas';
 
 /**
@@ -67,6 +68,7 @@ export const games: GameDefinition[] = [
   { meta: metaTunnel3D, component: lazy(() => import('../games/Tunnel3D')) },
   { meta: metaTactics3D, component: lazy(() => import('../games/Tactics3D')) },
   { meta: metaPool3D, component: lazy(() => import('../games/Pool3D')) },
+  { meta: metaBowling3D, component: lazy(() => import('../games/Bowling3D')) },
 ];
 
 /** 按 id 查找游戏 */

@@ -371,6 +371,18 @@ export const metaPool3D: GameMeta = {
   higherIsBetter: true,
 };
 
+export const metaBowling3D: GameMeta = {
+  id: 'bowling-3d',
+  title: '3D 保龄球',
+  description: '瞄准入袋口投出旋转球：全中补中加分，十局挑战满分 300！',
+  icon: '🎳',
+  difficulty: '中等',
+  category: '经典',
+  tags: ['3D', '物理', '街机'],
+  bestScoreLabel: '最高分',
+  higherIsBetter: true,
+};
+
 /** 成绩比较方向权威表：false=成绩越小越好（步数/时间类）。由各 meta 派生，云同步服务端也内置了同样白名单（functions/api/sync.js），新增"成绩取小"的游戏需两处同步 */
 export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
   [
@@ -402,6 +414,7 @@ export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
     metaTunnel3D,
     metaTactics3D,
     metaPool3D,
+    metaBowling3D,
   ].map((m) => [m.id, m.higherIsBetter]),
 );
 
