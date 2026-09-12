@@ -37,6 +37,8 @@ const FRICTION = 1.55;
 const STOP_EPS = 0.04;
 const MAX_POWER = 9.2;
 const MIN_POWER = 1.1;
+/** 自由球白球只能放在开球区（x ≤ 此值） */
+const CUE_MAX_X = -0.15;
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
@@ -94,6 +96,7 @@ interface Particle {
 }
 
 type Phase = 'aim' | 'roll' | 'hand';
+type Group = 'solid' | 'stripe';
 
 interface World {
   balls: Ball[];
@@ -104,10 +107,16 @@ interface World {
   power: number;
   /** 拖拽瞄准中 */
   dragging: boolean;
+  /** 本次拖拽是否已超过击球阈值（防轻点误击） */
+  dragArmed: boolean;
   /** 本杆入袋球 id（不含 cue） */
   shotPotted: number[];
   /** 本杆白球是否碰过目标球 */
   cueHit: boolean;
+  /** 本杆白球第一次碰到的球 id */
+  firstContactId: number | null;
+  /** 花色归属：首杆合法进球后确定 */
+  group: Group | null;
   score: number;
   lives: number;
   combo: number;
@@ -136,19 +145,17 @@ function rackBalls(): Ball[] {
   const balls: Ball[] = [
     { id: 0, x: -HX * 0.55, z: 0, vx: 0, vz: 0, pocketed: false, sink: 0 },
   ];
-  // 标准三角：尖朝白球（-x），底在 +x
+  // 标准三角：尖朝白球（-x），底在 +x；底角一全色一条纹
   const gap = BALL_R * 2.08;
   const footX = HX * 0.48;
-  let id = 1;
-  // 8 号固定中排，保证视觉与规则友好
+  // 8 号固定中排；底排两角一全色(7)一条纹(15)
   const order = [1, 9, 2, 10, 8, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15];
   let oi = 0;
   for (let row = 0; row < 5; row++) {
     for (let col = 0; col <= row; col++) {
       const x = footX + row * gap * 0.92;
       const z = (col - row / 2) * gap;
-      const bid = order[oi++] ?? id;
-      id = bid;
+      const bid = order[oi++] ?? 1;
       balls.push({ id: bid, x, z, vx: 0, vz: 0, pocketed: false, sink: 0 });
     }
   }
@@ -162,8 +169,11 @@ function newWorld(): World {
     aim: 0,
     power: 0.55,
     dragging: false,
+    dragArmed: false,
     shotPotted: [],
     cueHit: false,
+    firstContactId: null,
+    group: null,
     score: 0,
     lives: LIVES,
     combo: 0,
@@ -207,7 +217,7 @@ function cueBall(w: World): Ball {
 
 function placeCue(w: World, x: number, z: number) {
   const c = cueBall(w);
-  c.x = clamp(x, -HX + BALL_R + 0.05, -0.2);
+  c.x = clamp(x, -HX + BALL_R + 0.05, CUE_MAX_X);
   c.z = clamp(z, -HZ + BALL_R + 0.05, HZ - BALL_R - 0.05);
   // 避免与已有球重叠
   for (const b of w.balls) {
@@ -222,7 +232,7 @@ function placeCue(w: World, x: number, z: number) {
       c.z -= dz * push;
     }
   }
-  c.x = clamp(c.x, -HX + BALL_R + 0.05, -0.15);
+  c.x = clamp(c.x, -HX + BALL_R + 0.05, CUE_MAX_X);
   c.z = clamp(c.z, -HZ + BALL_R + 0.05, HZ - BALL_R - 0.05);
 }
 
@@ -248,110 +258,159 @@ function ballsMoving(w: World): boolean {
   return w.balls.some((b) => !b.pocketed && (Math.abs(b.vx) > STOP_EPS || Math.abs(b.vz) > STOP_EPS || b.sink > 0));
 }
 
+function ballGroup(id: number): Group | null {
+  if (id >= 1 && id <= 7) return 'solid';
+  if (id >= 9 && id <= 15) return 'stripe';
+  return null;
+}
+
+function pocketBall(w: World, b: Ball, px: number, pz: number, now: number) {
+  b.pocketed = true;
+  b.sink = 1;
+  b.vx = 0;
+  b.vz = 0;
+  if (b.id === 0) {
+    w.scratchAt = now;
+  } else {
+    w.shotPotted.push(b.id);
+    spawnSparkles(w, px, pz, ballColors(b.id));
+  }
+}
+
+/** 袋口捕获：中心距小于袋半径，或已越出台面且落在袋口扇区 */
+function tryPocket(w: World, b: Ball, now: number): boolean {
+  for (const [px, pz] of POCKETS) {
+    const d = Math.hypot(b.x - px, b.z - pz);
+    if (d < POCKET_R) {
+      pocketBall(w, b, px, pz, now);
+      return true;
+    }
+  }
+  // 出界且接近袋口 → 判入袋（防止 nearPocket 环带漏网穿台）
+  const outside = b.x < -HX + BALL_R || b.x > HX - BALL_R || b.z < -HZ + BALL_R || b.z > HZ - BALL_R;
+  if (outside) {
+    for (const [px, pz] of POCKETS) {
+      if (Math.hypot(b.x - px, b.z - pz) < POCKET_R + BALL_R * 1.35) {
+        pocketBall(w, b, px, pz, now);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 // ============ 物理 ============
 
 function stepPhysics(w: World, dt: number, now: number) {
-  // 入袋下落
+  // 入袋下落动画（不参与碰撞）
   for (const b of w.balls) {
     if (b.pocketed && b.sink > 0) {
       b.sink = Math.max(0, b.sink - dt * 2.8);
     }
   }
 
-  const live = w.balls.filter((b) => !b.pocketed);
-
-  for (const b of live) {
-    b.x += b.vx * dt;
-    b.z += b.vz * dt;
-    // 摩擦
-    const damp = Math.exp(-FRICTION * dt);
-    b.vx *= damp;
-    b.vz *= damp;
-    if (Math.hypot(b.vx, b.vz) < STOP_EPS * 0.5) {
-      b.vx = 0;
-      b.vz = 0;
-    }
+  // 子步积分：高速时按位移切分，防穿模
+  let maxV = 0;
+  for (const b of w.balls) {
+    if (b.pocketed) continue;
+    maxV = Math.max(maxV, Math.hypot(b.vx, b.vz));
   }
+  const maxDisp = BALL_R * 0.85;
+  const steps = clamp(Math.ceil((maxV * dt) / maxDisp), 1, 10);
+  const sdt = dt / steps;
 
-  // 袋口检测（先于库边，允许球“滑入”）
-  for (const b of live) {
-    for (const [px, pz] of POCKETS) {
-      if (Math.hypot(b.x - px, b.z - pz) < POCKET_R) {
-        b.pocketed = true;
-        b.sink = 1;
+  for (let s = 0; s < steps; s++) {
+    const live = w.balls.filter((b) => !b.pocketed);
+
+    for (const b of live) {
+      b.x += b.vx * sdt;
+      b.z += b.vz * sdt;
+      const damp = Math.exp(-FRICTION * sdt);
+      b.vx *= damp;
+      b.vz *= damp;
+      if (Math.hypot(b.vx, b.vz) < STOP_EPS * 0.5) {
         b.vx = 0;
         b.vz = 0;
-        if (b.id === 0) {
-          w.scratchAt = now;
-        } else {
-          w.shotPotted.push(b.id);
-          spawnSparkles(w, px, pz, ballColors(b.id));
+      }
+    }
+
+    // 袋口
+    for (const b of live) {
+      if (b.pocketed) continue;
+      tryPocket(w, b, now);
+    }
+
+    // 库边：袋口附近放宽，但出界必须已被 tryPocket 捕获，否则仍夹紧
+    for (const b of live) {
+      if (b.pocketed) continue;
+      const nearPocket = POCKETS.some(([px, pz]) => Math.hypot(b.x - px, b.z - pz) < POCKET_R + BALL_R * 0.9);
+      if (nearPocket) continue;
+      if (b.x < -HX + BALL_R) {
+        b.x = -HX + BALL_R;
+        b.vx = Math.abs(b.vx) * 0.82;
+      } else if (b.x > HX - BALL_R) {
+        b.x = HX - BALL_R;
+        b.vx = -Math.abs(b.vx) * 0.82;
+      }
+      if (b.z < -HZ + BALL_R) {
+        b.z = -HZ + BALL_R;
+        b.vz = Math.abs(b.vz) * 0.82;
+      } else if (b.z > HZ - BALL_R) {
+        b.z = HZ - BALL_R;
+        b.vz = -Math.abs(b.vz) * 0.82;
+      }
+      // nearPocket 但未入袋且仍出界：硬夹回
+      if (b.x < -HX + BALL_R || b.x > HX - BALL_R || b.z < -HZ + BALL_R || b.z > HZ - BALL_R) {
+        b.x = clamp(b.x, -HX + BALL_R, HX - BALL_R);
+        b.z = clamp(b.z, -HZ + BALL_R, HZ - BALL_R);
+        b.vx *= 0.5;
+        b.vz *= 0.5;
+      }
+    }
+
+    // 球球碰撞（等质量弹性）
+    const arr = w.balls.filter((b) => !b.pocketed);
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        const a = arr[i];
+        const b = arr[j];
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const dist = Math.hypot(dx, dz);
+        const min = BALL_R * 2;
+        if (dist <= 0.0001 || dist >= min) continue;
+        const nx = dx / dist;
+        const nz = dz / dist;
+        const overlap = (min - dist) * 0.5;
+        a.x -= nx * overlap;
+        a.z -= nz * overlap;
+        b.x += nx * overlap;
+        b.z += nz * overlap;
+        const avn = a.vx * nx + a.vz * nz;
+        const bvn = b.vx * nx + b.vz * nz;
+        if (avn - bvn <= 0) continue;
+        const rest = 0.96;
+        const aTanX = a.vx - avn * nx;
+        const aTanZ = a.vz - avn * nz;
+        const bTanX = b.vx - bvn * nx;
+        const bTanZ = b.vz - bvn * nz;
+        const aN = bvn * rest;
+        const bN = avn * rest;
+        a.vx = aTanX + aN * nx;
+        a.vz = aTanZ + aN * nz;
+        b.vx = bTanX + bN * nx;
+        b.vz = bTanZ + bN * nz;
+        if (a.id === 0 || b.id === 0) {
+          w.cueHit = true;
+          if (w.firstContactId == null) {
+            w.firstContactId = a.id === 0 ? b.id : a.id;
+          }
         }
-        break;
       }
     }
   }
 
-  // 库边（袋口附近放宽，模拟袋角）
-  for (const b of live) {
-    if (b.pocketed) continue;
-    const nearPocket = POCKETS.some(([px, pz]) => Math.hypot(b.x - px, b.z - pz) < POCKET_R + BALL_R * 0.85);
-    if (nearPocket) continue;
-    if (b.x < -HX + BALL_R) {
-      b.x = -HX + BALL_R;
-      b.vx = Math.abs(b.vx) * 0.82;
-    } else if (b.x > HX - BALL_R) {
-      b.x = HX - BALL_R;
-      b.vx = -Math.abs(b.vx) * 0.82;
-    }
-    if (b.z < -HZ + BALL_R) {
-      b.z = -HZ + BALL_R;
-      b.vz = Math.abs(b.vz) * 0.82;
-    } else if (b.z > HZ - BALL_R) {
-      b.z = HZ - BALL_R;
-      b.vz = -Math.abs(b.vz) * 0.82;
-    }
-  }
-
-  // 球球碰撞（等质量弹性）
-  const arr = w.balls.filter((b) => !b.pocketed);
-  for (let i = 0; i < arr.length; i++) {
-    for (let j = i + 1; j < arr.length; j++) {
-      const a = arr[i];
-      const b = arr[j];
-      const dx = b.x - a.x;
-      const dz = b.z - a.z;
-      const dist = Math.hypot(dx, dz);
-      const min = BALL_R * 2;
-      if (dist <= 0.0001 || dist >= min) continue;
-      const nx = dx / dist;
-      const nz = dz / dist;
-      // 位置修正
-      const overlap = (min - dist) * 0.5;
-      a.x -= nx * overlap;
-      a.z -= nz * overlap;
-      b.x += nx * overlap;
-      b.z += nz * overlap;
-      // 速度交换（沿法线）
-      const avn = a.vx * nx + a.vz * nz;
-      const bvn = b.vx * nx + b.vz * nz;
-      if (avn - bvn <= 0) continue;
-      const rest = 0.96;
-      const aTanX = a.vx - avn * nx;
-      const aTanZ = a.vz - avn * nz;
-      const bTanX = b.vx - bvn * nx;
-      const bTanZ = b.vz - bvn * nz;
-      const aN = bvn * rest;
-      const bN = avn * rest;
-      a.vx = aTanX + aN * nx;
-      a.vz = aTanZ + aN * nz;
-      b.vx = bTanX + bN * nx;
-      b.vz = bTanZ + bN * nz;
-      if (a.id === 0 || b.id === 0) w.cueHit = true;
-    }
-  }
-
-  // 粒子
+  // 粒子（整帧 dt）
   for (let i = w.particles.length - 1; i >= 0; i--) {
     const p = w.particles[i];
     p.life -= dt;
@@ -383,6 +442,7 @@ export default function Pool3D() {
   const [combo, setCombo] = useState(0);
   const [left, setLeft] = useState(15);
   const [phase, setPhase] = useState<Phase>('aim');
+  const [group, setGroup] = useState<Group | null>(null);
   const [newRecord, setNewRecord] = useState(false);
   const best = useBestScore(metaPool3D.id);
   const { toast } = useToast();
@@ -402,6 +462,7 @@ export default function Pool3D() {
     setCombo(0);
     setLeft(15);
     setPhase('aim');
+    setGroup(null);
     setNewRecord(false);
     setStatus('playing');
   }, []);
@@ -423,9 +484,11 @@ export default function Pool3D() {
     c.vz = Math.sin(w.aim) * sp;
     w.shotPotted = [];
     w.cueHit = false;
+    w.firstContactId = null;
     w.phase = 'roll';
     w.shots += 1;
     w.dragging = false;
+    w.dragArmed = false;
     setPhase('roll');
     sfx.click();
   }, []);
@@ -469,10 +532,11 @@ export default function Pool3D() {
     const dx = wx - c.x;
     const dz = wz - c.z;
     const dist = Math.hypot(dx, dz);
-    if (dist < 0.12) return;
+    if (dist < 0.18) return;
     w.aim = Math.atan2(dz, dx);
-    // 拉得越远力度越大（从白球向后拉）
+    // 指向目标方向越远力度越大
     w.power = clamp(dist / 3.2, 0.12, 1);
+    if (dist >= 0.35) w.dragArmed = true;
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -492,6 +556,7 @@ export default function Pool3D() {
     }
     if (w.phase === 'aim') {
       w.dragging = true;
+      w.dragArmed = false;
       const [sx, sy] = pointerToCanvas(e);
       updateAimFromPointer(sx, sy);
       (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
@@ -504,7 +569,7 @@ export default function Pool3D() {
     const [sx, sy] = pointerToCanvas(e);
     if (w.phase === 'hand') {
       const [wx, wz] = unproject(sx, sy);
-      w.handX = clamp(wx, -HX + BALL_R + 0.05, -0.15);
+      w.handX = clamp(wx, -HX + BALL_R + 0.05, CUE_MAX_X);
       w.handZ = clamp(wz, -HZ + BALL_R + 0.05, HZ - BALL_R - 0.05);
       return;
     }
@@ -516,7 +581,9 @@ export default function Pool3D() {
     const w = worldRef.current;
     if (!w.dragging) return;
     w.dragging = false;
-    if (statusRef.current === 'playing' && w.phase === 'aim' && w.power > 0.14) shoot();
+    // 仅当拖拽距离足够才击球，轻点白球/画面不误触
+    if (statusRef.current === 'playing' && w.phase === 'aim' && w.dragArmed && w.power > 0.14) shoot();
+    w.dragArmed = false;
   };
 
   // 键盘
@@ -573,45 +640,28 @@ export default function Pool3D() {
     const t = performance.now() / 1000;
     const potted = w.shotPotted.slice();
     const scratched = cueBall(w).pocketed;
-
-    // 8 号球
     const eight = potted.includes(8);
     const othersLeft = w.balls.filter((b) => b.id !== 0 && b.id !== 8 && !b.pocketed).length;
 
-    if (eight) {
-      if (othersLeft > 0 || scratched) {
-        // 提前击落 8 号：直接结束
-        w.lives = 0;
-        setLives(0);
-        setMessage(w, '提前击落 8 号球！', t);
-        sfx.lose();
-        statusRef.current = 'over';
-        setStatus('over');
-        return;
-      }
-      // 清台胜利
-      const bonus = 80 + w.lives * 40;
-      w.score += 50 + bonus;
-      setScore(w.score);
-      setMessage(w, `清台！奖励 ${bonus}`, t);
-      sfx.win();
-      statusRef.current = 'win';
-      setStatus('win');
-      return;
-    }
+    const syncLeft = () => {
+      const n = w.balls.filter((b) => b.id !== 0 && !b.pocketed).length;
+      setLeft(n);
+    };
 
-    if (scratched) {
+    /** 扣命 + 自由球/结束 */
+    const applyFoul = (msg: string): boolean => {
       w.lives -= 1;
       w.combo = 0;
       setLives(w.lives);
       setCombo(0);
-      setMessage(w, '白球落袋！', t);
+      setMessage(w, msg, t);
       sfx.mismatch();
       if (w.lives <= 0) {
         sfx.lose();
         statusRef.current = 'over';
         setStatus('over');
-        return;
+        syncLeft();
+        return true;
       }
       const [cx, cz] = defaultCuePos(w);
       placeCue(w, cx, cz);
@@ -621,44 +671,105 @@ export default function Pool3D() {
       w.handX = cueBall(w).x;
       w.handZ = cueBall(w).z;
       setPhase('hand');
+      syncLeft();
+      return true;
+    };
+
+    // 首碰合法性（花色归属后）
+    const ownLeft = w.group
+      ? w.balls.filter((b) => !b.pocketed && ballGroup(b.id) === w.group).length
+      : 0;
+    let contactFoul = false;
+    if (!w.cueHit) contactFoul = true;
+    else if (w.firstContactId != null && w.firstContactId !== 0) {
+      const fc = w.firstContactId;
+      if (w.group && ownLeft > 0 && ballGroup(fc) !== w.group && fc !== 8) {
+        contactFoul = true;
+      }
+      if (w.group && ownLeft > 0 && fc === 8) {
+        contactFoul = true;
+      }
+      if (!w.group && fc === 8 && othersLeft > 0) {
+        contactFoul = true;
+      }
+    }
+
+    // 8 号球
+    if (eight) {
+      if (othersLeft > 0 || scratched || contactFoul) {
+        w.lives = 0;
+        setLives(0);
+        setMessage(w, othersLeft > 0 ? '提前击落 8 号球！' : '8 号球犯规！', t);
+        sfx.lose();
+        statusRef.current = 'over';
+        setStatus('over');
+        syncLeft();
+        return;
+      }
+      const bonus = 80 + w.lives * 40;
+      w.score += 50 + bonus;
+      setScore(w.score);
+      setMessage(w, `清台！奖励 ${bonus}`, t);
+      sfx.win();
+      statusRef.current = 'win';
+      setStatus('win');
+      syncLeft();
       return;
     }
 
-    if (potted.length > 0) {
-      let gain = 0;
-      for (const id of potted) gain += ballPoints(id);
-      const multi = potted.length;
-      gain *= multi;
+    // 进球（含白球同杆落袋时仍计分，再单独判犯规）
+    let gain = 0;
+    let multi = 0;
+    for (const id of potted) {
+      const g = ballGroup(id);
+      if (!g) continue;
+      if (w.group && g !== w.group) continue;
+      if (!w.group) {
+        w.group = g;
+        setGroup(g);
+      }
+      gain += ballPoints(id);
+      multi += 1;
+    }
+
+    if (scratched) {
+      if (multi > 0) {
+        w.score += gain;
+        setScore(w.score);
+        applyFoul(`进球 +${gain}，白球落袋！`);
+      } else {
+        applyFoul('白球落袋！');
+      }
+      return;
+    }
+
+    if (contactFoul) {
+      applyFoul(!w.cueHit ? '空杆犯规！' : multi > 0 ? '首碰犯规，进球无效！' : '首碰犯规！');
+      return;
+    }
+
+    if (multi > 0) {
+      const base = gain * Math.max(1, multi);
+      let total = base;
       w.combo += 1;
-      if (w.combo >= 2) gain = Math.round(gain * (1 + (w.combo - 1) * 0.15));
-      w.score += gain;
+      if (w.combo >= 2) total = Math.round(base * (1 + (w.combo - 1) * 0.15));
+      w.score += total;
       setScore(w.score);
       setCombo(w.combo);
       w.flashAt = t;
-      setMessage(w, multi > 1 ? `一杆 ${multi} 球！+${gain}` : `漂亮！+${gain}`, t);
+      setMessage(w, multi > 1 ? `一杆 ${multi} 球！+${total}` : `漂亮！+${total}`, t);
       sfx.match();
-      if (multi >= 3) toast(`🎱 一杆 ${multi} 球！+${gain}`, 'success');
+      if (multi >= 3) toast(`🎱 一杆 ${multi} 球！+${total}`, 'success');
       if (w.combo === 5) toast(`🔥 连续进球 ×${w.combo}`, 'success');
     } else {
       w.combo = 0;
       setCombo(0);
-      if (!w.cueHit) {
-        w.lives -= 1;
-        setLives(w.lives);
-        setMessage(w, '空杆犯规！', t);
-        sfx.mismatch();
-        if (w.lives <= 0) {
-          sfx.lose();
-          statusRef.current = 'over';
-          setStatus('over');
-          return;
-        }
-      }
     }
 
     w.phase = 'aim';
     setPhase('aim');
-  }, []);
+    syncLeft();
+  }, [toast]);
 
   const finishRef = useRef(finishShot);
   finishRef.current = finishShot;
@@ -853,14 +964,14 @@ export default function Pool3D() {
         ctx.fill();
       }
 
-      // 球（按深度排序）
+      // 球（按深度排序：远→近，s 小的先画）
       const drawList = w.balls
         .filter((b) => !b.pocketed || b.sink > 0)
         .map((b) => {
           const p = proj(b.x, BALL_R * (1 - (1 - b.sink) * 0.85), b.z);
           return { b, p };
         })
-        .sort((a, b2) => b2.p.s - a.p.s);
+        .sort((a, b2) => a.p.s - b2.p.s);
 
       for (const { b, p } of drawList) {
         const r = Math.max(3, BALL_R * p.s * (b.pocketed ? b.sink : 1));
@@ -944,10 +1055,42 @@ export default function Pool3D() {
         const c = cueBall(w);
         const dirX = Math.cos(w.aim);
         const dirZ = Math.sin(w.aim);
-        // 预测线（虚线）
-        const len = 2.2 + w.power * 3.5;
+        // 射线求第一碰撞点（球或库边）
+        let hitT = 3.2 + w.power * 4.5;
+        let hitId = -1;
+        for (const b of w.balls) {
+          if (b.id === 0 || b.pocketed) continue;
+          const dx = b.x - c.x;
+          const dz = b.z - c.z;
+          const projT = dx * dirX + dz * dirZ;
+          if (projT <= 0) continue;
+          const perp2 = dx * dx + dz * dz - projT * projT;
+          const r2 = (BALL_R * 2) * (BALL_R * 2);
+          if (perp2 > r2) continue;
+          const thc = Math.sqrt(r2 - perp2);
+          const t0 = projT - thc;
+          if (t0 > 0.05 && t0 < hitT) {
+            hitT = t0;
+            hitId = b.id;
+          }
+        }
+        // 库边截断
+        const margin = BALL_R;
+        const boundT = (lo: number, hi: number, p: number, d: number) => {
+          if (Math.abs(d) < 1e-6) return Infinity;
+          const t1 = (lo - p) / d;
+          const t2 = (hi - p) / d;
+          const t = d > 0 ? t2 : t1;
+          return t > 0 ? t : Infinity;
+        };
+        const tx = boundT(-HX + margin, HX - margin, c.x, dirX);
+        const tz = boundT(-HZ + margin, HZ - margin, c.z, dirZ);
+        hitT = Math.min(hitT, tx, tz);
+
+        const endX = c.x + dirX * hitT;
+        const endZ = c.z + dirZ * hitT;
         const a0 = proj(c.x, BALL_R, c.z);
-        const a1 = proj(c.x + dirX * len, BALL_R, c.z + dirZ * len);
+        const a1 = proj(endX, BALL_R, endZ);
         ctx.strokeStyle = 'rgba(255,255,255,0.55)';
         ctx.lineWidth = 1.2;
         ctx.setLineDash([5, 4]);
@@ -956,13 +1099,37 @@ export default function Pool3D() {
         ctx.lineTo(a1.x, a1.y);
         ctx.stroke();
         ctx.setLineDash([]);
-        // 目标点
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        ctx.beginPath();
-        ctx.arc(a1.x, a1.y, 2.5, 0, Math.PI * 2);
-        ctx.fill();
+        // 碰撞点 ghost 球
+        if (hitId > 0) {
+          const gr = Math.max(3, BALL_R * a1.s);
+          ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(a1.x, a1.y, gr, 0, Math.PI * 2);
+          ctx.stroke();
+          // 目标球出球方向提示
+          const target = w.balls.find((b) => b.id === hitId);
+          if (target) {
+            const tdx = target.x - endX;
+            const tdz = target.z - endZ;
+            const td = Math.hypot(tdx, tdz) || 1;
+            const a2 = proj(target.x + (tdx / td) * 0.9, BALL_R, target.z + (tdz / td) * 0.9);
+            ctx.strokeStyle = 'rgba(255,220,120,0.4)';
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(a1.x, a1.y);
+            ctx.lineTo(a2.x, a2.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        } else {
+          ctx.fillStyle = 'rgba(255,255,255,0.7)';
+          ctx.beginPath();
+          ctx.arc(a1.x, a1.y, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
 
-        // 球杆（向后延伸，蓄力时后拉）
+        // 球杆（蓄力时杆身后拉）
         const pull = 0.35 + w.power * 1.1;
         const tip = proj(c.x - dirX * (BALL_R + 0.08 + pull * 0.15), BALL_R + 0.05, c.z - dirZ * (BALL_R + 0.08 + pull * 0.15));
         const butt = proj(c.x - dirX * (BALL_R + 0.08 + pull * 0.15 + 3.2), BALL_R + 0.22, c.z - dirZ * (BALL_R + 0.08 + pull * 0.15 + 3.2));
@@ -1053,15 +1220,6 @@ export default function Pool3D() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  // 用 interval 同步剩余球数到 UI（物理在 rAF 里更新 world）
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      const n = worldRef.current.balls.filter((b) => b.id !== 0 && !b.pocketed).length;
-      setLeft(n);
-    }, 200);
-    return () => window.clearInterval(id);
-  }, []);
-
   return (
     <GameShell
       meta={metaPool3D}
@@ -1088,6 +1246,10 @@ export default function Pool3D() {
             <strong>{combo > 0 ? `×${combo}` : '—'}</strong>
           </div>
           <div className="stat-box">
+            <span>花色</span>
+            <strong>{group === 'solid' ? '全色' : group === 'stripe' ? '条纹' : '待定'}</strong>
+          </div>
+          <div className="stat-box">
             <span>{metaPool3D.bestScoreLabel}</span>
             <strong>{best.value != null ? best.value : '—'}</strong>
           </div>
@@ -1110,13 +1272,13 @@ export default function Pool3D() {
             <div className="pl3d-overlay">
               <h2>🎱 3D 台球</h2>
               <p>
-                俯视球桌清台得分：全色 10 分、条纹 15 分、8 号球 50 分。
+                清台得分：全色 10 / 条纹 15 / 8 号球 50。
                 <br />
-                一杆多球分数翻倍，连续进球还有连击加成！
+                首次合法进球确定你的花色，之后须先碰到己方花色。
                 <br />
-                白球落袋或空杆会消耗机会，共 {LIVES} 次。
+                一杆多球翻倍、连续进球有连击；犯规或白球落袋扣机会。
               </p>
-              <p className="pl3d-keys">拖拽瞄准并蓄力，松手击球 · ←→ 调角 ↑↓ 调力 · 空格击球 · P 暂停</p>
+              <p className="pl3d-keys">拖拽瞄准蓄力，松手击球 · ←→ 调角 ↑↓ 调力 · 空格击球 · P 暂停</p>
               <button className="btn btn-primary" onClick={start}>
                 开球
               </button>
@@ -1158,7 +1320,9 @@ export default function Pool3D() {
           </button>
         </div>
         <p className="hint">
-          {phase === 'hand' ? '自由球：点击台面左侧放置白球' : '虚线为出杆方向 · 杆身后拉蓄力 · 剩余 15 球中先清彩球再打 8 号'}
+          {phase === 'hand'
+            ? '自由球：点击开球区放置白球'
+            : `拖拽瞄准蓄力，松手击球 · 花色：${group === 'solid' ? '全色' : group === 'stripe' ? '条纹' : '待定'} · 剩余 ${left} 球`}
         </p>
       </div>
     </GameShell>
