@@ -55,11 +55,15 @@ const CAR_HIT_X = 0.5;
 const NEAR_MISS_X = 0.85;
 /** 近失统计区间：超车过程中（前后 9 段内）记录最小横向间距 */
 const PASS_WINDOW_Z = 900;
-/** 护栏横向位置（路宽倍数）与刮擦后的速度上限 */
-const RAIL_X = 1.45;
+/** 护栏横向位置（路宽倍数）与刮擦后的速度上限。
+ *  碰撞用的是车中心可达位置 = 护栏位置 - 车半宽，否则车中心正好压在护栏正上方，
+ *  护栏会画成一条从车底穿到地平线的带子，看着像车在护栏上开。 */
+const RAIL_DRAW_X = 1.55;
+const CAR_HALF_X = 0.31;
+const RAIL_X = RAIL_DRAW_X - CAR_HALF_X;
 const SCRAPE_SPEED = MAX_SPEED * 0.42;
 /** 树石离路心的最小距离（要明显在护栏外，否则贴护栏行驶时会被树糊住视线） */
-const TREE_MIN_X = 1.95;
+const TREE_MIN_X = 2.15;
 /** 路侧物近到开始淡出的相机距离 / 完全剔除的距离 */
 const SPRITE_FADE_Z = 1300;
 const SPRITE_CULL_Z = 620;
@@ -122,7 +126,7 @@ function addRoad(segs: Segment[], enter: number, hold: number, leave: number, cu
 function addSigns(segs: Segment[], from: number, to: number, curve: number) {
   const side = curve > 0 ? -1 : 1;
   for (let i = from + 4; i < to - 4; i += 9) {
-    segs[i % segs.length].sprites.push({ type: 'sign', offset: side * 2.05 });
+    segs[i % segs.length].sprites.push({ type: 'sign', offset: side * 2.3 });
   }
 }
 
@@ -968,11 +972,12 @@ function railPt(p: Pt, side: number, off: number, hgt: number): readonly [number
   return [p.screen.x + side * off * p.screen.w, p.screen.y - hgt * p.screen.scale * (RW / 2)] as const;
 }
 
-/** 绘制一段护栏（横梁+高光+立柱）；比玩家车更近的段要在车之后画 */
+/** 绘制一段护栏（横梁+高光+立柱）。相机与车之间的那段在真实追车视角里被车身挡住，跳过 */
 function drawSegRail(ctx: CanvasRenderingContext2D, seg: Segment) {
+  if (seg.p1.screen.dz < PLAYER_Z) return;
   for (const side of [-1, 1]) {
-    const [ax, ay] = railPt(seg.p1, side, RAIL_X, RAIL_H);
-    const [bx, by] = railPt(seg.p2, side, RAIL_X, RAIL_H);
+    const [ax, ay] = railPt(seg.p1, side, RAIL_DRAW_X, RAIL_H);
+    const [bx, by] = railPt(seg.p2, side, RAIL_DRAW_X, RAIL_H);
     if ((ax < -80 && bx < -80) || (ax > RW + 80 && bx > RW + 80)) continue;
     const th = Math.max(0.7, seg.p1.screen.scale * (RW / 2) * 110);
     ctx.strokeStyle = COL.railDark;
