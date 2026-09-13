@@ -3,7 +3,7 @@ import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
-import { TouchDpad } from '../core/TouchControls';
+import { TouchButtons } from '../core/TouchControls';
 import { metaRacing3D } from '../core/gameMetas';
 
 // ============ 常量 ============
@@ -34,21 +34,27 @@ const MAX_SPEED = SEG_LEN * 62;
 const ACCEL = MAX_SPEED / 4.5;
 const BRAKE = -MAX_SPEED * 0.9;
 const DECEL = -MAX_SPEED / 6;
-const OFFROAD_DECEL = -MAX_SPEED / 1.6;
-const OFFROAD_LIMIT = MAX_SPEED / 4.5;
-/** 弯道离心力（把玩家往外甩的强度） */
-const CENTRIFUGAL = 0.31;
+const OFFROAD_DECEL = -MAX_SPEED / 2.6;
+/** 冲出路面后的巡航速度上限（约 100 km/h，够回到路面不至于寸步难行） */
+const OFFROAD_LIMIT = MAX_SPEED * 0.42;
+/** 转向角速度（路宽/秒，低速时保留下限以便微调） */
+const STEER_RATE = 3.4;
+/** 横向可达极限（路宽倍数，1=路面边缘） */
+const PLAYER_X_MAX = 1.7;
+/** 弯道离心力（把玩家往外甩的强度）：满速最急弯(6)时约等于转向能力的 90%，靠转向可守住线 */
+const CENTRIFUGAL = 0.15;
 
-/** 车流：初始数量 / 每 700m 加一辆 / 上限 / 速度范围（相对最高速） */
+/** 车流：初始数量 / 每 700m 加一辆 / 上限 / 速度范围（相对最高速）/ 生成距离（段，略远于视距免在地平线闪现） */
 const CARS0 = 6;
 const CARS_MAX = 14;
 const CAR_ADD_DIST = 700;
 const CAR_SPEED_MIN = 0.32;
 const CAR_SPEED_MAX = 0.58;
-/** 车距（前后碰撞判定）/ 横向碰撞半径 / 近失横向判定上限 */
+const CAR_SPAWN_SEG = DRAW_DIST * 1.15;
+/** 车距（前后碰撞判定）/ 横向碰撞半径 / 近失横向判定上限（略小于两倍车道半宽，只算真正贴身） */
 const CAR_LEN = 105;
 const CAR_HIT_X = 0.5;
-const NEAR_MISS_X = 1.0;
+const NEAR_MISS_X = 0.85;
 /** 近失奖励分 / 近失后短暂冲刺提速 */
 const NEAR_MISS_SCORE = 50;
 const NEAR_MISS_BOOST_T = 1.4;
@@ -63,7 +69,6 @@ const easeInOut = (a: number, b: number, t: number) => a + (b - a) * (-Math.cos(
 
 interface Pt {
   world: { y: number; z: number };
-  camera: { z: number };
   screen: { x: number; y: number; w: number; scale: number };
 }
 
@@ -86,13 +91,13 @@ function makeSegment(index: number, curve: number, y1: number, y2: number): Segm
     index,
     curve,
     sprites: [],
-    p1: { world: { y: y1, z: index * SEG_LEN }, camera: { z: 0 }, screen: { x: 0, y: 0, w: 0, scale: 0 } },
-    p2: { world: { y: y2, z: (index + 1) * SEG_LEN }, camera: { z: 0 }, screen: { x: 0, y: 0, w: 0, scale: 0 } },
+    p1: { world: { y: y1, z: index * SEG_LEN }, screen: { x: 0, y: 0, w: 0, scale: 0 } },
+    p2: { world: { y: y2, z: (index + 1) * SEG_LEN }, screen: { x: 0, y: 0, w: 0, scale: 0 } },
   };
 }
 
-/** 生成一段 enter/hold/leave 的弯道或坡道 */
-function addRoad(segs: Segment[], enter: number, hold: number, leave: number, curve: number, dy: number) {
+/** 生成一段 enter/hold/leave 的弯道或坡道，返回本段持有的弯道值 */
+function addRoad(segs: Segment[], enter: number, hold: number, leave: number, curve: number, dy: number): number {
   const startY = segs.length ? segs[segs.length - 1].p2.world.y : 0;
   const endY = startY + dy * SEG_LEN;
   const total = enter + hold + leave;
@@ -102,11 +107,12 @@ function addRoad(segs: Segment[], enter: number, hold: number, leave: number, cu
     segs.push(makeSegment(segs.length, curve, easeInOut(startY, endY, (enter + n) / total), easeInOut(startY, endY, (enter + n + 1) / total)));
   for (let n = 0; n < leave; n++)
     segs.push(makeSegment(segs.length, easeInOut(curve, 0, n / leave), easeInOut(startY, endY, (enter + hold + n) / total), easeInOut(startY, endY, (enter + hold + n + 1) / total)));
+  return curve;
 }
 
-/** 弯道外侧立指示牌 */
+/** 弯道外侧立指示牌（右弯在左侧，箭头指向弯道方向） */
 function addSigns(segs: Segment[], from: number, to: number, curve: number) {
-  const side = curve > 0 ? 1 : -1;
+  const side = curve > 0 ? -1 : 1;
   for (let i = from + 2; i < to - 2; i += 4) {
     segs[i % segs.length].sprites.push({ type: 'sign', offset: side * 1.35 });
   }
@@ -120,11 +126,11 @@ function buildTrack(): Segment[] {
   while (segs.length < SEG_TARGET) {
     const r = Math.random();
     const from = segs.length;
-    if (r < 0.3) addRoad(segs, 10, 20 + Math.random() * 30, 10, 0, rand(-4, 4));
-    else if (r < 0.55) addRoad(segs, 18, 26 + Math.random() * 26, 18, Math.random() < 0.5 ? 2.4 : -2.4, rand(-5, 5));
-    else if (r < 0.78) addRoad(segs, 22, 30 + Math.random() * 24, 22, Math.random() < 0.5 ? 4.2 : -4.2, rand(-6, 6));
-    else addRoad(segs, 26, 26 + Math.random() * 22, 26, Math.random() < 0.5 ? 6 : -6, rand(-3, 3));
-    const curve = segs[Math.min(segs.length - 2, segs.length - 1)].curve;
+    let curve = 0;
+    if (r < 0.3) curve = addRoad(segs, 10, 20 + Math.random() * 30, 10, 0, rand(-4, 4));
+    else if (r < 0.55) curve = addRoad(segs, 18, 26 + Math.random() * 26, 18, Math.random() < 0.5 ? 2.4 : -2.4, rand(-5, 5));
+    else if (r < 0.78) curve = addRoad(segs, 22, 30 + Math.random() * 24, 22, Math.random() < 0.5 ? 4.2 : -4.2, rand(-6, 6));
+    else curve = addRoad(segs, 26, 26 + Math.random() * 22, 26, Math.random() < 0.5 ? 6 : -6, rand(-3, 3));
     if (Math.abs(curve) > 1.5) addSigns(segs, from, segs.length, curve);
   }
   // 收尾回到起点高度，保证循环无跳变
@@ -151,7 +157,6 @@ function buildTrack(): Segment[] {
 /** 世界 → 屏幕；dz 下限避免相机脚下的段爆掉多边形；scale 上限防止巨大路径拖垮光栅 */
 function project(p: Pt, camX: number, camY: number, camZ: number) {
   const dz = Math.max(20, p.world.z - camZ);
-  p.camera.z = dz;
   const scale = Math.min(CAM_DEPTH / dz, 0.0052);
   p.screen.scale = scale;
   p.screen.x = Math.round(clamp(RW / 2 + scale * -camX * (RW / 2), -4000, 4000));
@@ -252,14 +257,14 @@ function spawnCar(w: World, aheadZ: number): Car {
 function step(w: World, dt: number, tNow: number) {
   const playerSegment = findSegment(w, w.position + PLAYER_Z);
   const speedPercent = w.speed / MAX_SPEED;
-  const dx = dt * 2.4 * speedPercent;
+  const dx = dt * STEER_RATE * Math.max(speedPercent, 0.3);
 
   // 转向输入
   if (w.steer < 0) w.playerX -= dx;
   else if (w.steer > 0) w.playerX += dx;
-  // 弯道离心力
-  w.playerX -= dx * speedPercent * playerSegment.curve * CENTRIFUGAL * 3.2;
-  w.playerX = clamp(w.playerX, -2.3, 2.3);
+  // 弯道离心力：与速度平方同阶，满速急弯略强于转向，需提前靠内侧
+  w.playerX -= dx * speedPercent * playerSegment.curve * CENTRIFUGAL;
+  w.playerX = clamp(w.playerX, -PLAYER_X_MAX, PLAYER_X_MAX);
 
   // 加减速
   const offroad = Math.abs(w.playerX) > 1;
@@ -285,7 +290,7 @@ function step(w: World, dt: number, tNow: number) {
   // 车流：补充 / 回收
   const want = targetCars(w.meters);
   while (w.cars.length < want) {
-    w.cars.push(spawnCar(w, w.position + PLAYER_Z + rand(DRAW_DIST, DRAW_DIST * 2.4) * SEG_LEN));
+    w.cars.push(spawnCar(w, w.position + PLAYER_Z + rand(CAR_SPAWN_SEG, DRAW_DIST * 2.4) * SEG_LEN));
   }
   for (const c of w.cars) c.z += c.speed * dt;
   for (let i = w.cars.length - 1; i >= 0; i--) {
@@ -293,7 +298,7 @@ function step(w: World, dt: number, tNow: number) {
     if (c.z < w.position - SEG_LEN * 4 || c.z > w.position + w.trackLen * 0.75) {
       if (w.cars.length > want) w.cars.splice(i, 1);
       else {
-        c.z = w.position + PLAYER_Z + rand(DRAW_DIST, DRAW_DIST * 2.4) * SEG_LEN;
+        c.z = w.position + PLAYER_Z + rand(CAR_SPAWN_SEG, DRAW_DIST * 2.4) * SEG_LEN;
         c.offset = LANES[Math.floor(Math.random() * 3)] + rand(-0.06, 0.06);
         c.speed = MAX_SPEED * rand(CAR_SPEED_MIN, CAR_SPEED_MAX) * (1 + Math.min(0.35, w.meters / 6000));
         c.passed = false;
@@ -310,7 +315,6 @@ function step(w: World, dt: number, tNow: number) {
         w.invincible = 1.6;
         w.speed = Math.min(w.speed, MAX_SPEED * 0.12);
         w.crashAt = tNow;
-        w.nearMiss = Math.max(0, w.nearMiss); // 不变，撞车不加分
         if (w.lives <= 0) w.over = true;
         else {
           sfx.lose();
@@ -453,7 +457,7 @@ function drawSprite(ctx: CanvasRenderingContext2D, sp: Sprite, x: number, y: num
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#20233a';
-    const dir = sp.offset > 0 ? 1 : -1;
+    const dir = sp.offset > 0 ? -1 : 1; // 牌立在弯道外侧，箭头指向弯道方向
     for (let i = -1; i <= 1; i++) {
       const bx = i * h * 0.16;
       ctx.beginPath();
@@ -525,21 +529,23 @@ function shade(hex: string, k: number): string {
 
 function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
   ctx.clearRect(0, 0, RW, RH);
+  /** 相机位置取赛道模：多圈后仍与段号同域，否则 dz 会变成负数被钳成近景 */
+  const posMod = ((w.position % w.trackLen) + w.trackLen) % w.trackLen;
   const playerSegment = findSegment(w, w.position + PLAYER_Z);
-  const playerPercent = ((w.position + PLAYER_Z) % SEG_LEN) / SEG_LEN;
+  const playerPercent = ((posMod + PLAYER_Z) % SEG_LEN) / SEG_LEN;
   const playerY = lerp(playerSegment.p1.world.y, playerSegment.p2.world.y, playerPercent);
-  const baseIndex = Math.floor(w.position / SEG_LEN) % w.segs.length;
+  const baseIndex = Math.floor(posMod / SEG_LEN) % w.segs.length;
 
   drawSky(ctx);
   drawMountains(ctx, w.position * 0.0004 + playerSegment.curve * 0.2);
 
   // 第一遍：由近及远投影并记录（供第二遍由远及近绘制）
   let x = 0;
-  let dx = -(w.segs[baseIndex].curve * ((w.position % SEG_LEN) / SEG_LEN));
+  let dx = -(w.segs[baseIndex].curve * ((posMod % SEG_LEN) / SEG_LEN));
   for (let n = 0; n < DRAW_DIST; n++) {
     const seg = w.segs[(baseIndex + n) % w.segs.length];
     const looped = seg.index < baseIndex;
-    const camZ = w.position - (looped ? w.trackLen : 0);
+    const camZ = posMod - (looped ? w.trackLen : 0);
     project(seg.p1, w.playerX * ROAD_W - x, playerY + CAM_H, camZ);
     project(seg.p2, w.playerX * ROAD_W - x - dx, playerY + CAM_H, camZ);
     x += dx;
@@ -565,7 +571,6 @@ function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
     const seg = w.segs[(baseIndex + n) % w.segs.length];
     const p1 = seg.p1.screen;
     const p2 = seg.p2.screen;
-    if (seg.p1.camera.z <= CAM_DEPTH) continue;
 
     const alt = Math.floor(seg.index / 3) % 2 === 0;
     const fogA = Math.pow(n / DRAW_DIST, 2.2) * 0.75;
@@ -732,24 +737,15 @@ export default function Racing3D() {
   const togglePauseRef = useRef(togglePause);
   togglePauseRef.current = togglePause;
 
-  // 触屏方向盘
-  const onDir = useCallback((dir: 'up' | 'down' | 'left' | 'right') => {
+  // 触屏按住式操控
+  const touchSteer = useCallback((dir: -1 | 1, on: boolean) => {
     const w = worldRef.current;
-    if (dir === 'left') {
-      w.steer = -1;
-      w.accel = true;
-    } else if (dir === 'right') {
-      w.steer = 1;
-      w.accel = true;
-    } else if (dir === 'up') {
-      w.accel = true;
-    } else {
-      w.brake = true;
-      w.accel = false;
-    }
+    if (on) w.steer = dir;
+    else if (w.steer === dir) w.steer = 0;
   }, []);
-  const onDirRef = useRef(onDir);
-  onDirRef.current = onDir;
+  const touchHold = useCallback((key: 'accel' | 'brake', on: boolean) => {
+    worldRef.current[key] = on;
+  }, []);
 
   // 主循环
   useEffect(() => {
@@ -908,7 +904,7 @@ export default function Racing3D() {
               <p className="rc3d-keys">
                 ←→/AD 转向 · ↑/W 油门 · ↓/S 刹车 · P 暂停
                 <br />
-                触屏：左侧方向盘 ↑ 油门 ↓ 刹车
+                触屏：按住 ◀ ▶ 转向，⛽ 油门 / 🛑 刹车
               </p>
               <button className="btn btn-primary" onClick={start}>
                 出发
@@ -944,19 +940,11 @@ export default function Racing3D() {
         </div>
 
         <div className="rc3d-controls">
-          <TouchDpad
-            onDir={(dir) => {
-              const w = worldRef.current;
-              if (statusRef.current !== 'playing') return;
-              onDirRef.current(dir);
-              sfx.move();
-              // 方向键松开后复位（dpad 无 up 事件，按下即冲，短按够用）
-              window.setTimeout(() => {
-                if (dir === 'left' || dir === 'right') w.steer = 0;
-                if (dir === 'up') w.accel = false;
-                if (dir === 'down') w.brake = false;
-              }, 260);
-            }}
+          <TouchButtons
+            items={[
+              { label: '◀', onPress: () => touchSteer(-1, true), onRelease: () => touchSteer(-1, false) },
+              { label: '▶', onPress: () => touchSteer(1, true), onRelease: () => touchSteer(1, false) },
+            ]}
           />
           <div className="rc3d-actions">
             <button className="btn btn-ghost" onClick={togglePause} disabled={status !== 'playing' && status !== 'paused'}>
@@ -966,6 +954,12 @@ export default function Racing3D() {
               🔄 重新开始
             </button>
           </div>
+          <TouchButtons
+            items={[
+              { label: '🛑 刹车', onPress: () => touchHold('brake', true), onRelease: () => touchHold('brake', false) },
+              { label: '⛽ 油门', primary: true, onPress: () => touchHold('accel', true), onRelease: () => touchHold('accel', false) },
+            ]}
+          />
         </div>
         <p className="hint">
           弯道上会被离心力向外甩，提前靠内侧；冲出路面会大幅减速；近失超车有 {NEAR_MISS_SCORE} 分奖励和短暂提速。
