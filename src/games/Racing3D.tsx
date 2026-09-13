@@ -61,8 +61,8 @@ const SCRAPE_SPEED = MAX_SPEED * 0.42;
 /** 树石离路心的最小距离（要明显在护栏外，否则贴护栏行驶时会被树糊住视线） */
 const TREE_MIN_X = 1.95;
 /** 路侧物近到开始淡出的相机距离 / 完全剔除的距离 */
-const SPRITE_FADE_Z = 900;
-const SPRITE_CULL_Z = 420;
+const SPRITE_FADE_Z = 1300;
+const SPRITE_CULL_Z = 620;
 /** 近失奖励分 / 近失后短暂冲刺提速 */
 const NEAR_MISS_SCORE = 50;
 const NEAR_MISS_BOOST_T = 1.4;
@@ -118,11 +118,11 @@ function addRoad(segs: Segment[], enter: number, hold: number, leave: number, cu
   return curve;
 }
 
-/** 弯道外侧立指示牌（右弯在左侧，箭头指向弯道方向） */
+/** 弯道外侧立指示牌（右弯在左侧，箭头指向弯道方向）：间距拉开并退到护栏外，否则糊在车头前 */
 function addSigns(segs: Segment[], from: number, to: number, curve: number) {
   const side = curve > 0 ? -1 : 1;
-  for (let i = from + 2; i < to - 2; i += 4) {
-    segs[i % segs.length].sprites.push({ type: 'sign', offset: side * 1.62 });
+  for (let i = from + 4; i < to - 4; i += 9) {
+    segs[i % segs.length].sprites.push({ type: 'sign', offset: side * 2.05 });
   }
 }
 
@@ -957,12 +957,46 @@ function drawPlayerCar(ctx: CanvasRenderingContext2D, cx: number, baseY: number,
   ctx.restore();
 }
 
+/** 平路时玩家车底的屏幕 y，用作随坡起伏的基准 */
+const FLAT_ROAD_Y = RH / 2 + (CAM_DEPTH / PLAYER_Z) * CAM_H * (RH / 2);
+
+/** 护栏横梁离地高度（世界单位）：约车高的 1/3，太高会横穿车窗看着像车压在护栏上 */
+const RAIL_H = 300;
+
 /** 护栏点：路面侧向偏移 off 倍路宽、离地 hgt 世界单位的屏幕坐标 */
 function railPt(p: Pt, side: number, off: number, hgt: number): readonly [number, number] {
   return [p.screen.x + side * off * p.screen.w, p.screen.y - hgt * p.screen.scale * (RW / 2)] as const;
 }
 
-const RAIL_H = 430;
+/** 绘制一段护栏（横梁+高光+立柱）；比玩家车更近的段要在车之后画 */
+function drawSegRail(ctx: CanvasRenderingContext2D, seg: Segment) {
+  for (const side of [-1, 1]) {
+    const [ax, ay] = railPt(seg.p1, side, RAIL_X, RAIL_H);
+    const [bx, by] = railPt(seg.p2, side, RAIL_X, RAIL_H);
+    if ((ax < -80 && bx < -80) || (ax > RW + 80 && bx > RW + 80)) continue;
+    const th = Math.max(0.7, seg.p1.screen.scale * (RW / 2) * 110);
+    ctx.strokeStyle = COL.railDark;
+    ctx.lineWidth = th * 1.8;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.strokeStyle = rgba(COL.rail, 0.92);
+    ctx.lineWidth = th * 0.62;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay - th * 0.5);
+    ctx.lineTo(bx, by - th * 0.5);
+    ctx.stroke();
+    if (seg.index % 3 === 0) {
+      ctx.strokeStyle = 'rgba(40,44,56,0.9)';
+      ctx.lineWidth = Math.max(0.7, th * 0.7);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax, seg.p1.screen.y);
+      ctx.stroke();
+    }
+  }
+}
 
 function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
   ctx.clearRect(0, 0, RW, RH);
@@ -1074,35 +1108,8 @@ function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
     }
     if (fogA > 0.02) poly(ctx, p1.x, p1.y, p2.x, p2.y, p1.w + r1, p2.w + r2, rgba(COL.fog, fogA * 0.9));
 
-    // 护栏（两侧，横梁沿路面延伸，立柱隔段设置）
-    if (n > 1) {
-      for (const side of [-1, 1]) {
-        const [ax, ay] = railPt(seg.p1, side, RAIL_X, RAIL_H);
-        const [bx, by] = railPt(seg.p2, side, RAIL_X, RAIL_H);
-        if ((ax < -80 && bx < -80) || (ax > RW + 80 && bx > RW + 80)) continue;
-        const th = Math.max(0.7, seg.p1.screen.scale * (RW / 2) * 110);
-        ctx.strokeStyle = COL.railDark;
-        ctx.lineWidth = th * 1.8;
-        ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(bx, by);
-        ctx.stroke();
-        ctx.strokeStyle = rgba(COL.rail, 0.92);
-        ctx.lineWidth = th * 0.62;
-        ctx.beginPath();
-        ctx.moveTo(ax, ay - th * 0.5);
-        ctx.lineTo(bx, by - th * 0.5);
-        ctx.stroke();
-        if (seg.index % 3 === 0) {
-          ctx.strokeStyle = 'rgba(40,44,56,0.9)';
-          ctx.lineWidth = Math.max(0.7, th * 0.7);
-          ctx.beginPath();
-          ctx.moveTo(ax, ay);
-          ctx.lineTo(ax, seg.p1.screen.y);
-          ctx.stroke();
-        }
-      }
-    }
+    // 护栏
+    drawSegRail(ctx, seg);
 
     // 路侧物：太近的会糊满屏幕挡住视线，按相机距离淡出后剔除
     for (const sp of seg.sprites) {
@@ -1133,13 +1140,12 @@ function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
     }
   }
 
-  // 玩家车：投影到所在段的实际路面位置（横向随 playerX，撞后闪烁）
-  const roadX = lerp(playerSegment.p1.screen.x, playerSegment.p2.screen.x, playerPercent);
+  // 玩家车：固定在画面底部（相机横向跟随玩家，路面与护栏在车下滑动）。
+  // 若按 playerZ 投影，比车更近的护栏必然投影更低，会从车底穿过看着像车压在护栏上。
   const roadY = lerp(playerSegment.p1.screen.y, playerSegment.p2.screen.y, playerPercent);
-  const roadW = lerp(playerSegment.p1.screen.w, playerSegment.p2.screen.w, playerPercent);
-  const carX = clamp(roadX + w.playerX * roadW, 20, RW - 20);
-  const carY = Math.min(roadY, RH - 6);
-  const carW = roadW * 0.62;
+  const carX = CX + w.tilt * 5;
+  const carY = RH - 10 + clamp((roadY - FLAT_ROAD_Y) * 0.18, -9, 9);
+  const carW = 132;
   const blink = w.invincible > 0 && Math.floor(t * 10) % 2 === 0;
   if (!blink) {
     drawPlayerCar(ctx, carX, carY, carW, {
