@@ -39,8 +39,6 @@ const OFFROAD_DECEL = -MAX_SPEED / 2.6;
 const OFFROAD_LIMIT = MAX_SPEED * 0.42;
 /** 转向角速度（路宽/秒，低速时保留下限以便微调） */
 const STEER_RATE = 3.4;
-/** 横向可达极限（路宽倍数，1=路面边缘） */
-const PLAYER_X_MAX = 1.7;
 /** 弯道离心力（把玩家往外甩的强度）：满速最急弯(6)时约等于转向能力的 90%，靠转向可守住线 */
 const CENTRIFUGAL = 0.15;
 
@@ -55,6 +53,11 @@ const CAR_SPAWN_SEG = DRAW_DIST * 1.15;
 const CAR_LEN = 105;
 const CAR_HIT_X = 0.5;
 const NEAR_MISS_X = 0.85;
+/** 近失统计区间：超车过程中（前后 9 段内）记录最小横向间距 */
+const PASS_WINDOW_Z = 900;
+/** 护栏横向位置（路宽倍数）与刮擦后的速度上限 */
+const RAIL_X = 1.45;
+const SCRAPE_SPEED = MAX_SPEED * 0.42;
 /** 近失奖励分 / 近失后短暂冲刺提速 */
 const NEAR_MISS_SCORE = 50;
 const NEAR_MISS_BOOST_T = 1.4;
@@ -175,6 +178,8 @@ interface Car {
   kind: 'sedan' | 'van' | 'truck';
   /** 是否已被本圈玩家超过（近失判定用） */
   passed: boolean;
+  /** 超车过程中的最小横向间距 */
+  minGap: number;
 }
 
 interface World {
@@ -195,6 +200,10 @@ interface World {
   nearMiss: number;
   /** 撞车红光闪 */
   crashAt: number;
+  /** >0 正在刮护栏（火花与震动） */
+  scrapeT: number;
+  /** 刮擦侧（-1 左 / 1 右），决定火花位置 */
+  scrapeSide: number;
   /** 近失提示语 */
   msg: string;
   msgAt: number;
@@ -229,6 +238,8 @@ function newWorld(): World {
     boostT: 0,
     nearMiss: 0,
     crashAt: -9,
+    scrapeT: 0,
+    scrapeSide: 0,
     msg: '',
     msgAt: -9,
     msgGood: true,
@@ -257,6 +268,7 @@ function spawnCar(w: World, aheadZ: number): Car {
     color,
     kind,
     passed: false,
+    minGap: Infinity,
   };
 }
 
@@ -279,7 +291,18 @@ function step(w: World, dt: number, tNow: number) {
   else if (w.steer > 0) w.playerX += dx;
   // 弯道离心力：与速度平方同阶，满速急弯略强于转向，需提前靠内侧
   w.playerX -= dx * speedPercent * playerSegment.curve * CENTRIFUGAL;
-  w.playerX = clamp(w.playerX, -PLAYER_X_MAX, PLAYER_X_MAX);
+  // 护栏不可穿越：贴上去即被弹回并掉速（新接触才响一次）
+  if (Math.abs(w.playerX) > RAIL_X) {
+    const side = w.playerX > 0 ? 1 : -1;
+    w.playerX = side * RAIL_X - side * 0.05;
+    if (w.scrapeT <= 0) {
+      sfx.move();
+      if (w.speed > SCRAPE_SPEED) w.speed = SCRAPE_SPEED * rand(0.9, 0.97);
+    }
+    w.scrapeT = 0.2;
+    w.scrapeSide = side;
+  }
+  if (w.scrapeT > 0) w.scrapeT -= dt;
 
   // 加减速
   const offroad = Math.abs(w.playerX) > 1;
@@ -320,6 +343,7 @@ function step(w: World, dt: number, tNow: number) {
         c.color = next.color;
         c.kind = next.kind;
         c.passed = false;
+        c.minGap = Infinity;
       }
     }
   }
@@ -329,6 +353,8 @@ function step(w: World, dt: number, tNow: number) {
     for (const c of w.cars) {
       const relZ = c.z - (w.position + PLAYER_Z);
       if (Math.abs(relZ) < CAR_LEN && Math.abs(w.playerX - c.offset) < CAR_HIT_X) {
+        c.passed = true;
+        c.minGap = Infinity;
         w.lives -= 1;
         w.invincible = 1.6;
         w.speed = Math.min(w.speed, MAX_SPEED * 0.12);
@@ -344,11 +370,16 @@ function step(w: World, dt: number, tNow: number) {
       }
     }
   }
+  // 近失：全程跟踪最小横向间距，完成超车时只在"我确实超了它"时结算
   for (const c of w.cars) {
     const relZ = c.z - (w.position + PLAYER_Z);
-    if (!c.passed && relZ < -CAR_LEN * 1.4) {
+    if (c.passed) continue;
+    if (Math.abs(relZ) < PASS_WINDOW_Z) c.minGap = Math.min(c.minGap, Math.abs(w.playerX - c.offset));
+    if (relZ < -CAR_LEN * 1.4) {
       c.passed = true;
-      if (w.invincible <= 0 && Math.abs(w.playerX - c.offset) < NEAR_MISS_X) {
+      const gap = c.minGap;
+      c.minGap = Infinity;
+      if (w.invincible <= 0 && w.speed > c.speed && gap < NEAR_MISS_X) {
         w.nearMiss += 1;
         w.boostT = NEAR_MISS_BOOST_T;
         w.msg = '贴身超车 +50';
@@ -938,8 +969,8 @@ function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
   const speedPct = clamp(w.speed / MAX_SPEED, 0, 1.4);
   const offroad = Math.abs(w.playerX) > 1;
 
-  // 相机抖动：出路面更明显，高速带轻微颠簸
-  const shake = (offroad ? 1.7 : 0) + speedPct * 0.7;
+  // 相机抖动：出路面与刮护栏更明显，高速带轻微颠簸
+  const shake = (offroad ? 1.7 : 0) + (w.scrapeT > 0 ? 3.4 : 0) + speedPct * 0.7;
   ctx.save();
   if (shake > 0.05) {
     ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake * 0.7);
@@ -1040,8 +1071,8 @@ function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
     // 护栏（两侧，横梁沿路面延伸，立柱隔段设置）
     if (n > 1) {
       for (const side of [-1, 1]) {
-        const [ax, ay] = railPt(seg.p1, side, 1.16, RAIL_H);
-        const [bx, by] = railPt(seg.p2, side, 1.16, RAIL_H);
+        const [ax, ay] = railPt(seg.p1, side, RAIL_X, RAIL_H);
+        const [bx, by] = railPt(seg.p2, side, RAIL_X, RAIL_H);
         if ((ax < -80 && bx < -80) || (ax > RW + 80 && bx > RW + 80)) continue;
         const th = Math.max(0.7, seg.p1.screen.scale * (RW / 2) * 110);
         ctx.strokeStyle = COL.railDark;
@@ -1092,18 +1123,36 @@ function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
   }
 
   // 玩家车：投影到所在段的实际路面位置（横向随 playerX，撞后闪烁）
+  const roadX = lerp(playerSegment.p1.screen.x, playerSegment.p2.screen.x, playerPercent);
+  const roadY = lerp(playerSegment.p1.screen.y, playerSegment.p2.screen.y, playerPercent);
+  const roadW = lerp(playerSegment.p1.screen.w, playerSegment.p2.screen.w, playerPercent);
+  const carX = clamp(roadX + w.playerX * roadW, 20, RW - 20);
+  const carY = Math.min(roadY, RH - 6);
+  const carW = roadW * 0.62;
   const blink = w.invincible > 0 && Math.floor(t * 10) % 2 === 0;
   if (!blink) {
-    const roadX = lerp(playerSegment.p1.screen.x, playerSegment.p2.screen.x, playerPercent);
-    const roadY = lerp(playerSegment.p1.screen.y, playerSegment.p2.screen.y, playerPercent);
-    const roadW = lerp(playerSegment.p1.screen.w, playerSegment.p2.screen.w, playerPercent);
-    drawPlayerCar(ctx, roadX + w.playerX * roadW, Math.min(roadY, RH - 6), roadW * 0.62, {
+    drawPlayerCar(ctx, carX, carY, carW, {
       tilt: w.tilt,
       brake: w.brake,
       boost: w.boostT > 0 ? 1 : 0,
       bob: Math.sin(t * 26) * (0.4 + speedPct * 1.3) + (offroad ? Math.sin(t * 44) * 1.7 : 0),
       color: '#7c5cff',
     });
+    // 刮护栏火花：贴着接触侧向外上方迸出
+    if (w.scrapeT > 0) {
+      const px = carX + w.scrapeSide * carW * 0.5;
+      const py = carY - carW * 0.2;
+      const pow = 0.4 + w.scrapeT * 3;
+      for (let i = 0; i < 9; i++) {
+        const len = (3 + Math.random() * 12) * pow;
+        ctx.strokeStyle = `rgba(255,${(190 + Math.random() * 60) | 0},${(90 + Math.random() * 90) | 0},0.9)`;
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + w.scrapeSide * len * (0.3 + Math.random() * 0.7), py - len * (0.2 + Math.random() * 0.9));
+        ctx.stroke();
+      }
+    }
   }
 
   // 结束相机抖动，后处理与 HUD 走屏幕坐标
@@ -1451,7 +1500,7 @@ export default function Racing3D() {
           />
         </div>
         <p className="hint">
-          弯道上会被离心力向外甩，提前靠内侧；冲出路面会大幅减速；近失超车有 {NEAR_MISS_SCORE} 分奖励和短暂提速。
+          弯道上会被离心力向外甩，提前靠内侧；冲出路面会大幅减速，蹭到护栏会被弹回并刮掉速度；只有你超过别人才算近失（{NEAR_MISS_SCORE} 分 + 短暂提速）。
         </p>
       </div>
     </GameShell>
