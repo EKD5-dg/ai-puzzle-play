@@ -58,6 +58,11 @@ const PASS_WINDOW_Z = 900;
 /** 护栏横向位置（路宽倍数）与刮擦后的速度上限 */
 const RAIL_X = 1.45;
 const SCRAPE_SPEED = MAX_SPEED * 0.42;
+/** 树石离路心的最小距离（要明显在护栏外，否则贴护栏行驶时会被树糊住视线） */
+const TREE_MIN_X = 1.95;
+/** 路侧物近到开始淡出的相机距离 / 完全剔除的距离 */
+const SPRITE_FADE_Z = 900;
+const SPRITE_CULL_Z = 420;
 /** 近失奖励分 / 近失后短暂冲刺提速 */
 const NEAR_MISS_SCORE = 50;
 const NEAR_MISS_BOOST_T = 1.4;
@@ -72,7 +77,7 @@ const easeInOut = (a: number, b: number, t: number) => a + (b - a) * (-Math.cos(
 
 interface Pt {
   world: { y: number; z: number };
-  screen: { x: number; y: number; w: number; scale: number };
+  screen: { x: number; y: number; w: number; scale: number; dz: number };
 }
 
 interface Sprite {
@@ -94,8 +99,8 @@ function makeSegment(index: number, curve: number, y1: number, y2: number): Segm
     index,
     curve,
     sprites: [],
-    p1: { world: { y: y1, z: index * SEG_LEN }, screen: { x: 0, y: 0, w: 0, scale: 0 } },
-    p2: { world: { y: y2, z: (index + 1) * SEG_LEN }, screen: { x: 0, y: 0, w: 0, scale: 0 } },
+    p1: { world: { y: y1, z: index * SEG_LEN }, screen: { x: 0, y: 0, w: 0, scale: 0, dz: 0 } },
+    p2: { world: { y: y2, z: (index + 1) * SEG_LEN }, screen: { x: 0, y: 0, w: 0, scale: 0, dz: 0 } },
   };
 }
 
@@ -117,7 +122,7 @@ function addRoad(segs: Segment[], enter: number, hold: number, leave: number, cu
 function addSigns(segs: Segment[], from: number, to: number, curve: number) {
   const side = curve > 0 ? -1 : 1;
   for (let i = from + 2; i < to - 2; i += 4) {
-    segs[i % segs.length].sprites.push({ type: 'sign', offset: side * 1.35 });
+    segs[i % segs.length].sprites.push({ type: 'sign', offset: side * 1.62 });
   }
 }
 
@@ -144,12 +149,12 @@ function buildTrack(): Segment[] {
       const side = Math.random() < 0.5 ? -1 : 1;
       segs[i].sprites.push({
         type: Math.random() < 0.78 ? 'tree' : 'rock',
-        offset: side * rand(1.35, 2.6),
+        offset: side * rand(TREE_MIN_X, 3.4),
       });
       if (Math.random() < 0.35) {
         segs[i].sprites.push({
           type: 'tree',
-          offset: -side * rand(1.45, 2.7),
+          offset: -side * rand(TREE_MIN_X, 3.6),
         });
       }
     }
@@ -161,6 +166,7 @@ function buildTrack(): Segment[] {
 function project(p: Pt, camX: number, camY: number, camZ: number) {
   const dz = Math.max(20, p.world.z - camZ);
   const scale = Math.min(CAM_DEPTH / dz, 0.0052);
+  p.screen.dz = dz;
   p.screen.scale = scale;
   p.screen.x = Math.round(clamp(RW / 2 + scale * -camX * (RW / 2), -4000, 4000));
   p.screen.y = Math.round(RH / 2 - scale * (p.world.y - camY) * (RH / 2));
@@ -1098,11 +1104,16 @@ function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
       }
     }
 
-    // 路侧物
+    // 路侧物：太近的会糊满屏幕挡住视线，按相机距离淡出后剔除
     for (const sp of seg.sprites) {
+      const dz = seg.p1.screen.dz;
+      if (dz < SPRITE_CULL_Z) continue;
       const sx = lerp(p1.x, p2.x, 0.5) + sp.offset * lerp(p1.w, p2.w, 0.5);
       const sy = lerp(p1.y, p2.y, 0.5);
+      const fade = clamp((dz - SPRITE_CULL_Z) / (SPRITE_FADE_Z - SPRITE_CULL_Z), 0, 1);
+      if (fade < 1) ctx.globalAlpha = fade;
       drawSprite(ctx, sp, sx, sy, lerp(p1.scale, p2.scale, 0.5));
+      if (fade < 1) ctx.globalAlpha = 1;
     }
 
     // 车流
