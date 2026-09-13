@@ -30,6 +30,7 @@ import {
   metaTactics3D,
   metaPool3D,
   metaBowling3D,
+  metaRacing3D,
 } from './gameMetas';
 
 /**
@@ -69,6 +70,7 @@ export const games: GameDefinition[] = [
   { meta: metaTactics3D, component: lazy(() => import('../games/Tactics3D')) },
   { meta: metaPool3D, component: lazy(() => import('../games/Pool3D')) },
   { meta: metaBowling3D, component: lazy(() => import('../games/Bowling3D')) },
+  { meta: metaRacing3D, component: lazy(() => import('../games/Racing3D')) },
 ];
 
 /** 按 id 查找游戏 */

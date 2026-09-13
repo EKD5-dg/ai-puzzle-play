@@ -383,6 +383,18 @@ export const metaBowling3D: GameMeta = {
   higherIsBetter: true,
 };
 
+export const metaRacing3D: GameMeta = {
+  id: 'racing-3d',
+  title: '3D 极速赛车',
+  description: '黄昏山路无限狂飙：在车流中穿梭超车，贴身而过有近失加分，跑得更远！',
+  icon: '🏎️',
+  difficulty: '中等',
+  category: '反应',
+  tags: ['3D', '赛车', '街机'],
+  bestScoreLabel: '最高分',
+  higherIsBetter: true,
+};
+
 /** 成绩比较方向权威表：false=成绩越小越好（步数/时间类）。由各 meta 派生，云同步服务端也内置了同样白名单（functions/api/sync.js），新增"成绩取小"的游戏需两处同步 */
 export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
   [
@@ -415,6 +427,7 @@ export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
     metaTactics3D,
     metaPool3D,
     metaBowling3D,
+    metaRacing3D,
   ].map((m) => [m.id, m.higherIsBetter]),
 );
 
