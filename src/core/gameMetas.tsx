@@ -395,6 +395,18 @@ export const metaRacing3D: GameMeta = {
   higherIsBetter: true,
 };
 
+export const metaBreak3D: GameMeta = {
+  id: 'breakout-3d',
+  title: '3D 打砖块',
+  description: '霓虹球台击碎远端砖墙：挡板控角、连击翻倍，拾取强化冲进无尽挑战！',
+  icon: '🧱',
+  difficulty: '中等',
+  category: '经典',
+  tags: ['3D', '街机', '弹球'],
+  bestScoreLabel: '最高分',
+  higherIsBetter: true,
+};
+
 /** 成绩比较方向权威表：false=成绩越小越好（步数/时间类）。由各 meta 派生，云同步服务端也内置了同样白名单（functions/api/sync.js），新增"成绩取小"的游戏需两处同步 */
 export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
   [
@@ -428,6 +440,7 @@ export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
     metaPool3D,
     metaBowling3D,
     metaRacing3D,
+    metaBreak3D,
   ].map((m) => [m.id, m.higherIsBetter]),
 );
 
