@@ -16,6 +16,39 @@ function routeFromHash(): string {
 const CATEGORIES = ['全部', '逻辑', '记忆', '策略', '反应', '经典'] as const;
 const DIFFICULTIES = ['全部', '简单', '中等', '困难'] as const;
 
+/** 大厅展示分组（分类 + 3D 专区），顺序即首页展示顺序 */
+const LOBBY_GROUPS = [
+  { key: '逻辑', label: '逻辑', icon: '🧩' },
+  { key: '记忆', label: '记忆', icon: '🧠' },
+  { key: '策略', label: '策略', icon: '♟️' },
+  { key: '反应', label: '反应', icon: '⚡' },
+  { key: '经典', label: '经典', icon: '👾' },
+  { key: '3d', label: '3D 专区', icon: '🧊' },
+] as const;
+
+type LobbyGroupKey = (typeof LOBBY_GROUPS)[number]['key'];
+const COLLAPSE_KEY = 'pp:lobby-collapsed';
+
+/** 标题或 id 含 3D 的归入「3D 专区」，其余按 meta.category */
+function lobbyGroupKey(meta: GameMeta): LobbyGroupKey {
+  if (meta.title.includes('3D') || /3d/i.test(meta.id)) return '3d';
+  return meta.category as LobbyGroupKey;
+}
+
+function readCollapsedMap(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(COLLAPSE_KEY);
+    if (!raw) return { '3d': true };
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, boolean>;
+    }
+  } catch {
+    /* ignore */
+  }
+  return { '3d': true };
+}
+
 /** 游戏卡片：memo 化避免输入搜索词/切筛选时 21 张卡片全量重渲染 */
 const GameCard = memo(function GameCard({ meta }: { meta: GameMeta }) {
   const best = useLocalStorage<number>(`best:${meta.id}`);
@@ -72,6 +105,8 @@ export default function App() {
   const [syncErr, setSyncErr] = useState(false);
   /** 同步完成后递增，强制游戏卡片重新读取 localStorage 中的成绩 */
   const [syncVersion, setSyncVersion] = useState(0);
+  /** 大厅分组折叠态：key=分组 id，true=已折叠；默认折叠 3D 专区 */
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(readCollapsedMap);
 
   /** 统一设置提示消息（err=true 时红色展示） */
   const showSyncMsg = (text: string, err = false) => {
@@ -119,6 +154,42 @@ export default function App() {
       return true;
     });
   }, [query, category, difficulty]);
+
+  /** 「全部」分类时按分组区块展示（3D 独立成区）；选定具体分类时保持扁平网格 */
+  const grouped = useMemo(() => {
+    if (category !== '全部') return null;
+    const buckets = new Map<LobbyGroupKey, GameMeta[]>();
+    for (const g of filtered) {
+      const key = lobbyGroupKey(g.meta);
+      const list = buckets.get(key);
+      if (list) list.push(g.meta);
+      else buckets.set(key, [g.meta]);
+    }
+    return LOBBY_GROUPS.map((group) => ({
+      ...group,
+      games: buckets.get(group.key) ?? [],
+    })).filter((g) => g.games.length > 0);
+  }, [filtered, category]);
+
+  const persistCollapsed = (next: Record<string, boolean>) => {
+    setCollapsed(next);
+    try {
+      localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const toggleGroup = (key: string) => {
+    persistCollapsed({ ...collapsed, [key]: !collapsed[key] });
+  };
+
+  const setAllGroups = (fold: boolean) => {
+    if (!grouped) return;
+    const next: Record<string, boolean> = {};
+    for (const g of grouped) next[g.key] = fold;
+    persistCollapsed(next);
+  };
 
   const current = findGame(currentId);
   const CurrentGame = current?.component;
@@ -449,6 +520,16 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              {grouped && grouped.length > 0 && (
+                <div className="filter-group group-actions">
+                  <button className="btn btn-ghost group-all-btn" onClick={() => setAllGroups(false)}>
+                    全部展开
+                  </button>
+                  <button className="btn btn-ghost group-all-btn" onClick={() => setAllGroups(true)}>
+                    全部折叠
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -456,6 +537,38 @@ export default function App() {
             <div className="empty-state">
               <span aria-hidden>🔍</span>
               <p>没有找到匹配的游戏，换个关键词试试？</p>
+            </div>
+          ) : grouped ? (
+            <div className="game-groups">
+              {grouped.map((group) => {
+                const isFolded = !!collapsed[group.key];
+                return (
+                  <section key={group.key} className={`game-group${isFolded ? ' folded' : ''}`}>
+                    <button
+                      type="button"
+                      className="game-group-header"
+                      aria-expanded={!isFolded}
+                      onClick={() => toggleGroup(group.key)}
+                    >
+                      <span className="game-group-chevron" aria-hidden>
+                        {isFolded ? '▸' : '▾'}
+                      </span>
+                      <span className="game-group-icon" aria-hidden>
+                        {group.icon}
+                      </span>
+                      <span className="game-group-title">{group.label}</span>
+                      <span className="game-group-count">{group.games.length} 款</span>
+                    </button>
+                    {!isFolded && (
+                      <div className="game-grid">
+                        {group.games.map((meta) => (
+                          <GameCard key={meta.id} meta={meta} />
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
             </div>
           ) : (
             <div className="game-grid">

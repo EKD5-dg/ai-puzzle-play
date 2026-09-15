@@ -277,6 +277,118 @@ code {
   opacity: 1;
 }
 
+/* ============ 大厅分组（分类区块 + 3D 专区） ============ */
+.game-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.game-group {
+  margin-bottom: 12px;
+}
+
+.game-group-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 4px 14px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(15, 18, 34, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.18s, background 0.18s;
+}
+
+.game-group-header:hover {
+  color: #fff;
+  background: rgba(22, 26, 48, 0.92);
+}
+
+.game-group-chevron {
+  width: 14px;
+  color: var(--text-dim);
+  font-size: 13px;
+  transition: color 0.18s;
+}
+
+.game-group-header:hover .game-group-chevron {
+  color: var(--primary-2);
+}
+
+.game-group-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.game-group-title {
+  background: linear-gradient(90deg, #c4b5fd, #67e8f9);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.game-group-count {
+  margin-left: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+}
+
+.game-group.folded .game-group-header {
+  padding-bottom: 12px;
+}
+
+.game-group.folded .game-group-title {
+  background: none;
+  color: var(--text-dim);
+}
+
+.game-group .game-grid {
+  margin-top: 4px;
+  animation: groupFadeIn 0.22s ease;
+}
+
+@keyframes groupFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.group-actions {
+  margin-left: auto;
+}
+
+.group-all-btn {
+  font-size: 12px;
+  padding: 5px 12px;
+  color: var(--text-dim);
+}
+
+.group-all-btn:hover {
+  color: var(--text);
+}
+
 .lobby-footer {
   margin-top: 44px;
   padding: 20px 24px;
@@ -874,6 +986,16 @@ code {
 
   .game-grid {
     grid-template-columns: 1fr;
+  }
+
+  .game-group-header {
+    font-size: 15px;
+    padding: 10px 2px 12px;
+  }
+
+  .group-actions {
+    margin-left: 0;
+    width: 100%;
   }
 
   .game-stats {
