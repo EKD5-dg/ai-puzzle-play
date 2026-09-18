@@ -71,9 +71,11 @@ npm run preview    # 本地预览生产构建
 src/
 ├── core/               # 核心框架
 │   ├── types.ts        # GameDefinition 类型契约
+│   ├── gameMetas.tsx   # ★ 全部游戏元信息（唯一权威来源）+ 成绩方向表
 │   ├── registry.tsx    # ★ 游戏注册表（新增游戏唯一入口）
 │   ├── GameShell.tsx   # 统一游戏外壳（标题/统计/返回）
-│   ├── useLocalStorage.ts  # 成绩持久化
+│   ├── useLocalStorage.ts  # 成绩持久化（含分档键聚合与展示格式化）
+│   ├── sync.tsx        # 跨设备成绩云同步（useBestScore / 存档清洗）
 │   ├── sound.ts        # Web Audio 音效系统
 │   └── Toast.tsx       # Toast 通知系统
 ├── games/              # 各游戏独立模块
@@ -109,17 +111,18 @@ src/
 │   ├── Racing3D.tsx     # 3D 极速赛车（伪 3D 黄昏山路无限狂飙）
 │   └── Breakout3D.tsx   # 3D 打砖块（透视霓虹球台 + 强化掉落）
 └── App.tsx             # 大厅（搜索/筛选/统计）
+
+functions/api/
+├── sync.js             # 云同步读写（Pages Functions + KV，成绩合并方向的权威表）
+└── pair.js             # 同步码配对（5 分钟有效）
 ```
 
 ## 🛠 如何新增游戏
 
-1. 在 `src/games/` 下新建组件文件（如 `MyGame.tsx`），导出 `meta` 元信息与默认组件：
+1. 在 `src/core/gameMetas.tsx` 追加一条元信息（组件与注册表都从这里导入，保证按需分包）：
 
 ```tsx
-import { GameShell } from '../core/GameShell';
-import type { GameMeta } from '../core/types';
-
-export const meta: GameMeta = {
+export const metaMyGame: GameMeta = {
   id: 'my-game',            // 唯一 id（用作路由与存档 key）
   title: '我的游戏',
   description: '一句话介绍',
@@ -128,25 +131,48 @@ export const meta: GameMeta = {
   category: '逻辑',         // 逻辑 | 记忆 | 策略 | 反应 | 经典
   tags: ['标签'],
   bestScoreLabel: '最高分',
+  higherIsBetter: true,     // 必填：false = 成绩越小越好（步数/时间类）
+  bestVariants: ['0', '1'], // 可选：按难度/关卡分档存档时列出各档后缀
+  bestUnit: 's',            // 可选：'s' = 存秒，'ms' = 存毫秒（大厅卡片据此换算展示）
 };
+```
+
+2. 在 `src/games/` 下新建组件文件（如 `MyGame.tsx`），成绩读写统一走 `useBestScore`：
+
+```tsx
+import { GameShell } from '../core/GameShell';
+import { useBestScore } from '../core/sync';
+import { metaMyGame } from '../core/gameMetas';
 
 export default function MyGame() {
-  return <GameShell meta={meta} onBack={() => (window.location.hash = '#/')}>{/* 游戏内容 */}</GameShell>;
+  // 分档存档时键写成 `${metaMyGame.id}:${难度下标}`，与 meta.bestVariants 对应
+  const best = useBestScore(metaMyGame.id);
+  // 只有比历史更好才会写入并返回 true（成绩取小的游戏用 (a, b) => a < b）
+  const isNew = best.updateBest(score, (a, b) => a > b);
+  return (
+    <GameShell meta={metaMyGame} onBack={() => (window.location.hash = '#/')}>
+      {/* 游戏内容 */}
+    </GameShell>
+  );
 }
 ```
 
-2. 在 `src/core/registry.tsx` 注册一行：
+3. 在 `src/core/registry.tsx` 注册一行（`lazy` 分包，进入游戏才下载对应 chunk）：
 
 ```tsx
-import MyGame, { meta as metaMyGame } from '../games/MyGame';
+import { metaMyGame } from './gameMetas';
 
 export const games: GameDefinition[] = [
   // ...已有游戏
-  { meta: metaMyGame, component: MyGame },
+  { meta: metaMyGame, component: lazy(() => import('../games/MyGame')) },
 ];
 ```
 
-完成！大厅卡片、路由、成绩存档全部自动生效。
+完成！大厅卡片、路由、成绩存档与云同步全部自动生效。
+
+> ⚠️ 成绩"越小越好"的游戏，除了 `higherIsBetter: false`，还必须把 id 加进 `functions/api/sync.js` 的 `LOWER_BETTER` 白名单——那是服务端合并方向的权威表，两处不一致会让云同步按"取大"合并、把更好的成绩覆盖掉。
+
+> ☁️ 云同步依赖 KV 绑定 `SYNC_KV`（见 `wrangler.jsonc`）。重新创建 Pages 项目时若忘了配置该绑定，站点照常可玩，但 `/api/sync` 与 `/api/pair` 会 500。
 
 ## ☁️ 部署（Cloudflare Pages）
 

@@ -28,6 +28,9 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+# wrangler 本地密钥/配置（勿入库）
+.dev.vars
+.dev.vars.*
 
 # 部署
 .wrangler/
