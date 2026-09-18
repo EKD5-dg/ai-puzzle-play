@@ -57,6 +57,8 @@ export const metaMines: GameMeta = {
   tags: ['推理', '经典'],
   bestScoreLabel: '最快通关',
   higherIsBetter: false,
+  bestVariants: ['0', '1', '2'],
+  bestUnit: 's',
 };
 
 export const metaMemory: GameMeta = {
@@ -69,6 +71,7 @@ export const metaMemory: GameMeta = {
   tags: ['配对', '记忆'],
   bestScoreLabel: '最少步数',
   higherIsBetter: false,
+  bestVariants: ['0', '1', '2'],
 };
 
 export const metaSliding: GameMeta = {
@@ -81,6 +84,7 @@ export const metaSliding: GameMeta = {
   tags: ['滑块', '排序'],
   bestScoreLabel: '最少步数',
   higherIsBetter: false,
+  bestVariants: ['0', '1', '2'],
 };
 
 export const metaSudoku: GameMeta = {
@@ -93,6 +97,8 @@ export const metaSudoku: GameMeta = {
   tags: ['数字', '推理'],
   bestScoreLabel: '最快完成',
   higherIsBetter: false,
+  bestVariants: ['0', '1', '2'],
+  bestUnit: 's',
 };
 
 export const metaTetris: GameMeta = {
@@ -129,6 +135,7 @@ export const metaSokoban: GameMeta = {
   tags: ['推箱', '关卡'],
   bestScoreLabel: '最少步数',
   higherIsBetter: false,
+  bestVariants: ['0', '1', '2', '3', '4', '5', '6', '7'],
 };
 
 export const metaSnake: GameMeta = {
@@ -285,6 +292,7 @@ export const metaCube: GameMeta = {
   tags: ['3D', '空间', '经典'],
   bestScoreLabel: '最快还原',
   higherIsBetter: false,
+  bestUnit: 'ms',
 };
 
 export const metaMaze3D: GameMeta = {
@@ -297,6 +305,7 @@ export const metaMaze3D: GameMeta = {
   tags: ['3D', '迷宫', '街机'],
   bestScoreLabel: '最快逃脱',
   higherIsBetter: false,
+  bestUnit: 'ms',
 };
 
 export const metaPong3D: GameMeta = {

@@ -1,8 +1,9 @@
 import { Suspense, memo, useEffect, useMemo, useState } from 'react';
 import { games, findGame } from './core/registry';
-import { useLocalStorage, notifyScoresUpdated } from './core/useLocalStorage';
+import { useBestSummary, hasAnyBest, formatBest, readBestKey, notifyScoresUpdated } from './core/useLocalStorage';
 import { isMuted, setMuted, sfx } from './core/sound';
-import { getSyncCode, setSyncCode, generateSyncCode, createPair, joinPair, isBetterScore, readDqSave, writeDqSave, isBetterDqSave, readSoundMuted, writeSoundMuted } from './core/sync';
+import { getSyncCode, setSyncCode, generateSyncCode, createPair, joinPair, isBetterScore, readDqSave, writeDqSave, isBetterDqSave, readSoundMuted, writeSoundMuted, sanitizeDqSave, fetchCloud, pushCloud } from './core/sync';
+import type { DqSave } from './core/sync';
 import type { GameMeta } from './core/types';
 import { DonateWidget } from './core/DonateWidget';
 import { AdSlot } from './core/AdSlot';
@@ -29,6 +30,11 @@ const LOBBY_GROUPS = [
 type LobbyGroupKey = (typeof LOBBY_GROUPS)[number]['key'];
 const COLLAPSE_KEY = 'pp:lobby-collapsed';
 
+/** 已改为分档记录（meta.bestVariants）的游戏：旧基础键是跨档混出来的脏值，不再上传云端 */
+const VARIANT_BASE_IDS = new Set(
+  games.filter((g) => g.meta.bestVariants).map((g) => g.meta.id),
+);
+
 /** 标题或 id 含 3D 的归入「3D 专区」，其余按 meta.category */
 function lobbyGroupKey(meta: GameMeta): LobbyGroupKey {
   if (meta.title.includes('3D') || /3d/i.test(meta.id)) return '3d';
@@ -49,19 +55,10 @@ function readCollapsedMap(): Record<string, boolean> {
   return { '3d': true };
 }
 
-/** 游戏卡片：memo 化避免输入搜索词/切筛选时 21 张卡片全量重渲染 */
+/** 游戏卡片：memo 化避免输入搜索词/切筛选时几十张卡片全量重渲染 */
 const GameCard = memo(function GameCard({ meta }: { meta: GameMeta }) {
-  const best = useLocalStorage<number>(`best:${meta.id}`);
-  // 扫雷按难度细分记录（minesweeper:0..2），卡片展示三档中最优；兼容旧基础键数据
-  const best0 = useLocalStorage<number>('best:minesweeper:0');
-  const best1 = useLocalStorage<number>('best:minesweeper:1');
-  const best2 = useLocalStorage<number>('best:minesweeper:2');
-  const bestValue =
-    meta.id === 'minesweeper'
-      ? [best0.value, best1.value, best2.value]
-          .filter((v): v is number => v !== null)
-          .reduce<number | null>((a, b) => (a === null ? b : Math.min(a, b)), null) ?? best.value
-      : best.value;
+  // 分档成绩（难度/关卡各自存键）在此按 higherIsBetter 聚合，无需每游戏特例
+  const bestValue = useBestSummary(meta);
   const played = bestValue !== null;
   return (
     <a href={`#/game/${meta.id}`} className="game-card">
@@ -83,7 +80,7 @@ const GameCard = memo(function GameCard({ meta }: { meta: GameMeta }) {
             </span>
           ))}
           <span className="best">
-            {meta.bestScoreLabel}：{bestValue ?? '--'}
+            {meta.bestScoreLabel}：{formatBest(meta, bestValue)}
           </span>
           <span className="game-card-play">{played ? '继续 ▶' : '开始 ▶'}</span>
         </div>
@@ -123,25 +120,11 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  // 大厅统计：已游玩 / 已通关（有最佳成绩；扫雷含分难度记录）
+  // 大厅统计：已游玩 = 有过成绩记录的游戏数（含分档键；无"通关"这一独立概念，故不再单列）
   const stats = useMemo(() => {
     let played = 0;
-    let cleared = 0;
-    for (const g of games) {
-      try {
-        let found = localStorage.getItem(`pp:best:${g.meta.id}`) !== null;
-        if (!found && g.meta.id === 'minesweeper') {
-          found = ['0', '1', '2'].some((i) => localStorage.getItem(`pp:best:minesweeper:${i}`) !== null);
-        }
-        if (found) {
-          played++;
-          cleared++;
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    return { played, cleared };
+    for (const g of games) if (hasAnyBest(g.meta)) played++;
+    return { played };
   }, [currentId, syncVersion]);
 
   const filtered = useMemo(() => {
@@ -228,25 +211,16 @@ export default function App() {
     sfx.merge();
     // 拉取并合并云端成绩 + 进度 + 偏好到本地
     try {
-      const res = await fetch(`https://puzzle-play.pages.dev/api/sync?code=${encodeURIComponent(code)}`);
-      if (!res.ok) throw new Error('fetch failed');
-      const data = (await res.json()) as {
-        scores?: Record<string, number>;
-        progress?: { dqSave?: ReturnType<typeof readDqSave> };
-        prefs?: { soundMuted?: boolean };
-      };
+      const data = await fetchCloud(code);
       const cloud = data.scores ?? {};
       let merged = 0;
       // 遍历云端所有成绩键（支持 `id:后缀` 细分键，如扫雷按难度），按各游戏比较方向合并
       for (const [cid, cv] of Object.entries(cloud)) {
-        let lv: number | null;
-        try {
-          const raw = localStorage.getItem(`pp:best:${cid}`);
-          lv = raw === null ? null : Number(raw);
-        } catch {
-          lv = null;
-        }
-        if (lv === null || Number.isNaN(lv) || isBetterScore(cid, cv, lv)) {
+        // 云端值必须是有意义的正数：0 对"取小"的成绩是必胜值，会把本地真纪录冲掉
+        if (typeof cv !== 'number' || !Number.isFinite(cv) || cv <= 0) continue;
+        // 与存储层同源的解析（值是 JSON 序列化的）：Number() 会把脏值当成 0，导致云端小值覆盖本地好成绩
+        const lv = readBestKey(`best:${cid}`);
+        if (lv === null || isBetterScore(cid, cv, lv)) {
           try {
             localStorage.setItem(`pp:best:${cid}`, JSON.stringify(cv));
             merged++;
@@ -255,9 +229,9 @@ export default function App() {
           }
         }
       }
-      // 进度合并：勇者斗恶龙存档取更优
+      // 进度合并：勇者斗恶龙存档取更优（先清洗，缺字段的脏存档不能让 isBetterDqSave 读崩）
       let progressMsg = '';
-      const cloudSave = data.progress?.dqSave ?? null;
+      const cloudSave = sanitizeDqSave(data.progress?.dqSave ?? null);
       const localSave = readDqSave();
       if (cloudSave && (!localSave || isBetterDqSave(cloudSave, localSave))) {
         writeDqSave(cloudSave);
@@ -293,12 +267,9 @@ export default function App() {
         const key = localStorage.key(i);
         if (!key || !key.startsWith('pp:best:')) continue;
         const gameId = key.slice('pp:best:'.length);
-        // 扫雷旧基础键已废弃（分难度键为准）：不再上传，避免云端形成孤立键
-        if (gameId === 'minesweeper') continue;
-        const raw = localStorage.getItem(key);
-        if (raw === null) continue;
-        const lv = Number(raw);
-        if (Number.isFinite(lv) && lv > 0) scores[gameId] = lv;
+        if (!gameId.includes(':') && VARIANT_BASE_IDS.has(gameId)) continue;
+        const lv = readBestKey(key.slice('pp:'.length));
+        if (lv !== null && lv > 0) scores[gameId] = lv;
       }
     } catch {
       /* 隐私模式等跳过 */
@@ -310,17 +281,11 @@ export default function App() {
   const pushLocalScores = async (code: string): Promise<number> => {
     const scores = readAllLocalScores();
     const count = Object.keys(scores).length;
-    const res = await fetch('https://puzzle-play.pages.dev/api/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code,
-        scores: count > 0 ? scores : undefined,
-        progress: { dqSave: readDqSave() },
-        prefs: { soundMuted: readSoundMuted() },
-      }),
+    await pushCloud(code, {
+      scores: count > 0 ? scores : undefined,
+      progress: { dqSave: readDqSave() },
+      prefs: { soundMuted: readSoundMuted() },
     });
-    if (!res.ok) throw new Error('upload failed');
     return count;
   };
 
@@ -365,16 +330,13 @@ export default function App() {
     }
     // 1. 拉取旧码云端数据
     const merged: Record<string, number> = {};
-    let cloudSave: ReturnType<typeof readDqSave> = null;
+    let cloudSave: DqSave | null = null;
     try {
-      const res = await fetch(`https://puzzle-play.pages.dev/api/sync?code=${encodeURIComponent(oldCode ?? '')}`);
-      if (!res.ok) throw new Error('fetch failed');
-      const data = (await res.json()) as {
-        scores?: Record<string, number>;
-        progress?: { dqSave?: ReturnType<typeof readDqSave> };
-      };
-      Object.assign(merged, data.scores ?? {});
-      cloudSave = data.progress?.dqSave ?? null;
+      const data = await fetchCloud(oldCode ?? '');
+      for (const [cid, cv] of Object.entries(data.scores ?? {})) {
+        if (typeof cv === 'number' && Number.isFinite(cv) && cv > 0) merged[cid] = cv;
+      }
+      cloudSave = sanitizeDqSave(data.progress?.dqSave ?? null);
     } catch {
       /* 旧码云端不可达则跳过 */
     }
@@ -391,17 +353,11 @@ export default function App() {
     // 4. 写入新码
     let migrated = true;
     try {
-      const res = await fetch('https://puzzle-play.pages.dev/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: newCode,
-          scores: merged,
-          progress: { dqSave: bestSave },
-          prefs: { soundMuted: readSoundMuted() },
-        }),
+      await pushCloud(newCode, {
+        scores: merged,
+        progress: { dqSave: bestSave },
+        prefs: { soundMuted: readSoundMuted() },
       });
-      if (!res.ok) throw new Error('upload failed');
     } catch {
       migrated = false;
     }
@@ -442,7 +398,7 @@ export default function App() {
             </div>
             <div className="lobby-stats">
               <span className="chip chip-lg">
-                🎮 {games.length} 款游戏 · 已玩 {stats.played} · 通关 {stats.cleared}
+                🎮 {games.length} 款游戏 · 已玩 {stats.played}
               </span>
               <button
                 className={`btn sound-toggle ${syncCode ? 'on' : ''}`}
@@ -641,8 +597,10 @@ export default function App() {
             <details className="dev-guide">
               <summary>🛠 开发者指南：如何新增游戏？</summary>
               <p>
-                在 <code>src/games/</code> 下新建组件文件，导出 <code>meta</code> 与默认组件，
-                再到 <code>src/core/registry.tsx</code> 注册一行即可，大厅、路由、成绩存档自动生效。
+                先在 <code>src/core/gameMetas.tsx</code> 追加一条 meta（含 <code>higherIsBetter</code>），
+                再在 <code>src/games/</code> 下新建默认导出组件、用 <code>useBestScore</code> 存档，
+                最后到 <code>src/core/registry.tsx</code> 注册一行 <code>lazy</code> 导入即可，
+                大厅、路由、成绩存档自动生效。详见 README「如何新增游戏」。
               </p>
             </details>
           </footer>

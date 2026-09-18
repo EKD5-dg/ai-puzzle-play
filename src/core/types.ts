@@ -34,6 +34,14 @@ export interface GameMeta {
   bestScoreLabel: string;
   /** 成绩比较方向：true=越大越好（分数/轮数），false=越小越好（步数/时间） */
   higherIsBetter: boolean;
+  /**
+   * 分档记录后缀：同一游戏按难度/关卡分别存档时列出（如 ['0','1','2']）。
+   * 游戏侧需以 `${id}:${suffix}` 作为 useBestScore 的键，大厅卡片按 higherIsBetter 跨档聚合，
+   * 否则不同难度的步数/时间会互相压制，高难度永远破不了纪录。
+   */
+  bestVariants?: string[];
+  /** 入库数值单位：'s'=秒，'ms'=毫秒（展示时换算成秒）；缺省表示就是分数本身 */
+  bestUnit?: 's' | 'ms';
 }
 
 /** 完整游戏定义 */

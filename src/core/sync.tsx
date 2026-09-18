@@ -48,20 +48,64 @@ export interface SyncPayload {
 
 const DQ_SAVE_KEY = 'pp:dq:save';
 const SOUND_MUTE_KEY = 'pp:sound-muted';
-/** 读取本机勇者斗恶龙存档 */
+/** 存档字段兜底值（与勇者斗恶龙 PLAYER_START 一致）：脏存档/旧版存档缺字段时按起点补齐 */
+const DQ_START: DqSave['player'] = {
+  level: 1,
+  xp: 0,
+  hp: 60,
+  maxHp: 60,
+  mp: 10,
+  maxMp: 10,
+  atk: 8,
+  def: 3,
+  gold: 0,
+  kills: 0,
+};
+
+/**
+ * 存档结构校验与清洗：非有限数一律回退默认值，并夹到合法区间。
+ * 本地手改、旧版结构或另一台设备上传的脏数据都可能缺字段，而 NaN 的攻击力会让
+ * `newHp > 0` 恒假 —— 玩家会一路"秒杀"包括 10 层恶龙在内的全部怪物并把最高层数写进最佳分。
+ */
+export function sanitizeDqSave(raw: unknown): DqSave | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as { floor?: unknown; player?: unknown };
+  if (!o.player || typeof o.player !== 'object') return null;
+  const src = o.player as Record<string, unknown>;
+  const num = (v: unknown, def: number, min: number) =>
+    typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.floor(v)) : def;
+  const player: DqSave['player'] = {
+    level: num(src.level, DQ_START.level, 1),
+    xp: num(src.xp, DQ_START.xp, 0),
+    hp: 1,
+    maxHp: num(src.maxHp, DQ_START.maxHp, 1),
+    mp: 0,
+    maxMp: num(src.maxMp, DQ_START.maxMp, 0),
+    atk: num(src.atk, DQ_START.atk, 1),
+    def: num(src.def, DQ_START.def, 0),
+    gold: num(src.gold, DQ_START.gold, 0),
+    kills: num(src.kills, DQ_START.kills, 0),
+  };
+  player.hp = Math.min(num(src.hp, player.maxHp, 1), player.maxHp);
+  player.mp = Math.min(num(src.mp, player.maxMp, 0), player.maxMp);
+  return { floor: Math.min(num(o.floor, 1, 1), 999), player };
+}
+
+/** 读取本机勇者斗恶龙存档（已清洗，结构不合法时视为无存档） */
 export function readDqSave(): DqSave | null {
   try {
     const raw = localStorage.getItem(DQ_SAVE_KEY);
-    return raw ? (JSON.parse(raw) as DqSave) : null;
+    return raw ? sanitizeDqSave(JSON.parse(raw) as unknown) : null;
   } catch {
     return null;
   }
 }
 
-/** 写入本机勇者斗恶龙存档 */
+/** 写入本机勇者斗恶龙存档（写入前清洗，脏数据宁可丢弃也不落地） */
 export function writeDqSave(save: DqSave | null): void {
+  const clean = save ? sanitizeDqSave(save) : null;
   try {
-    if (save) localStorage.setItem(DQ_SAVE_KEY, JSON.stringify(save));
+    if (clean) localStorage.setItem(DQ_SAVE_KEY, JSON.stringify(clean));
     else localStorage.removeItem(DQ_SAVE_KEY);
   } catch {
     /* ignore */
@@ -119,7 +163,8 @@ export function generateSyncCode(): string {
   return code;
 }
 
-async function fetchCloud(code: string): Promise<SyncPayload> {
+/** 拉取云端负载（App 的加入/迁移流程与 useBestScore 共用，接口地址只此一处） */
+export async function fetchCloud(code: string): Promise<SyncPayload> {
   const res = await fetch(`${API}?code=${encodeURIComponent(code)}`);
   if (!res.ok) throw new Error('fetch failed');
   const data = (await res.json()) as SyncPayload;
@@ -127,7 +172,7 @@ async function fetchCloud(code: string): Promise<SyncPayload> {
 }
 
 /** 上传负载到云端（成绩合并方向由服务端权威白名单决定，客户端不再声明） */
-async function pushCloud(code: string, payload: SyncPayload): Promise<void> {
+export async function pushCloud(code: string, payload: SyncPayload): Promise<void> {
   const res = await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -175,7 +220,7 @@ export async function joinPair(code: string): Promise<'ok' | 'expired' | 'invali
   }
 }
 
-/** 成绩 hook：本地优先 + 云端合并（拉取取最大，写入双写） */
+/** 成绩 hook：本地立即写入 + 云端双向合并（挂载时拉取、破纪录时回传，方向按各游戏 higherIsBetter） */
 export function useBestScore(gameId: string) {
   const local = useLocalStorage<number>(`best:${gameId}`);
 
