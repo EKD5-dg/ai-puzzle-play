@@ -153,6 +153,8 @@ export default function Tetris() {
   );
 
   const lock = useCallback((customActive?: Active) => {
+    // 暂停/终局不得锁块：↓ 在 move 被拒时会走到这里，否则能在遮罩下持续堆叠并把刷出来的分数写进最佳分
+    if (paused || gameOverRef.current) return;
     const cur = customActive ?? activeRef.current;
     if (!cur) return;
     const merged = merge(boardRef.current, cur);
@@ -178,7 +180,7 @@ export default function Tetris() {
     } else {
       setActive(next);
     }
-  }, [level, pullNext, spawn, toast]);
+  }, [level, paused, pullNext, spawn, toast]);
 
   // 等级按累计消行数定级：每 10 行 +1 级、封顶 15（按单次消行数升级会让只消单行永不升级）
   useEffect(() => {

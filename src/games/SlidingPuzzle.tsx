@@ -4,6 +4,7 @@ import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { metaSliding } from '../core/gameMetas';
+import { migrateLegacyBest } from '../core/useLocalStorage';
 
 
 
@@ -58,8 +59,14 @@ export default function SlidingPuzzle() {
   const [won, setWon] = useState(false);
   // 窄屏（≤640px）缩小方块尺寸，避免棋盘溢出 375px 视口
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 640);
-  const best = useBestScore(metaSliding.id);
+  // 每种棋盘独立记键：3×3 的二十几步会永久压住 5×5，共用一键则大棋盘永不破纪录
+  const best = useBestScore(`${metaSliding.id}:${sizeIdx}`);
   const { toast } = useToast();
+
+  // 改造前三档共用基础键，把那份旧纪录搬到首档，避免凭空消失
+  useEffect(() => {
+    migrateLegacyBest(metaSliding);
+  }, []);
 
   const startNew = (idx: number) => {
     setSizeIdx(idx);
@@ -120,7 +127,7 @@ export default function SlidingPuzzle() {
             <strong>{moves}</strong>
           </div>
           <div className="stat-box">
-            <span>{metaSliding.bestScoreLabel}</span>
+            <span>{metaSliding.bestScoreLabel}·本档</span>
             <strong>{best.value ?? '--'}</strong>
           </div>
           <button className="btn btn-primary" onClick={() => startNew(sizeIdx)}>

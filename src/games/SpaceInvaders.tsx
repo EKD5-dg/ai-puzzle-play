@@ -94,6 +94,19 @@ export default function SpaceInvaders() {
     setStatus('playing');
   }, [initLevel]);
 
+  /** 进入下一波：保留分数与命数（跨波累积） */
+  const nextWave = useCallback(() => {
+    setLevel((l) => l + 1);
+    initLevel(level + 1);
+    setStatus('playing');
+  }, [level, initLevel]);
+
+  /** 遮罩主行动：击退一波后按主行动键进入下一波，其余状态从头开始——按钮与键盘/触屏共用同一入口，杜绝路径分叉 */
+  const advance = useCallback(() => {
+    if (status === 'win') nextWave();
+    else startGame();
+  }, [status, nextWave, startGame]);
+
   // 主循环
   useEffect(() => {
     if (status !== 'playing') return;
@@ -257,14 +270,15 @@ export default function SpaceInvaders() {
       if (e.key === ' ') {
         e.preventDefault();
         if (status === 'ready' || status === 'over' || status === 'win') {
-          startGame();
+          // 与遮罩主按钮同一 handler：清波后按空格进下一波，不再把分数/波次清零
+          advance();
         } else if (gameRef.current.bullets.length < 2) {
           gameRef.current.bullets.push({ x: gameRef.current.player.x + 20, y: gameRef.current.player.y - 10 });
           sfx.drop();
         }
       }
       if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
-        if (status === 'ready' || status === 'over' || status === 'win') startGame();
+        if (status === 'ready' || status === 'over' || status === 'win') advance();
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -283,7 +297,7 @@ export default function SpaceInvaders() {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [status, startGame]);
+  }, [status, advance]);
 
   // 炮台移动（独立循环，按按键状态）
   useEffect(() => {
@@ -335,7 +349,7 @@ export default function SpaceInvaders() {
             <div className="arcade-overlay">
               <h2>👾 太空侵略者</h2>
               <p>← → 移动 · 空格射击 · 击落全部外星人</p>
-              <button className="btn btn-primary" onClick={startGame}>
+              <button className="btn btn-primary" onClick={advance}>
                 开始游戏
               </button>
             </div>
@@ -344,7 +358,7 @@ export default function SpaceInvaders() {
             <div className="arcade-overlay">
               <h2>💀 地球失守</h2>
               <p>得分 {score} · 第 {level} 波</p>
-              <button className="btn btn-primary" onClick={startGame}>
+              <button className="btn btn-primary" onClick={advance}>
                 再来一局
               </button>
             </div>
@@ -353,14 +367,7 @@ export default function SpaceInvaders() {
             <div className="arcade-overlay">
               <h2>🎉 第 {level} 波击退！</h2>
               <p>得分 {score}</p>
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  setLevel((l) => l + 1);
-                  initLevel(level + 1);
-                  setStatus('playing');
-                }}
-              >
+              <button className="btn btn-primary" onClick={advance}>
                 下一波
               </button>
             </div>
@@ -376,7 +383,8 @@ export default function SpaceInvaders() {
                 label: '🔥 射击',
                 primary: true,
                 onPress: () => {
-                  if (status === 'ready' || status === 'over' || status === 'win') startGame();
+                  // 与遮罩主按钮同一 handler：清波后点射击进下一波，不再把分数/波次清零
+                  if (status === 'ready' || status === 'over' || status === 'win') advance();
                   else if (gameRef.current.bullets.length < 2) {
                     gameRef.current.bullets.push({ x: gameRef.current.player.x + 20, y: gameRef.current.player.y - 10 });
                     sfx.drop();

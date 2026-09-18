@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
-import { useBestScore, getSyncCode, pushProgress } from '../core/sync';
+import { useBestScore, getSyncCode, pushProgress, readDqSave } from '../core/sync';
+import type { DqSave } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { Portrait, preloadPortraits } from './Portrait';
@@ -107,13 +108,9 @@ function xpNeed(level: number): number {
   return level * 22;
 }
 
-function loadSave(): { floor: number; player: PlayerState } | null {
-  try {
-    const raw = localStorage.getItem(`pp:${SAVE_KEY}`);
-    return raw ? (JSON.parse(raw) as { floor: number; player: PlayerState }) : null;
-  } catch {
-    return null;
-  }
+/** 读档：统一走 core 的清洗入口（本地手改 / 旧版结构 / 云端同步下来的脏字段都会回退起点值） */
+function loadSave(): DqSave | null {
+  return readDqSave();
 }
 
 function saveGame(floor: number, player: PlayerState): void {

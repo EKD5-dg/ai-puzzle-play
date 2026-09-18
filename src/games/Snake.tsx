@@ -141,6 +141,8 @@ export default function Snake() {
         return;
       }
       if (e.key === ' ' || e.key === 'p' || e.key === 'P') {
+        // 空格默认会滚动页面：不 preventDefault 的话每次暂停/继续/重开都带着视口滚一屏
+        e.preventDefault();
         if (statusRef.current === 'playing') setStatus('paused');
         else if (statusRef.current === 'paused') setStatus('playing');
         else if (statusRef.current === 'over') start();

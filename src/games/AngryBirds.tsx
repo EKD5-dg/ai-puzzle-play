@@ -15,6 +15,9 @@ const MAX_PULL = 95;
 const SLING_X = 95;
 const SLING_Y = 300;
 const BIRD_R = 13;
+/** 飞行子步：单步位移上限（px）需小于最薄木块支柱 16px，步数上限兜住极端长帧 */
+const BIRD_STEP = 7;
+const BIRD_MAX_STEPS = 8;
 
 interface Pig {
   x: number;
@@ -275,29 +278,39 @@ export default function AngryBirds() {
       const b = gg.bird;
       const frame = Math.min(3, dtMs / 16.67); // 1 帧 = 60Hz 的一帧
 
-      // 鸟飞行
+      // 鸟飞行：按位移切子步再判碰撞——frame 钳到 3 时高速鸟一步可跨 51px，
+      // 而支柱只有 16px 宽（含鸟直径也才 42px 捕获窗），会穿柱穿猪且木块连锁永不触发
       if (b.state === 'flying') {
         gg.birdMs += dtMs;
-        b.vy += GRAVITY * frame;
-        b.vx *= Math.pow(0.996, frame);
-        b.x += b.vx * frame;
-        b.y += b.vy * frame;
-        b.rot = Math.atan2(b.vy, b.vx);
-        if (b.y >= GROUND - BIRD_R) {
-          b.y = GROUND - BIRD_R;
-          if (Math.abs(b.vx) < 0.6) {
-            b.vx = 0;
-            b.vy = 0;
-            b.state = 'grounded';
-          } else {
-            b.vy = 0;
-            b.vx *= Math.pow(0.86, frame);
+        const travel = Math.hypot(b.vx, b.vy) * frame;
+        const steps = Math.min(BIRD_MAX_STEPS, Math.max(1, Math.ceil(travel / BIRD_STEP)));
+        const h = frame / steps;
+        for (let i = 0; i < steps; i++) {
+          b.vy += GRAVITY * h;
+          b.vx *= Math.pow(0.996, h);
+          b.x += b.vx * h;
+          b.y += b.vy * h;
+          b.rot = Math.atan2(b.vy, b.vx);
+          if (b.y >= GROUND - BIRD_R) {
+            b.y = GROUND - BIRD_R;
+            if (Math.abs(b.vx) < 0.6) {
+              b.vx = 0;
+              b.vy = 0;
+              b.state = 'grounded';
+              break;
+            } else {
+              b.vy = 0;
+              b.vx *= Math.pow(0.86, h);
+            }
           }
+          if (b.x < -80 || b.x > W + 80 || b.y > H + 40) {
+            b.state = 'gone';
+            break;
+          }
+          collideBird();
         }
-        if (b.x < -80 || b.x > W + 80 || b.y > H + 40) b.state = 'gone';
         // 超时兜底：坐标被污染（NaN）或反复弹跳时出界判定恒不成立，不能让回合永不结算
         if (gg.birdMs > 8000) b.state = 'gone';
-        if (b.state === 'flying') collideBird();
       }
 
       // 飞行的木块
@@ -814,6 +827,19 @@ export default function AngryBirds() {
     sfx.flip();
   };
 
+  /** 触点被系统手势抢走（安卓侧滑 / 防误触 / 通知）：取消瞄准把鸟放回弹弓，不能当成松手发射浪费一只鸟 */
+  const onCancel = (e: React.PointerEvent) => {
+    if (e.pointerId !== aimPointerRef.current) return;
+    aimPointerRef.current = null;
+    const gg = g.current;
+    if (!gg.aiming) return;
+    gg.aiming = false;
+    gg.bird.x = SLING_X;
+    gg.bird.y = SLING_Y - BIRD_R;
+    gg.pullX = 0;
+    gg.pullY = 0;
+  };
+
   return (
     <GameShell
       meta={metaBirds}
@@ -851,7 +877,7 @@ export default function AngryBirds() {
           onPointerDown={onDown}
           onPointerMove={onMove}
           onPointerUp={onUp}
-          onPointerCancel={onUp}
+          onPointerCancel={onCancel}
         />
         {status === 'ready' && (
           <div className="arcade-overlay ab-overlay">

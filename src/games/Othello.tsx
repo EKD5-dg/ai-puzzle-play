@@ -3,6 +3,7 @@ import { GameShell } from '../core/GameShell';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { useBestScore } from '../core/sync';
+import { useLocalStorage } from '../core/useLocalStorage';
 import { metaOthello } from '../core/gameMetas';
 
 
@@ -133,8 +134,11 @@ export default function Othello() {
   const [turn, setTurn] = useState<1 | 2>(1);
   const [gameOver, setGameOver] = useState(false);
   const [thinking, setThinking] = useState(false);
-  const [wins, setWins] = useState(0);
-  const [losses, setLosses] = useState(0);
+  // 胜负累计持久化：会话态每次进页面归零，用它算出的胜率会让"最高胜率"首胜即永久 100%
+  const winsStore = useLocalStorage<number>('othello:wins', 0);
+  const lossesStore = useLocalStorage<number>('othello:losses', 0);
+  const wins = winsStore.value ?? 0;
+  const losses = lossesStore.value ?? 0;
   const { toast } = useToast();
   const best = useBestScore(metaOthello.id);
 
@@ -181,14 +185,15 @@ export default function Othello() {
     if (b > w) {
       sfx.win();
       const newWins = wins + 1;
-      setWins(newWins);
+      winsStore.set(newWins);
       best.updateBest(Math.round((newWins / (newWins + losses)) * 100), (a, b) => a > b);
       toast(`🎉 你赢了！${b} : ${w}`, 'success');
     } else if (w > b) {
       sfx.lose();
       const newLosses = losses + 1;
-      setLosses(newLosses);
-      best.updateBest(Math.round((wins / (wins + newLosses)) * 100), (a, b) => a > b);
+      lossesStore.set(newLosses);
+      // 未赢过一局时不写纪录：0% 作为"历史最高胜率"没有信息量，且会占住基础键
+      if (wins > 0) best.updateBest(Math.round((wins / (wins + newLosses)) * 100), (a, b) => a > b);
       toast(`💀 电脑赢了 ${w} : ${b}`, 'info');
     } else {
       sfx.mismatch();
@@ -240,7 +245,7 @@ export default function Othello() {
             <strong>{wCount}</strong>
           </div>
           <div className="stat-box">
-            <span>胜率</span>
+            <span>历史胜率</span>
             <strong>{winRate}%</strong>
           </div>
           <div className="stat-box">

@@ -175,12 +175,14 @@ export default function WhackMole() {
             <span>{metaMole.bestScoreLabel}</span>
             <strong>{best.value ?? 0}</strong>
           </div>
-          {/* 游玩中变身"暂停"：常驻的开始按钮会误点清分（重开入口在 ready/over 覆盖层） */}
+          {/* 游玩中变身"暂停"：常驻的开始按钮会误点清分（重开入口在 ready/over 覆盖层）；暂停中必须回到"继续"，否则一次误点就清掉这局 */}
           <button
             className="btn btn-primary"
-            onClick={() => (status === 'playing' ? setStatus('paused') : start())}
+            onClick={() =>
+              status === 'playing' ? setStatus('paused') : status === 'paused' ? setStatus('playing') : start()
+            }
           >
-            {status === 'playing' ? '⏸ 暂停' : '🔄 开始'}
+            {status === 'playing' ? '⏸ 暂停' : status === 'paused' ? '▶ 继续' : '🔄 开始'}
           </button>
         </>
       }

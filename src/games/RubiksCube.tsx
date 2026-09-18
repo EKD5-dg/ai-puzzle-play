@@ -278,8 +278,8 @@ function quadPath(ctx: CanvasRenderingContext2D, pts: [number, number][], _r: nu
 export default function RubiksCube() {
   const cubeRef = useRef<Cubie[]>(makeSolvedCube());
   const animRef = useRef<Anim | null>(null);
-  /** 转动动画期间收到的待执行指令（只留最后一条） */
-  const pendingRef = useRef<{ f: number; dir: 1 | -1 } | null>(null);
+  /** 转动动画期间收到的待执行指令：按序排队，落定后逐条执行（连点不丢转），上限 8 条防无限积压 */
+  const pendingRef = useRef<Array<{ f: number; dir: 1 | -1 }>>([]);
   const viewRef = useRef({ rx: -0.5, ry: -0.72 });
   /** 正在拖视角的 pointerId，null 表示无拖拽 */
   const dragIdRef = useRef<number | null>(null);
@@ -300,10 +300,12 @@ export default function RubiksCube() {
   // ============ 操作 ============
 
   const doMove = useCallback((faceIdx: number, dir: 1 | -1) => {
-    if (statusRef.current === 'solved') return;
+    // 只在接受输入的状态下转动：idle/solved 下转（含键盘 U/D/L/R/F/B）会绕过步数计数与还原判定，
+    // 把魔方悄悄转乱在遮罩后面
+    if (statusRef.current !== 'scrambled' && statusRef.current !== 'playing') return;
     if (animRef.current) {
-      // 动画期间的输入不丢弃：排队一条，落定时立即执行（连续输入只保留最后一条）
-      pendingRef.current = { f: faceIdx, dir };
+      // 动画期间的输入不丢弃：按序排队，落定后逐条执行（连点 R R R 不再只留最后一条），队列封顶 8 条
+      if (pendingRef.current.length < 8) pendingRef.current.push({ f: faceIdx, dir });
       return;
     }
     const face = FACES[faceIdx];
@@ -319,7 +321,7 @@ export default function RubiksCube() {
     cubeRef.current = makeSolvedCube();
     for (const { f, dir } of genScramble(22)) applyMoveInstant(cubeRef.current, f, dir);
     animRef.current = null;
-    pendingRef.current = null;
+    pendingRef.current = [];
     setMoves(0);
     setElapsed(0);
     setNewRecord(false);
@@ -331,7 +333,7 @@ export default function RubiksCube() {
   const reset = useCallback(() => {
     cubeRef.current = makeSolvedCube();
     animRef.current = null;
-    pendingRef.current = null;
+    pendingRef.current = [];
     setMoves(0);
     setElapsed(0);
     setNewRecord(false);
@@ -379,12 +381,11 @@ export default function RubiksCube() {
             if (isSolvedCube(cube)) {
               setElapsed(performance.now() - startRef.current);
               setStatus('solved');
-              pendingRef.current = null; // 已还原：丢弃排队转动，别在成功遮罩下继续转
+              pendingRef.current = []; // 已还原：丢弃排队转动，别在成功遮罩下继续转
             }
           }
-          const next = pendingRef.current;
+          const next = pendingRef.current.shift();
           if (next) {
-            pendingRef.current = null;
             const face = FACES[next.f];
             animRef.current = {
               axis: face.axis,
@@ -624,8 +625,10 @@ export default function RubiksCube() {
     if (dragIdRef.current === e.pointerId) dragIdRef.current = null;
   };
 
-  /** index.css 无 .cube-btn:disabled 样式，禁用态用内联样式补上视觉区分 */
-  const solvedBtnStyle = status === 'solved' ? { opacity: 0.45, cursor: 'not-allowed' as const } : undefined;
+  /** 未打乱 / 已还原都不接受转动（doMove 已守卫），按钮同步置灰，避免点了没反应的死控件
+   *  index.css 无 .cube-btn:disabled 样式，禁用态用内联样式补上视觉区分 */
+  const turnLocked = status === 'idle' || status === 'solved';
+  const turnLockedStyle = turnLocked ? { opacity: 0.45, cursor: 'not-allowed' as const } : undefined;
 
   return (
     <GameShell
@@ -691,8 +694,8 @@ export default function RubiksCube() {
               key={f.label}
               className="cube-btn"
               title={`${f.cn}层顺时针旋转`}
-              disabled={status === 'solved'}
-              style={solvedBtnStyle}
+              disabled={turnLocked}
+              style={turnLockedStyle}
               onClick={() => doMove(i, 1)}
             >
               <span className="cube-btn-key">{f.label}</span>
@@ -704,8 +707,8 @@ export default function RubiksCube() {
               key={`${f.label}'`}
               className="cube-btn cube-btn-prime"
               title={`${f.cn}层逆时针旋转`}
-              disabled={status === 'solved'}
-              style={solvedBtnStyle}
+              disabled={turnLocked}
+              style={turnLockedStyle}
               onClick={() => doMove(i, -1)}
             >
               <span className="cube-btn-key">{f.label}′</span>

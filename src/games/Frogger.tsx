@@ -13,6 +13,14 @@ const H = 440;
 const ROWS = 12;
 const ROW_H = H / ROWS;
 
+/** 目标洞几何：5 个，洞心 x = i*GOAL_W + GOAL_W/2，半径 GOAL_R（绘制与进洞判定共用，避免规则与画面脱节） */
+const GOAL_N = 5;
+const GOAL_W = W / GOAL_N;
+const GOAL_R = 16;
+/** 青蛙身体中心 x 偏移（绘制为 arc(f.x + 15, f.y + 14, 13)） */
+const FROG_CX = 15;
+const goalCX = (i: number) => i * GOAL_W + GOAL_W / 2;
+
 interface Lane {
   kind: 'road' | 'river' | 'safe';
   dir: 1 | -1;
@@ -100,11 +108,10 @@ export default function Frogger() {
         }
       });
       // 目标洞（空状态，激活态动态绘制）
-      for (let i = 0; i < 5; i++) {
-        const gx = i * (W / 5) + W / 10 - 20;
+      for (let i = 0; i < GOAL_N; i++) {
         bctx.fillStyle = '#3a2a10';
         bctx.beginPath();
-        bctx.arc(gx + 20, ROW_H / 2, 16, 0, Math.PI * 2);
+        bctx.arc(goalCX(i), ROW_H / 2, GOAL_R, 0, Math.PI * 2);
         bctx.fill();
         bctx.strokeStyle = '#6b4f1d';
         bctx.lineWidth = 3;
@@ -220,21 +227,25 @@ export default function Frogger() {
       // 边界（不在浮木上时钳制在画布内；在浮木上时允许随浮木短暂出屏再回绕，避免 clamp 破坏搬移）
       if (!f.onLog) f.x = Math.max(2, Math.min(W - 30, f.x));
 
-      // 到达目标
+      let won = false;
+      // 到达目标：青蛙身体中心必须真的压在洞上（旧实现整条 96px 带都算，落在洞旁石面上也白给回家分）
       if (f.y < ROW_H) {
-        const goalIdx = Math.floor(f.x / (W / 5));
-        if (goalIdx >= 0 && goalIdx < 5 && !g.goals[goalIdx]) {
+        const fcx = f.x + FROG_CX;
+        let goalIdx = -1;
+        for (let i = 0; i < GOAL_N; i++) {
+          if (Math.abs(fcx - goalCX(i)) <= GOAL_R) {
+            goalIdx = i;
+            break;
+          }
+        }
+        if (goalIdx >= 0 && !g.goals[goalIdx]) {
           g.goals[goalIdx] = true;
           setScore((s) => s + 100 + level * 50);
           sfx.clear();
-          if (g.goals.every(Boolean)) {
-            setStatus('win');
-            sfx.win();
-            return;
-          }
-          respawn();
+          if (g.goals.every(Boolean)) won = true;
+          else respawn();
         } else {
-          // 目标位已被占：回起点（不能推回第 1 行，那是车流带）
+          // 目标位已被占 / 没落进洞里：回起点（不能推回第 1 行，那是车流带）
           respawn();
         }
       }
@@ -248,10 +259,9 @@ export default function Frogger() {
       // 已激活目标洞（覆盖静态层的空洞）
       g.goals.forEach((done, i) => {
         if (!done) return;
-        const gx = i * (W / 5) + W / 10 - 20;
         ctx.fillStyle = '#34d399';
         ctx.beginPath();
-        ctx.arc(gx + 20, ROW_H / 2, 16, 0, Math.PI * 2);
+        ctx.arc(goalCX(i), ROW_H / 2, GOAL_R, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#6ee7b7';
         ctx.lineWidth = 3;
@@ -301,6 +311,13 @@ export default function Frogger() {
         ctx.fillRect(0, row * ROW_H, W, ROW_H);
       }
 
+      // 决胜帧先画完（第 5 个洞变绿、青蛙停在洞里）再切状态，否则胜利遮罩下永远是过期的旧画面
+      if (won) {
+        setStatus('win');
+        sfx.win();
+        return;
+      }
+
       raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
@@ -334,8 +351,10 @@ export default function Frogger() {
         e.preventDefault();
         moveFrog(ROW_H, 0);
       }
-      if (e.key === ' ' && (status === 'ready' || status === 'over' || status === 'win')) {
-        startGame();
+      if (e.key === ' ') {
+        // 空格是提示里写明的开始键，运行中按下也不能滚动页面（其他分支都做了同样的事）
+        e.preventDefault();
+        if (status === 'ready' || status === 'over' || status === 'win') startGame();
       }
     };
     window.addEventListener('keydown', onKey);

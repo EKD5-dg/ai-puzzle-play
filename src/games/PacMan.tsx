@@ -8,7 +8,7 @@ import { metaPacMan } from '../core/gameMetas';
 
 
 
-/** 迷宫地图：#墙 .豆 o能量豆 空格 */
+/** 迷宫地图：#墙 .豆 o能量豆 空格；每行必须 19 字符且外圈闭合，否则边界空格会成为不可见的可走走廊 */
 const MAP = [
   '###################',
   '#........#........#',
@@ -25,7 +25,7 @@ const MAP = [
   '#.##.#.#####.#.##.#',
   '#o##.#.......#.##o#',
   '#.................#',
-  '#.#############.#  ',
+  '#.#############.###',
   '#.................#',
   '###################',
 ];
@@ -158,6 +158,12 @@ export default function PacMan() {
     },
     [initMaze],
   );
+
+  /** 遮罩主行动：通关后进入下一关（跨关保留分数与命数），其余状态从头开始——按钮与键盘/触屏共用同一入口，杜绝路径分叉 */
+  const advance = useCallback(() => {
+    if (status === 'win') startGame(level + 1, true);
+    else startGame();
+  }, [status, level, startGame]);
 
   const isWall = useCallback((x: number, y: number, forGhost = false): boolean => {
     const maze = gameRef.current.maze;
@@ -371,8 +377,11 @@ export default function PacMan() {
             livesRef.current = nl;
             setLives(nl);
             if (nl <= 0) {
+              // 致死即结束本帧（return 而非 break）：本轮 rAF 的 statusRef 快照仍是 playing，
+              // 只 break 的话下一帧重叠幽灵会继续进这里逐帧扣命（生命显示 --）并反复播失败音效
               setStatus('over');
               sfx.lose();
+              return;
             } else {
               p.x = 9 * TILE + TILE / 2;
               p.y = 7.5 * TILE;
@@ -494,12 +503,13 @@ export default function PacMan() {
         gameRef.current.player.nextDir = dir;
       }
       if (e.key === ' ' && (status === 'ready' || status === 'over' || status === 'win')) {
-        startGame();
+        // 与遮罩上的主按钮同一个 handler：通关按空格继续下一关，不再把分数/关卡清零
+        advance();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [status, startGame]);
+  }, [status, startGame, advance]);
 
   // 触屏方向键
   const setTouchDir = (d: string) => {
@@ -551,7 +561,7 @@ export default function PacMan() {
             <div className="arcade-overlay">
               <h2>👻 吃豆人</h2>
               <p>吃掉所有豆子 · 能量豆可反吃幽灵</p>
-              <button className="btn btn-primary" onClick={() => startGame()}>
+              <button className="btn btn-primary" onClick={advance}>
                 开始游戏
               </button>
             </div>
@@ -560,7 +570,7 @@ export default function PacMan() {
             <div className="arcade-overlay">
               <h2>💀 游戏结束</h2>
               <p>得分 {score} · 到达第 {level} 关</p>
-              <button className="btn btn-primary" onClick={() => startGame()}>
+              <button className="btn btn-primary" onClick={advance}>
                 再来一局
               </button>
             </div>
@@ -569,7 +579,7 @@ export default function PacMan() {
             <div className="arcade-overlay">
               <h2>🎉 通关！</h2>
               <p>得分 {score}</p>
-              <button className="btn btn-primary" onClick={() => startGame(level + 1, true)}>
+              <button className="btn btn-primary" onClick={advance}>
                 下一关（第 {level + 1} 关）
               </button>            </div>
           )}

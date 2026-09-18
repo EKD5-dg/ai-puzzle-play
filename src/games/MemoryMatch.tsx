@@ -139,6 +139,8 @@ export default function MemoryMatch() {
     setDeck(buildDeck(LEVELS[idx].pairs));
     setFlipped([]);
     flippedRef.current = [];
+    // 卡片 id 从 0 复用，不清抖动标记会让新牌局开局就带着上一局的错配残影
+    setMismatchIds([]);
     setMoves(0);
     setTime(0);
     startRef.current = null;
@@ -177,7 +179,7 @@ export default function MemoryMatch() {
             <strong>{time}s</strong>
           </div>
           <div className="stat-box">
-            <span>{metaMemory.bestScoreLabel}</span>
+            <span>{metaMemory.bestScoreLabel}·本档</span>
             <strong>{best.value ?? '--'}</strong>
           </div>
         </>

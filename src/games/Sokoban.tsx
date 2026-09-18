@@ -5,6 +5,7 @@ import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { TouchDpad } from '../core/TouchControls';
 import { metaSokoban } from '../core/gameMetas';
+import { migrateLegacyBest } from '../core/useLocalStorage';
 
 
 
@@ -62,8 +63,14 @@ export default function Sokoban() {
   const [won, setWon] = useState(false);
   /** 通关后延迟切关的定时器句柄（手动切关/撤销/卸载时需清除，防止竞态跳关） */
   const winTimerRef = useRef<number | null>(null);
-  const best = useBestScore(metaSokoban.id);
+  // 每关独立记键：各关最优步数本不可比，共用一键会让第 2 关起永远破不了纪录
+  const best = useBestScore(`${metaSokoban.id}:${levelIdx}`);
   const { toast } = useToast();
+
+  // 改造前 8 关共用基础键，把那份旧纪录搬到第 1 关，避免凭空消失
+  useEffect(() => {
+    migrateLegacyBest(metaSokoban);
+  }, []);
 
   const totalMoves = (lv: LevelState) => {
     let boxes = 0;
@@ -251,7 +258,7 @@ export default function Sokoban() {
             <strong>{remainingBoxes}/{totalGoals}</strong>
           </div>
           <div className="stat-box">
-            <span>{metaSokoban.bestScoreLabel}</span>
+            <span>{metaSokoban.bestScoreLabel}·本关</span>
             <strong>{best.value ?? '--'}</strong>
           </div>
           <button className="btn btn-primary" onClick={() => loadLevel(levelIdx)}>

@@ -22,7 +22,6 @@ export default function Simon() {
   const [inputIdx, setInputIdx] = useState(0);
   const [litIdx, setLitIdx] = useState(-1); // 当前高亮的键
   const [round, setRound] = useState(1);
-  const [bestRound, setBestRound] = useState(0);
   const best = useBestScore(metaSimon.id);
   const { toast } = useToast();
   const timers = useRef<number[]>([]);
@@ -80,11 +79,13 @@ export default function Simon() {
       setPhase('over');
       // round 在完成本轮时才 +1，失败时它是"正在尝试的轮次"，已完成轮数为 round - 1
       const cleared = round - 1;
-      if (cleared > bestRound) {
-        setBestRound(cleared);
-        best.updateBest(cleared, (a, b) => a > b);
-        sfx.record();
-        toast(`新纪录！${cleared} 轮`, 'record');
+      // 纪录是否刷新只能问 updateBest：会话内的 bestRound 从不读历史值，会把旧纪录也喊成新纪录
+      if (cleared > 0) {
+        const isNew = best.updateBest(cleared, (a, b) => a > b);
+        if (isNew) {
+          sfx.record();
+          toast(`新纪录！${cleared} 轮`, 'record');
+        }
       }
       return;
     }
@@ -152,7 +153,7 @@ export default function Simon() {
             <div className="arcade-overlay simon-overlay">
               <h2>💀 记错了！</h2>
               <p>
-                完成 {round - 1} 轮 · 最佳 {bestRound || best.value || '--'} 轮
+                完成 {round - 1} 轮 · 最佳 {best.value ?? '--'} 轮
               </p>
               <button className="btn btn-primary" onClick={startGame}>
                 再来一局
