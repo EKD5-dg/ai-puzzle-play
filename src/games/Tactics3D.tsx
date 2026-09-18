@@ -119,6 +119,8 @@ interface Sched {
 interface Sel {
   id: number;
   from: [number, number];
+  /** 选中时（= 移动前）的瞄准蓄力快照：↩取消要连它一起还原，否则"待机蓄力→移动→取消"会静默吞掉 +50% */
+  aim0: boolean;
   moved: boolean;
 }
 
@@ -1048,7 +1050,7 @@ export default function Tactics3D() {
 
     function select(u: Unit) {
       const w = wq();
-      w.sel = { id: u.id, from: [u.gx, u.gy], moved: false };
+      w.sel = { id: u.id, from: [u.gx, u.gy], aim0: u.aiming, moved: false };
       w.inspect = null;
       w.danger = null;
       w.moveMap = reachable(u, u.mov);
@@ -1064,6 +1066,7 @@ export default function Tactics3D() {
         if (u && !u.dead) {
           u.gx = w.sel.from[0];
           u.gy = w.sel.from[1];
+          u.aiming = w.sel.aim0; // "取消可撤回移动"：位置与移动前快照一起回滚，不能只回位置
         }
       }
       w.sel = null;
@@ -1214,7 +1217,8 @@ export default function Tactics3D() {
 
     function rotate() {
       const w = wq();
-      if (statusRef.current !== 'playing') return;
+      // 不加 status 守卫：rot 只是视图变换（只有绘制与 hitTest 的投影读它，寻路/AI 全在网格坐标上），
+      // 结算前的开局界面也能转镜头预览棋盘，按钮和 R 键不至于变成死控件
       w.rot = (w.rot + 1) & 3;
       sfx.click();
       bump();
@@ -1464,7 +1468,13 @@ export default function Tactics3D() {
           }
           case 'enemyAct': {
             if (w.phase !== 'enemy' || w.over) break;
-            const u = w.enemyQueue.length > 0 ? byId(w.enemyQueue.shift()!) : undefined;
+            // 队列已空（击杀最后一个敌人后立刻点结束回合即可复现）：与 nextEnemy 一样走 endEnemy 收尾，
+            // 否则自续的 enemyAct 永远取不到单位，敌方阶段结束不了、回合交不出去
+            if (w.enemyQueue.length === 0) {
+              w.queue.push({ at: now + 220, type: 'endEnemy' });
+              break;
+            }
+            const u = byId(w.enemyQueue.shift()!);
             if (!u || u.dead) {
               w.queue.push({ at: now + 60, type: 'enemyAct' });
               break;
@@ -1560,14 +1570,19 @@ export default function Tactics3D() {
         cands.sort((a, b) => b.d - a.d);
         return [cands[0].x, cands[0].y];
       }
-      let bd = 22;
+      // 兜底只赦免"投影菱形外扩 3px"以内的点：菱形在棋盘内部是铺满无缝的，
+      // 所以这条只补棋盘轮廓边缘的像素级误差；棋盘外的真空点必须返回 null，
+      // 让 tap 走取消选中——旧的 22px 格心半径比顶面（纵向仅 16px）宽，
+      // 会把角落格外面虚空里的点击当成角落格（四个朝向同样越界，因为半径与投影形状无关）
       let bx = -1;
       let by = -1;
+      let bd = -1;
       for (const c of cells) {
         const sx = OX + (c.vx - c.vy) * TW2;
         const sy = OY + (c.vx + c.vy) * TH2 - (c.hpx - SKIRT);
-        const d = Math.hypot(mx - sx, my - sy);
-        if (d < bd) {
+        if (Math.abs(mx - sx) / (TW2 + 3) + Math.abs(my - sy) / (TH2 + 3) > 1) continue;
+        const d = c.vx + c.vy;
+        if (d > bd) {
           bd = d;
           bx = c.x;
           by = c.y;

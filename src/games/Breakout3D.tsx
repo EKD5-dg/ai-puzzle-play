@@ -50,6 +50,13 @@ const VACC = 0.28;
 const VMAX = 8.5;
 const MIN_KICK = 0.35;
 const LIVES = 3;
+/** 球速上限（破砖/触板共用），不封顶会让每次触板 +1% 无限加速 */
+const SPEED_CAP_MUL = 1.35;
+/** 子步进：单步位移上限（世界单位），须明显小于挡板最薄碰撞带 0.53，否则高速球直接穿板 */
+const MAX_STEP = 0.18;
+const MAX_SUBSTEPS = 8;
+/** 触板后水平分量下限（占速率比例）：正中击球会得到纯竖直球，永远在挡板↔远墙之间往返 */
+const PAD_VX_MIN = 0.16;
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
@@ -117,6 +124,8 @@ interface World {
   combo: number;
   bestCombo: number;
   paddleX: number;
+  /** 挡板最近的移动方向（0=未移动过）：给纯竖直反弹一个稳定的出射符号 */
+  paddleDir: number;
   paddleW: number;
   wideT: number;
   slowT: number;
@@ -179,6 +188,7 @@ function newWorld(): World {
     combo: 0,
     bestCombo: 0,
     paddleX: 0,
+    paddleDir: 0,
     paddleW: PAD_HALF,
     wideT: 0,
     slowT: 0,
@@ -258,7 +268,9 @@ export default function Breakout3D() {
   const { toast } = useToast();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const worldRef = useRef<World>(newWorld());
+  const worldRef = useRef<World>(null as unknown as World);
+  // 懒初始化：useRef(newWorld()) 的实参每次渲染都会求值，破砖/拾取强化的重渲染会白建一屏砖块
+  if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   const overHandledRef = useRef(false);
   const keysRef = useRef({ left: false, right: false });
@@ -499,12 +511,15 @@ export default function Breakout3D() {
 
       if (playing) {
         const spd = 6.5;
+        const px0 = w.paddleX;
         if (keysRef.current.left) w.paddleX -= spd * dt;
         if (keysRef.current.right) w.paddleX += spd * dt;
         if (pointerRef.current != null) {
           w.paddleX += (pointerRef.current - w.paddleX) * Math.min(1, dt * 14);
         }
         w.paddleX = clamp(w.paddleX, -HW + w.paddleW + SIDE, HW - w.paddleW - SIDE);
+        // 记住真实位移方向（含被边界钳住不动的情况不更新），供触板出射角取符号
+        if (w.paddleX !== px0) w.paddleDir = w.paddleX > px0 ? 1 : -1;
 
         if (w.wideT > 0) {
           w.wideT -= dt;
@@ -528,70 +543,85 @@ export default function Breakout3D() {
             b.vy = 0;
           }
 
-          b.x += b.vx * dt * speedMul;
-          b.z += b.vz * dt * speedMul;
+          // 子步进：高速时单帧位移会超过挡板最薄碰撞带（0.53）直接穿板漏球，切成小段逐段判碰撞
+          const hdt = dt * speedMul;
+          const travel = Math.hypot(b.vx, b.vz) * hdt;
+          const steps = Math.min(MAX_SUBSTEPS, Math.max(1, Math.ceil(travel / MAX_STEP)));
+          const h = hdt / steps;
+          for (let s = 0; s < steps; s++) {
+            b.x += b.vx * h;
+            b.z += b.vz * h;
 
-          if (b.x < -HW + BALL_R) {
-            b.x = -HW + BALL_R;
-            b.vx = Math.abs(b.vx);
-            sfx.click();
-          } else if (b.x > HW - BALL_R) {
-            b.x = HW - BALL_R;
-            b.vx = -Math.abs(b.vx);
-            sfx.click();
-          }
-          if (b.z > FAR - BALL_R) {
-            b.z = FAR - BALL_R;
-            b.vz = -Math.abs(b.vz);
-            sfx.click();
-          }
+            if (b.x < -HW + BALL_R) {
+              b.x = -HW + BALL_R;
+              b.vx = Math.abs(b.vx);
+              sfx.click();
+            } else if (b.x > HW - BALL_R) {
+              b.x = HW - BALL_R;
+              b.vx = -Math.abs(b.vx);
+              sfx.click();
+            }
+            if (b.z > FAR - BALL_R) {
+              b.z = FAR - BALL_R;
+              b.vz = -Math.abs(b.vz);
+              sfx.click();
+            }
 
-          // 挡板反弹：击中位置决定出射角
-          if (
-            b.vz < 0 &&
-            b.z <= PAD_Z + PAD_T + BALL_R &&
-            b.z >= PAD_Z - PAD_T * 0.5 &&
-            Math.abs(b.x - w.paddleX) <= w.paddleW + BALL_R * 0.6
-          ) {
-            b.z = PAD_Z + PAD_T + BALL_R;
-            const rel = clamp((b.x - w.paddleX) / (w.paddleW + 1e-6), -1, 1);
-            const sp = Math.hypot(b.vx, b.vz) * 1.01;
-            const ang = Math.PI / 2 - rel * 0.95;
-            b.vx = Math.cos(ang) * sp;
-            b.vz = Math.abs(Math.sin(ang) * sp);
-            b.vy = 2.2;
-            w.combo = 0;
-            sfx.drop();
-          }
-
-          // 砖块碰撞：选侵入更深的轴反弹
-          for (const br of w.bricks) {
-            if (!br.alive) continue;
-            const hw = BRICK_W / 2 + BALL_R;
-            const hd = BRICK_D / 2 + BALL_R;
-            const dx = b.x - br.x;
-            const dz = b.z - br.z;
-            if (Math.abs(dx) < hw && Math.abs(dz) < hd) {
-              const ox = hw - Math.abs(dx);
-              const oz = hd - Math.abs(dz);
-              const sp = Math.hypot(b.vx, b.vz) || 1;
-              if (ox < oz) {
-                const sx = dx >= 0 ? 1 : -1;
-                b.x = br.x + sx * hw;
-                b.vx = sx * Math.max(Math.abs(b.vx), sp * MIN_KICK);
-              } else {
-                const sz = dz >= 0 ? 1 : -1;
-                b.z = br.z + sz * hd;
-                b.vz = sz * Math.max(Math.abs(b.vz), sp * MIN_KICK);
+            // 挡板反弹：击中位置决定出射角
+            if (
+              b.vz < 0 &&
+              b.z <= PAD_Z + PAD_T + BALL_R &&
+              b.z >= PAD_Z - PAD_T * 0.5 &&
+              Math.abs(b.x - w.paddleX) <= w.paddleW + BALL_R * 0.6
+            ) {
+              b.z = PAD_Z + PAD_T + BALL_R;
+              const rel = clamp((b.x - w.paddleX) / (w.paddleW + 1e-6), -1, 1);
+              const cap = ballSpeed(w) * SPEED_CAP_MUL;
+              const sp = Math.min(Math.hypot(b.vx, b.vz) * 1.01, cap);
+              const ang = Math.PI / 2 - rel * 0.95;
+              b.vx = Math.cos(ang) * sp;
+              b.vz = Math.abs(Math.sin(ang) * sp);
+              // 正中以心 = 纯竖直死循环：补一个水平下限，方向取挡板移动方向（未移动过则取击球偏侧）
+              const minVx = sp * PAD_VX_MIN;
+              if (Math.abs(b.vx) < minVx) {
+                const dir = w.paddleDir !== 0 ? w.paddleDir : rel >= 0 ? 1 : -1;
+                b.vx = dir * minVx;
+                b.vz = Math.sqrt(Math.max(0, sp * sp - minVx * minVx));
               }
-              const cap = ballSpeed(w) * 1.35;
-              const sp2 = Math.hypot(b.vx, b.vz);
-              if (sp2 > cap) {
-                b.vx = (b.vx / sp2) * cap;
-                b.vz = (b.vz / sp2) * cap;
+              b.vy = 2.2;
+              w.combo = 0;
+              sfx.drop();
+            }
+
+            // 砖块碰撞：选侵入更深的轴反弹（每子步只碎一块，与旧逻辑一致）
+            for (const br of w.bricks) {
+              if (!br.alive) continue;
+              const hw = BRICK_W / 2 + BALL_R;
+              const hd = BRICK_D / 2 + BALL_R;
+              const dx = b.x - br.x;
+              const dz = b.z - br.z;
+              if (Math.abs(dx) < hw && Math.abs(dz) < hd) {
+                const ox = hw - Math.abs(dx);
+                const oz = hd - Math.abs(dz);
+                const sp = Math.hypot(b.vx, b.vz) || 1;
+                if (ox < oz) {
+                  const sx = dx >= 0 ? 1 : -1;
+                  b.x = br.x + sx * hw;
+                  b.vx = sx * Math.max(Math.abs(b.vx), sp * MIN_KICK);
+                } else {
+                  const sz = dz >= 0 ? 1 : -1;
+                  b.z = br.z + sz * hd;
+                  b.vz = sz * Math.max(Math.abs(b.vz), sp * MIN_KICK);
+                }
+                const cap = ballSpeed(w) * SPEED_CAP_MUL;
+                const sp2 = Math.hypot(b.vx, b.vz);
+                if (sp2 > cap) {
+                  b.vx = (b.vx / sp2) * cap;
+                  b.vz = (b.vz / sp2) * cap;
+                }
+                hitBrick(w, br);
+                break;
               }
-              hitBrick(w, br);
-              break;
             }
           }
 

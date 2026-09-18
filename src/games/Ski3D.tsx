@@ -196,11 +196,13 @@ export default function Ski3D() {
     const down = (e: KeyboardEvent) => {
       const k = e.code;
       if (e.key.startsWith('Arrow') || e.key === ' ') e.preventDefault();
+      // Enter 落在已聚焦的按钮上会同时触发热键与按钮 onClick（点过"重新开始"后按 Enter 会连开新局），交给按钮自身处理
+      if (e.key === 'Enter' && (e.target as HTMLElement | null)?.closest('button')) return;
       const keys = keysRef.current;
       if (k === 'ArrowLeft' || k === 'KeyA') keys.l = true;
       else if (k === 'ArrowRight' || k === 'KeyD') keys.r = true;
-      else if (k === 'KeyP' || k === 'Space') togglePause();
-      else if (k === 'Enter') {
+      else if ((k === 'KeyP' || k === 'Space') && !e.repeat) togglePause();
+      else if (k === 'Enter' && !e.repeat) {
         const s = statusRef.current;
         if (s === 'ready' || s === 'over') start();
       }

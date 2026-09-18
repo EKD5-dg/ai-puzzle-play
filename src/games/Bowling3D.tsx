@@ -194,6 +194,8 @@ interface World {
   standingBefore: number;
   /** 上一球是否清空球瓶（决定下一球摆放） */
   lastCleared: boolean;
+  /** 当前这一球面对的是否为整组新瓶（区分全中与"洗沟后补中"） */
+  rackFresh: boolean;
   waitT: number;
   settleT: number;
   rollT: number;
@@ -240,6 +242,7 @@ function newWorld(): World {
     frameIdx: 0,
     standingBefore: 10,
     lastCleared: false,
+    rackFresh: true,
     waitT: 0,
     settleT: 0,
     rollT: 0,
@@ -475,6 +478,7 @@ function rackPins(w: World, full: boolean) {
   b.gutter = false;
   b.pit = false;
   b.trail = [];
+  w.rackFresh = full;
   w.standingBefore = w.pins.filter((p) => p.present && p.state === 'up').length;
 }
 
@@ -1023,7 +1027,9 @@ export default function Bowling3D() {
   const { toast } = useToast();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const worldRef = useRef<World>(newWorld());
+  const worldRef = useRef<World>(null as unknown as World);
+  // 懒初始化：useRef(newWorld()) 的实参每次渲染都会求值，每球结算的重渲染会白摆一组瓶
+  if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   const overRef = useRef(false);
   statusRef.current = status;
@@ -1065,7 +1071,8 @@ export default function Bowling3D() {
     const before = w.standingBefore;
     const n = w.pins.filter((p) => p.present && p.state !== 'up').length;
     const fr = w.frames[w.frameIdx];
-    const strike = n === 10 && before === 10;
+    // 全中必须是"整组新瓶一球清空"：洗沟后再扫倒全部 10 瓶只是补中
+    const strike = n === 10 && before === 10 && w.rackFresh;
     const spare = !strike && n === before && before > 0;
     fr.rolls.push(n);
     fr.marks.push(strike ? 'X' : spare ? '/' : n === 0 ? '–' : String(n));

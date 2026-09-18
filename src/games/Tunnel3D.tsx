@@ -222,7 +222,9 @@ export default function Tunnel3D() {
   const { toast } = useToast();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const worldRef = useRef<World>(newWorld());
+  /** 懒初始化：里程 HUD 每米重渲染一次，直接 useRef(newWorld()) 每次渲染都会白建一世界 */
+  const worldRef = useRef<World>(null as unknown as World);
+  if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   const keysRef = useRef({ l: false, r: false, u: false, d: false });
   const overHandledRef = useRef(false);
@@ -259,8 +261,10 @@ export default function Tunnel3D() {
       else if (k === 'ArrowRight' || k === 'KeyD') keys.r = true;
       else if (k === 'ArrowUp' || k === 'KeyW') keys.u = true;
       else if (k === 'ArrowDown' || k === 'KeyS') keys.d = true;
-      else if (k === 'KeyP' || k === 'Space') togglePause();
-      else if (k === 'Enter') {
+      else if ((k === 'KeyP' || k === 'Space') && !e.repeat) togglePause();
+      else if (k === 'Enter' && !e.repeat) {
+        // 焦点还停在按钮上（例如刚点过 🔄 重新开始）时，Enter 交给浏览器原生激活，别再触发起飞
+        if ((e.target as HTMLElement | null)?.closest('button')) return;
         const s = statusRef.current;
         if (s === 'ready' || s === 'over') start();
       }
@@ -341,7 +345,7 @@ export default function Tunnel3D() {
       return { x: CX - cam.x * s, y: CY + cam.y * s, s };
     };
 
-    /** 能量环：外圈 + 辐条 + 缺口端点灯球（带霓虹辉光），半径加 max 保护防负值 */
+    /** 能量环：缺口外阻断面铺半透明膜 + 外圈 + 辐条 + 内毂 + 缺口端点灯球（带霓虹辉光），半径加 max 保护防负值 */
     const drawGate = (ring: Ring, z: number, t: number, cam: { x: number; y: number }) => {
       const s = projS(z);
       const fog = clamp(z / FAR, 0, 1);
@@ -351,6 +355,19 @@ export default function Tunnel3D() {
       const seg = 40;
       // 缺口角随接近进度自转：spin 语义=全程总转角(rad)，剩余深度越浅转得越多
       const gapA = ring.gap + (ring.spin * (FAR - z)) / FAR;
+      // 阻挡面：判定只认缺口角度（半径方向整圆都算撞），所以缺口以外的圆面从轴心到外沿铺一层半透明霓虹膜，
+      // 让玩家看得见"只有这道缝能过"（判定与难度不动，只把美术补齐到命中框）
+      const mA = 0.22 - fog * 0.16;
+      const mg = ctx.createRadialGradient(mx, my, rr * 0.08, mx, my, rr);
+      mg.addColorStop(0, `hsla(${hue},78%,56%,${(mA * 0.4).toFixed(3)})`);
+      mg.addColorStop(0.72, `hsla(${hue},88%,58%,${(mA * 0.85).toFixed(3)})`);
+      mg.addColorStop(1, `hsla(${hue},92%,64%,${mA.toFixed(3)})`);
+      ctx.fillStyle = mg;
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
+      ctx.arc(mx, my, rr, gapA + ring.half, gapA + TAU - ring.half);
+      ctx.closePath();
+      ctx.fill();
       // 外圈辉光打底
       ctx.strokeStyle = fogA('255,255,255', 0.16, fog);
       ctx.lineWidth = Math.max(1.5, s * 0.16);
@@ -549,13 +566,16 @@ export default function Tunnel3D() {
         }
 
         // ---- 碰撞与回收 ----
+        // 免判宽限必须盖住本帧实际前进距离（VMAX×dt 上限 1.4m > 原来的固定 1.2m），
+        // 否则掉一帧就会把刚越过判定面的环/陨石直接标成 judged 白穿过去
+        const crossGrace = Math.max(1.2, w.speed * dt) + 0.05;
         const pAng = Math.atan2(p.y, p.x);
         for (let i = w.rings.length - 1; i >= 0; i--) {
           const rg = w.rings[i];
           const z = rg.z - w.dist;
           if (!rg.judged && z <= 0) {
             rg.judged = true;
-            if (z > -1.2 && w.invuln <= 0) {
+            if (z > -crossGrace && w.invuln <= 0) {
               const gapA = rg.gap + (rg.spin * (FAR - (rg.z - w.dist))) / FAR;
               // 穿环瞬间贴墙也算撞（缺口外且几乎贴壁）
               const outsideGap = Math.abs(angDiff(pAng, gapA)) > rg.half - 0.06;
@@ -584,7 +604,7 @@ export default function Tunnel3D() {
           const z = rk.z - w.dist;
           if (!rk.judged && z <= 0) {
             rk.judged = true;
-            if (z > -1.2 && w.invuln <= 0) {
+            if (z > -crossGrace && w.invuln <= 0) {
               const wob = rk.a + Math.sin(t * 1.2 + rk.seed * 9) * 0.04;
               const rx = Math.cos(wob) * rk.r;
               const ry = Math.sin(wob) * rk.r;

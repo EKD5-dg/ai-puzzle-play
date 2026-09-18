@@ -217,23 +217,39 @@ function cueBall(w: World): Ball {
 
 function placeCue(w: World, x: number, z: number) {
   const c = cueBall(w);
-  c.x = clamp(x, -HX + BALL_R + 0.05, CUE_MAX_X);
-  c.z = clamp(z, -HZ + BALL_R + 0.05, HZ - BALL_R - 0.05);
-  // 避免与已有球重叠
-  for (const b of w.balls) {
-    if (b.id === 0 || b.pocketed) continue;
-    const dx = c.x - b.x;
-    const dz = c.z - b.z;
-    const d = Math.hypot(dx, dz);
-    const min = BALL_R * 2 + 0.02;
-    if (d < min && d > 0.0001) {
-      const push = (min - d) / d;
-      c.x -= dx * push;
-      c.z -= dz * push;
+  const minX = -HX + BALL_R + 0.05;
+  const maxX = CUE_MAX_X;
+  const minZ = -HZ + BALL_R + 0.05;
+  const maxZ = HZ - BALL_R - 0.05;
+  let cx = clamp(x, minX, maxX);
+  let cz = clamp(z, minZ, maxZ);
+  const overlaps = () =>
+    w.balls.some((b) => b.id !== 0 && !b.pocketed && Math.hypot(cx - b.x, cz - b.z) < BALL_R * 2 + 0.02);
+  // 反复"推开再回钳"：一次推开可能把白球顶到库边外，回钳后又压回原来那颗球上
+  for (let pass = 0; pass < 6 && overlaps(); pass++) {
+    for (const b of w.balls) {
+      if (b.id === 0 || b.pocketed) continue;
+      const dx = cx - b.x;
+      const dz = cz - b.z;
+      const d = Math.hypot(dx, dz);
+      const min = BALL_R * 2 + 0.02;
+      if (d >= min) continue;
+      if (d > 0.0001) {
+        const push = (min - d) / d;
+        cx -= dx * push;
+        cz -= dz * push;
+      } else {
+        cz += min; // 完全同心：任选一向挪开，下一轮再收敛
+      }
+      cx = clamp(cx, minX, maxX);
+      cz = clamp(cz, minZ, maxZ);
     }
   }
-  c.x = clamp(c.x, -HX + BALL_R + 0.05, CUE_MAX_X);
-  c.z = clamp(c.z, -HZ + BALL_R + 0.05, HZ - BALL_R - 0.05);
+  if (overlaps()) {
+    [cx, cz] = defaultCuePos(w); // 拖放点被球群围死，退回一个确定能放的位置
+  }
+  c.x = cx;
+  c.z = cz;
 }
 
 function defaultCuePos(w: World): [number, number] {
@@ -448,7 +464,9 @@ export default function Pool3D() {
   const { toast } = useToast();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const worldRef = useRef<World>(newWorld());
+  const worldRef = useRef<World>(null as unknown as World);
+  // 懒初始化：useRef(newWorld()) 的实参每次渲染都会求值，击球过程中的分数/阶段重渲染会白摆一局球
+  if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   const overHandledRef = useRef(false);
 
@@ -675,21 +693,19 @@ export default function Pool3D() {
       return true;
     };
 
-    // 首碰合法性（花色归属后）
+    // 首碰合法性（花色归属后）：8 号只有在全台清空后才是合法目标，
+    // 否则会出现"这杆合法、8 号一进袋就判负"的陷阱；己方打完但对方仍有球时放宽（否则每杆皆犯规）
     const ownLeft = w.group
       ? w.balls.filter((b) => !b.pocketed && ballGroup(b.id) === w.group).length
       : 0;
+    const eightReady = othersLeft === 0;
     let contactFoul = false;
     if (!w.cueHit) contactFoul = true;
     else if (w.firstContactId != null && w.firstContactId !== 0) {
       const fc = w.firstContactId;
-      if (w.group && ownLeft > 0 && ballGroup(fc) !== w.group && fc !== 8) {
+      if (!eightReady && fc === 8) {
         contactFoul = true;
-      }
-      if (w.group && ownLeft > 0 && fc === 8) {
-        contactFoul = true;
-      }
-      if (!w.group && fc === 8 && othersLeft > 0) {
+      } else if (w.group && ownLeft > 0 && fc !== 8 && ballGroup(fc) !== w.group) {
         contactFoul = true;
       }
     }
@@ -720,22 +736,28 @@ export default function Pool3D() {
     // 进球（含白球同杆落袋时仍计分，再单独判犯规）
     let gain = 0;
     let multi = 0;
+    /** 开台时这一杆打进的花色：只有无犯规才锁定归属，否则会出现"进球无效"却已锁花色 */
+    let firstPotGroup: Group | null = null;
     for (const id of potted) {
       const g = ballGroup(id);
       if (!g) continue;
       if (w.group && g !== w.group) continue;
-      if (!w.group) {
-        w.group = g;
-        setGroup(g);
-      }
+      if (!w.group && firstPotGroup === null) firstPotGroup = g;
       gain += ballPoints(id);
       multi += 1;
     }
+    const claimGroup = () => {
+      if (!w.group && firstPotGroup) {
+        w.group = firstPotGroup;
+        setGroup(firstPotGroup);
+      }
+    };
 
     if (scratched) {
       if (multi > 0) {
         w.score += gain;
         setScore(w.score);
+        claimGroup();
         applyFoul(`进球 +${gain}，白球落袋！`);
       } else {
         applyFoul('白球落袋！');
@@ -744,10 +766,11 @@ export default function Pool3D() {
     }
 
     if (contactFoul) {
-      applyFoul(!w.cueHit ? '空杆犯规！' : multi > 0 ? '首碰犯规，进球无效！' : '首碰犯规！');
+      applyFoul(!w.cueHit ? '空杆犯规！' : multi > 0 ? '首碰犯规，进球不计分！' : '首碰犯规！');
       return;
     }
 
+    claimGroup();
     if (multi > 0) {
       const base = gain * Math.max(1, multi);
       let total = base;

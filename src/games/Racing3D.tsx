@@ -291,7 +291,8 @@ function carSpeedFrac(kind: Car['kind']): number {
 
 // ============ 物理 ============
 
-function step(w: World, dt: number, tNow: number) {
+/** 单个物理子步：转向/加减速/车流位移/碰撞与近失（近失的最小间距按子步采样） */
+function substep(w: World, dt: number, tNow: number) {
   const playerSegment = findSegment(w, w.position + PLAYER_Z);
   const speedPercent = w.speed / MAX_SPEED;
   const dx = dt * STEER_RATE * Math.max(speedPercent, 0.3);
@@ -358,20 +359,22 @@ function step(w: World, dt: number, tNow: number) {
     }
   }
 
-  // 碰撞 / 近失
+  // 碰撞 / 近失（relZ 判定窗只有 2×CAR_LEN，靠 step 的子步保证一帧不会整辆跨过）
   if (w.invincible <= 0) {
     for (const c of w.cars) {
       const relZ = c.z - (w.position + PLAYER_Z);
       if (Math.abs(relZ) < CAR_LEN && Math.abs(w.playerX - c.offset) < CAR_HIT_X) {
+        // 撞过的车不再补近失：直接标 passed 并清掉最小间距记录
         c.passed = true;
         c.minGap = Infinity;
         w.lives -= 1;
         w.invincible = 1.6;
         w.speed = Math.min(w.speed, MAX_SPEED * 0.12);
         w.crashAt = tNow;
+        // 致命撞击同样要出声，否则最后一撞毫无反馈
+        sfx.lose();
         if (w.lives <= 0) w.over = true;
         else {
-          sfx.lose();
           w.msg = '撞车！';
           w.msgAt = tNow;
           w.msgGood = false;
@@ -398,6 +401,19 @@ function step(w: World, dt: number, tNow: number) {
         sfx.match();
       }
     }
+  }
+}
+
+/** 一帧的推进按最大接近速度切子步：dt 封顶 0.05，满速追一辆慢货车能一口气闭合 400 多单位，
+ *  远超 2×CAR_LEN 的判定窗，单子步会直接从货车身上穿过去还顺带吃到近失奖励（子步数封顶 6 控开销） */
+function step(w: World, dt: number, tNow: number) {
+  let closeV = 0;
+  for (const c of w.cars) closeV = Math.max(closeV, Math.abs(w.speed - c.speed));
+  const n = clamp(Math.ceil((closeV * dt) / (CAR_LEN * 0.8)), 1, 6);
+  const h = dt / n;
+  for (let i = 0; i < n; i++) {
+    substep(w, h, tNow);
+    if (w.over) return;
   }
 }
 
@@ -1273,9 +1289,13 @@ export default function Racing3D() {
   const { toast } = useToast();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const worldRef = useRef<World>(newWorld());
+  /** 懒初始化：HUD 每秒重渲染约 8 次，直接 useRef(newWorld()) 每次渲染都会白建一条赛道 */
+  const worldRef = useRef<World>(null as unknown as World);
+  if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   const overHandledRef = useRef(false);
+  /** 当前按住的转向输入（键盘 / 触屏分开记，松手时按剩余按键重算） */
+  const steerHeldRef = useRef({ kL: false, kR: false, tL: false, tR: false });
   statusRef.current = status;
 
   const start = useCallback(() => {
@@ -1297,12 +1317,24 @@ export default function Racing3D() {
   const togglePauseRef = useRef(togglePause);
   togglePauseRef.current = togglePause;
 
-  // 触屏按住式操控
-  const touchSteer = useCallback((dir: -1 | 1, on: boolean) => {
-    const w = worldRef.current;
-    if (on) w.steer = dir;
-    else if (w.steer === dir) w.steer = 0;
+  // 按住 ←、点一下 → 再松开时 steer 必须还原成 ← 仍按住，否则要等系统按键重复才有转向
+  const applySteer = useCallback(() => {
+    const s = steerHeldRef.current;
+    worldRef.current.steer = (s.kR || s.tR ? 1 : 0) - (s.kL || s.tL ? 1 : 0);
   }, []);
+  const applySteerRef = useRef(applySteer);
+  applySteerRef.current = applySteer;
+
+  // 触屏按住式操控
+  const touchSteer = useCallback(
+    (dir: -1 | 1, on: boolean) => {
+      const s = steerHeldRef.current;
+      if (dir < 0) s.tL = on;
+      else s.tR = on;
+      applySteer();
+    },
+    [applySteer],
+  );
   const touchHold = useCallback((key: 'accel' | 'brake', on: boolean) => {
     worldRef.current[key] = on;
   }, []);
@@ -1358,8 +1390,10 @@ export default function Racing3D() {
     if (status !== 'over' || overHandledRef.current) return;
     overHandledRef.current = true;
     const w = worldRef.current;
-    const sc = Math.floor(w.meters) + w.nearMiss * NEAR_MISS_SCORE;
-    setHud((h) => ({ ...h, score: sc }));
+    // 终局一次性快照：HUD 的里程/近失是 0.12s 节流的旧采样，只补分会和"里程+近失"对不上账
+    const meters = Math.floor(w.meters);
+    const sc = meters + w.nearMiss * NEAR_MISS_SCORE;
+    setHud((h) => ({ ...h, meters, nearMiss: w.nearMiss, score: sc }));
     const isNew = sc > 0 && best.updateBest(sc, (a, b) => a > b);
     setNewRecord(isNew);
     if (isNew) {
@@ -1374,6 +1408,8 @@ export default function Racing3D() {
     const down = (e: KeyboardEvent) => {
       const k = e.code;
       if (k.startsWith('Arrow') || k === 'Space') e.preventDefault();
+      // 焦点还停在按钮上（例如刚点过 🔄 重新开始）时，Enter 交给浏览器原生激活，别再触发起跑
+      if (e.key === 'Enter' && (e.target as HTMLElement | null)?.closest('button')) return;
       const w = worldRef.current;
       if (k === 'KeyP' && !e.repeat) {
         togglePauseRef.current();
@@ -1386,21 +1422,32 @@ export default function Racing3D() {
         return;
       }
       if (statusRef.current !== 'playing') return;
-      if (k === 'ArrowLeft' || k === 'KeyA') w.steer = -1;
-      else if (k === 'ArrowRight' || k === 'KeyD') w.steer = 1;
-      else if (k === 'ArrowUp' || k === 'KeyW') w.accel = true;
+      const held = steerHeldRef.current;
+      if (k === 'ArrowLeft' || k === 'KeyA') {
+        held.kL = true;
+        applySteerRef.current();
+      } else if (k === 'ArrowRight' || k === 'KeyD') {
+        held.kR = true;
+        applySteerRef.current();
+      } else if (k === 'ArrowUp' || k === 'KeyW') w.accel = true;
       else if (k === 'ArrowDown' || k === 'KeyS') w.brake = true;
     };
     const up = (e: KeyboardEvent) => {
       const w = worldRef.current;
       const k = e.code;
-      if ((k === 'ArrowLeft' || k === 'KeyA') && w.steer < 0) w.steer = 0;
-      else if ((k === 'ArrowRight' || k === 'KeyD') && w.steer > 0) w.steer = 0;
-      else if (k === 'ArrowUp' || k === 'KeyW') w.accel = false;
+      const held = steerHeldRef.current;
+      if (k === 'ArrowLeft' || k === 'KeyA') {
+        held.kL = false;
+        applySteerRef.current();
+      } else if (k === 'ArrowRight' || k === 'KeyD') {
+        held.kR = false;
+        applySteerRef.current();
+      } else if (k === 'ArrowUp' || k === 'KeyW') w.accel = false;
       else if (k === 'ArrowDown' || k === 'KeyS') w.brake = false;
     };
     const clear = () => {
       const w = worldRef.current;
+      steerHeldRef.current = { kL: false, kR: false, tL: false, tR: false };
       w.steer = 0;
       w.accel = false;
       w.brake = false;

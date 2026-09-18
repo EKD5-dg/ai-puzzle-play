@@ -358,6 +358,8 @@ export default function Maze3D() {
     const down = (e: KeyboardEvent) => {
       const k = e.code;
       if (e.key === ' ' || e.key.startsWith('Arrow')) e.preventDefault();
+      // Enter 落在已聚焦的按钮上会同时触发热键与按钮 onClick（点过"换一座迷宫"后按 Enter 会连换迷宫），交给按钮自身处理
+      if (e.key === 'Enter' && (e.target as HTMLElement | null)?.closest('button')) return;
       const keys = keysRef.current;
       if (k === 'KeyW' || k === 'ArrowUp') keys.fwd = true;
       else if (k === 'KeyS' || k === 'ArrowDown') keys.back = true;
@@ -365,12 +367,12 @@ export default function Maze3D() {
       else if (k === 'KeyD') keys.strafeR = true;
       else if (k === 'ArrowLeft' || k === 'KeyQ') keys.turnL = true;
       else if (k === 'ArrowRight' || k === 'KeyE') keys.turnR = true;
-      else if (k === 'KeyM') setMapOn((v) => !v);
-      else if (k === 'KeyP' || k === 'Space') {
+      else if (k === 'KeyM' && !e.repeat) setMapOn((v) => !v);
+      else if ((k === 'KeyP' || k === 'Space') && !e.repeat) {
         const s = statusRef.current;
         if (s === 'playing') setStatus('paused');
         else if (s === 'paused') setStatus('playing');
-      } else if (k === 'Enter') {
+      } else if (k === 'Enter' && !e.repeat) {
         const s = statusRef.current;
         if (s === 'ready' || s === 'won') start();
       }
@@ -526,7 +528,8 @@ export default function Maze3D() {
     let last = performance.now();
 
     const loop = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const rawDt = (now - last) / 1000;
+      const dt = Math.min(0.05, rawDt);
       last = now;
       const w = worldRef.current;
       const playing = statusRef.current === 'playing';
@@ -571,7 +574,9 @@ export default function Maze3D() {
         }
 
         // 计时 & 探索迷雾（周围一圈直接点亮）
-        w.elapsed += dt * 1000;
+        // 用时累加真实帧间隔（只挡病态长停顿）：用钳制后的 dt 计时会让掉帧局虚低，
+        // 而该成绩取小，一旦入库后续流畅设备的真实用时永远破不了
+        w.elapsed += Math.min(rawDt, 0.25) * 1000;
         const cx = Math.floor(w.px);
         const cy = Math.floor(w.py);
         for (let y = cy - 1; y <= cy + 1; y++)

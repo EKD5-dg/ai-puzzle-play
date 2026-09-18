@@ -163,7 +163,9 @@ export default function Pong3D() {
   const { toast } = useToast();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const worldRef = useRef<World>(newWorld());
+  // 懒初始化：useRef(newWorld()) 的实参每次渲染都会求值，得分/生命刷新会白建一个世界
+  const worldRef = useRef<World>(null as unknown as World);
+  if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   /** 键盘输入态（帧循环读取，避免重渲染） */
   const keysRef = useRef({ l: false, r: false, u: false, d: false });
@@ -205,16 +207,18 @@ export default function Pong3D() {
     const down = (e: KeyboardEvent) => {
       const k = e.code;
       if (e.key === ' ' || e.key.startsWith('Arrow')) e.preventDefault();
+      // Enter 落在已聚焦的按钮上会同时触发热键与按钮 onClick（点过"重新开始"后按 Enter 会连开新局），交给按钮自身处理
+      if (e.key === 'Enter' && (e.target as HTMLElement | null)?.closest('button')) return;
       const keys = keysRef.current;
       if (k === 'ArrowLeft' || k === 'KeyA') keys.l = true;
       else if (k === 'ArrowRight' || k === 'KeyD') keys.r = true;
       else if (k === 'ArrowUp' || k === 'KeyW') keys.u = true;
       else if (k === 'ArrowDown' || k === 'KeyS') keys.d = true;
-      else if (k === 'KeyP') togglePause();
-      else if (k === 'Space') {
+      else if (k === 'KeyP' && !e.repeat) togglePause();
+      else if (k === 'Space' && !e.repeat) {
         const w = worldRef.current;
         if (statusRef.current === 'playing' && w.phase === 'serve') doServe(w);
-      } else if (k === 'Enter') {
+      } else if (k === 'Enter' && !e.repeat) {
         const s = statusRef.current;
         if (s === 'ready' || s === 'over') start();
       }

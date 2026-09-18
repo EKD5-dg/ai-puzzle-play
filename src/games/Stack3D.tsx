@@ -186,7 +186,9 @@ export default function Stack3D() {
   const { toast } = useToast();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const worldRef = useRef<World>(newWorld());
+  // 懒初始化：useRef(newWorld()) 的实参每次渲染都会求值，每次落块重渲染会白建星空与云
+  const worldRef = useRef<World>(null as unknown as World);
+  if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   const overHandledRef = useRef(false);
 
@@ -359,11 +361,13 @@ export default function Stack3D() {
     const down = (e: KeyboardEvent) => {
       const k = e.code;
       if (e.key.startsWith('Arrow') || e.key === ' ') e.preventDefault();
+      // Enter 落在已聚焦的按钮上会同时触发热键与按钮 onClick（点过"重新开始"后按 Enter 会连清塔身），交给按钮自身处理
+      if (e.key === 'Enter' && (e.target as HTMLElement | null)?.closest('button')) return;
       if (k === 'KeyP' && !e.repeat) togglePause();
-      else if (k === 'Enter') {
+      else if (k === 'Enter' && !e.repeat) {
         const s = statusRef.current;
         if (s === 'ready' || s === 'over') start();
-        else if (!e.repeat) placeRef.current();
+        else placeRef.current();
       } else if ((k === 'Space' || k === 'ArrowDown') && !e.repeat) {
         if (statusRef.current === 'paused') togglePause();
         else if (statusRef.current === 'ready' || statusRef.current === 'over') start();
@@ -828,19 +832,14 @@ export default function Stack3D() {
             </div>
           )}
           {status === 'over' && (
-            <div className="stk-overlay" onClick={start}>
+            // 结算面板不挂整层 onClick：手快的下一次点击会在 ~100ms 内重开，层数与新纪录根本来不及看
+            <div className="stk-overlay">
               <h2>🏁 塔倒了</h2>
               <p>
                 最终 {score} 层 · 最高连击 {bestCombo > 1 ? `×${bestCombo}` : '—'}
                 {newRecord ? ' · 🏆 新纪录！' : best.value != null ? ` · 最佳 ${best.value} 层` : ''}
               </p>
-              <button
-                className="btn btn-primary"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  start();
-                }}
-              >
+              <button className="btn btn-primary" onClick={start}>
                 再来一次
               </button>
             </div>
