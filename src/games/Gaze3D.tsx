@@ -191,6 +191,8 @@ interface Face {
   col: RGB;
   /** 自发光：跳过光照，只留一点雾（石像眼睛、星门核心） */
   glow?: boolean;
+  /** 第一人称视图模型：改用固定的机位打光，不参与雾（否则手里的枪会随距离忽明忽暗） */
+  vm?: boolean;
   /** 墙面砌缝：底边到顶边之间的归一化高度 */
   seams?: number[];
 }
@@ -327,11 +329,25 @@ function shade(f: Face, cam: Cam): string {
     const k = 1 - fog * 0.75;
     return `rgb(${Math.round(f.col[0] * k)},${Math.round(f.col[1] * k)},${Math.round(f.col[2] * k)})`;
   }
-  const lam = Math.max(0, (f.n[0] * vx + f.n[1] * vy + f.n[2] * vz) / dist);
-  const torch = lam / (1 + dist * 0.34);
-  const up = Math.max(0, f.n[2]) * 0.22;
-  // 上限 1.15：近处墙面不钳制会直接烧成白块
-  const lit = Math.min(1.15, Math.max(0.08, 0.38 + torch * 1.0 + up));
+  let lit: number;
+  if (f.vm) {
+    // 机位固定三点光：顶光塑形 + 左侧冷光勾边，手里的东西不该随照向哪里而变暗
+    const rx = -Math.sin(cam.yaw);
+    const ry = Math.cos(cam.yaw);
+    const fx = Math.cos(cam.yaw);
+    const fy = Math.sin(cam.yaw);
+    const nR = f.n[0] * rx + f.n[1] * ry;
+    const nF = f.n[0] * fx + f.n[1] * fy;
+    const key = Math.max(0, f.n[2] * 0.9 + nF * 0.35);
+    const rim = Math.max(0, -nR * 0.55 + nF * 0.45);
+    lit = Math.min(1.3, 0.26 + key * 0.92 + rim * 0.42);
+  } else {
+    const lam = Math.max(0, (f.n[0] * vx + f.n[1] * vy + f.n[2] * vz) / dist);
+    const torch = lam / (1 + dist * 0.34);
+    const up = Math.max(0, f.n[2]) * 0.22;
+    // 上限 1.15：近处墙面不钳制会直接烧成白块
+    lit = Math.min(1.15, Math.max(0.08, 0.38 + torch * 1.0 + up));
+  }
   const r = f.col[0] * lit * (1 - fog) + FOGC[0] * fog;
   const g = f.col[1] * lit * (1 - fog) + FOGC[1] * fog;
   const b = f.col[2] * lit * (1 - fog) + FOGC[2] * fog;
@@ -999,52 +1015,113 @@ function updateStatues(w: World, dt: number): Step {
   return { threat, gain, chain: w.chain };
 }
 
-// ============ 屏幕空间美术（HUD 用，与 3D 管线无关） ============
+// ============ 第一人称视图模型（手 + 光矛） ============
 
-/** 光矛发射器：画面右下角的简易"枪模" */
-function weaponSprite(): HTMLCanvasElement {
-  const W = 118;
-  const H = 74;
-  const c = makeCanvas(W, H);
-  const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#2a2340';
-  ctx.beginPath();
-  ctx.moveTo(6, H);
-  ctx.lineTo(40, 24);
-  ctx.lineTo(74, 30);
-  ctx.lineTo(96, H);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#3b3260';
-  ctx.beginPath();
-  ctx.moveTo(14, H);
-  ctx.lineTo(44, 32);
-  ctx.lineTo(70, 37);
-  ctx.lineTo(88, H);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = '#6f5cff';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(44, 30);
-  ctx.lineTo(78, 12);
-  ctx.stroke();
-  for (let i = 0; i < 3; i++) {
-    ctx.strokeStyle = `rgba(90,235,255,${0.85 - i * 0.22})`;
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.ellipse(78 + i * 11, 12 + i * 4, 9 - i * 1.6, 4.6 - i * 0.8, 0.35, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  const mg = ctx.createRadialGradient(108, 20, 1, 108, 20, 12);
-  mg.addColorStop(0, 'rgba(220,250,255,0.95)');
-  mg.addColorStop(1, 'rgba(90,200,255,0)');
-  ctx.fillStyle = mg;
-  ctx.beginPath();
-  ctx.arc(108, 20, 12, 0, Math.PI * 2);
-  ctx.fill();
-  return c;
+const SKIN: RGB = [203, 164, 136];
+const SKIN_TOP: RGB = [221, 186, 158];
+const SKIN_DARK: RGB = [164, 126, 104];
+const SKIN_NAIL: RGB = [238, 216, 196];
+const SUIT: RGB = [72, 64, 108];
+const SUIT_DARK: RGB = [46, 40, 72];
+const SUIT_LIGHT: RGB = [100, 90, 144];
+const STEEL: RGB = [88, 94, 124];
+const STEEL_DARK: RGB = [50, 54, 78];
+const COOL: RGB = [110, 235, 255];
+
+/** 相机局部轴：x=右、y=上、z=前，转成世界坐标 */
+function vmPoint(cam: Cam, lx: number, ly: number, lz: number): Vec3 {
+  const fx = Math.cos(cam.yaw);
+  const fy = Math.sin(cam.yaw);
+  return [cam.x - fy * lx + fx * lz, cam.y + fx * lx + fy * lz, cam.eye + ly];
 }
+
+/**
+ * 视图模型方块：hr 沿相机右轴、hf 沿前轴、hu 沿上轴。
+ * pushBox 只能绕世界竖轴转，所以 yaw 取 cam.yaw + 90° 让它的局部 x 轴对齐相机右轴，
+ * phi 再绕竖直方向微调（+phi 把长轴从"前"转向"右"）。
+ */
+function vmBox(faces: Face[], cam: Cam, lx: number, ly: number, lz: number, hr: number, hf: number, hu: number, phi: number, col: RGB, top?: RGB): void {
+  const p = vmPoint(cam, lx, ly, lz);
+  pushBox(faces, p[0], p[1], p[2], hr, hf, hu, cam.yaw + Math.PI / 2 + phi, col, top);
+}
+
+/** 垂直于视线的环（能量线圈）：正负两面都发，避免转身时消失 */
+function vmRing(faces: Face[], cam: Cam, lx: number, ly: number, lz: number, r0: number, r1: number, col: RGB): void {
+  const N = 8;
+  for (let i = 0; i < N; i++) {
+    const a0 = (i / N) * Math.PI * 2;
+    const a1 = ((i + 1) / N) * Math.PI * 2;
+    pushQuad2(
+      faces,
+      vmPoint(cam, lx + Math.cos(a0) * r0, ly + Math.sin(a0) * r0, lz),
+      vmPoint(cam, lx + Math.cos(a1) * r0, ly + Math.sin(a1) * r0, lz),
+      vmPoint(cam, lx + Math.cos(a1) * r1, ly + Math.sin(a1) * r1, lz),
+      vmPoint(cam, lx + Math.cos(a0) * r1, ly + Math.sin(a0) * r1, lz),
+      col,
+      true,
+    );
+  }
+}
+
+/**
+ * 右手握持光矛的第一人称模型：护腕 → 袖口 → 手背 → 四根分段包住握把的手指 → 拇指，
+ * 再接握把、机匣、导轨、枪管、能量环与枪口。返回枪口的世界坐标（光束起点）。
+ */
+function emitViewModel(faces: Face[], cam: Cam, w: World, t: number): Vec3 {
+  const from = faces.length;
+  const rec = w.shotFx > 0 ? w.shotFx / 0.1 : 0; // 后坐 0..1
+  const step = (w.stepAcc / 0.85) * Math.PI * 2; // 每走一步一个摆动周期
+  const dx = Math.cos(step * 0.5) * 0.005;
+  const dy = Math.sin(step) * 0.006 + Math.sin(t * 1.4) * 0.0035 - 0.012 * rec;
+  const dz = -0.055 * rec;
+  const dr = 0.07 * rec; // 后坐时枪口上跳
+  const box = (lx: number, ly: number, lz: number, hr: number, hf: number, hu: number, phi: number, col: RGB, top?: RGB) =>
+    vmBox(faces, cam, lx + dx, ly + dy, lz + dz, hr, hf, hu, phi + dr, col, top);
+
+  // 小臂从画面右下角伸入，袖口收在腕部
+  box(0.26, -0.175, 0.44, 0.044, 0.115, 0.044, -0.42, SUIT, SUIT_LIGHT);
+  box(0.205, -0.165, 0.545, 0.047, 0.02, 0.047, -0.42, SUIT_DARK, SUIT_LIGHT);
+  // 手背
+  box(0.16, -0.14, 0.575, 0.052, 0.06, 0.028, -0.1, SKIN, SKIN_TOP);
+  // 握把：横在掌前，四指从上方绕到前侧
+  box(0.135, -0.118, 0.628, 0.07, 0.021, 0.021, 0, STEEL_DARK, [64, 68, 94]);
+  const FING = [0.09, 0.121, 0.152, 0.183];
+  for (let i = 0; i < 4; i++) {
+    const x = FING[i];
+    const droop = 0.0035 * (i - 1.5); // 中指最高、小指最低，排成一条指节弧
+    box(x, -0.098 + droop, 0.622, 0.013, 0.016, 0.014, 0, SKIN_TOP, SKIN);
+    box(x, -0.135 + droop, 0.646, 0.012, 0.013, 0.017, 0.15, SKIN_DARK, SKIN);
+    box(x, -0.15 + droop, 0.66, 0.009, 0.0075, 0.005, 0.15, SKIN_NAIL); // 指甲
+  }
+  // 拇指压在机匣侧面
+  box(0.205, -0.098, 0.65, 0.014, 0.034, 0.014, -0.25, SKIN, SKIN_TOP);
+  // 机匣、导轨、枪管
+  box(0.125, -0.056, 0.76, 0.024, 0.16, 0.02, 0.02, STEEL, [112, 118, 150]);
+  box(0.125, -0.028, 0.765, 0.009, 0.1, 0.006, 0.02, SUIT_DARK, COOL);
+  box(0.125, -0.07, 0.95, 0.014, 0.1, 0.014, 0.02, STEEL_DARK, STEEL);
+  // 能量环与枪口
+  for (let i = 0; i < 3; i++) vmRing(faces, cam, 0.125 + dx, -0.07 + dy, 1.09 + i * 0.1 + dz, 0.018, 0.028 + i * 0.005, COOL);
+  const mz = 1.36 + dz;
+  const N = 8;
+  const c0 = vmPoint(cam, 0.125 + dx, -0.07 + dy, mz);
+  for (let i = 0; i < N; i++) {
+    const a0 = (i / N) * Math.PI * 2;
+    const a1 = ((i + 1) / N) * Math.PI * 2;
+    pushQuad2(
+      faces,
+      c0,
+      vmPoint(cam, 0.125 + dx + Math.cos(a0) * 0.018, -0.07 + dy + Math.sin(a0) * 0.018, mz),
+      vmPoint(cam, 0.125 + dx + Math.cos(a1) * 0.018, -0.07 + dy + Math.sin(a1) * 0.018, mz),
+      c0,
+      [220, 250, 255],
+      true,
+    );
+  }
+  for (let i = from; i < faces.length; i++) faces[i].vm = true;
+  return c0;
+}
+
+// ============ 屏幕空间美术（HUD 用，与 3D 管线无关） ============
 
 function vignetteSprite(inner: string, outer: string): HTMLCanvasElement {
   const c = makeCanvas(RW, RH);
@@ -1245,7 +1322,7 @@ export default function Gaze3D() {
     const ctx = canvas.getContext('2d')!;
     ctx.imageSmoothingEnabled = false;
 
-    const weapon = weaponSprite();
+    const vmFaces: Face[] = [];
     const vignette = vignetteSprite('rgba(0,0,0,0)', 'rgba(2,3,10,0.82)');
     const danger = vignetteSprite('rgba(0,0,0,0)', 'rgba(150,10,30,0.9)');
     const faces: Face[] = [];
@@ -1413,17 +1490,22 @@ export default function Gaze3D() {
       emitPortal(faces, w.portalX, w.portalY, w.open, t);
       renderScene(ctx, cam, faces, list, sc);
 
-      // 光矛光束：世界两点投影成屏幕线段
+      // 先建视图模型拿到枪口世界坐标（光束要从这里射出），但留到最后一步再画，
+      // 让它压住世界与光束——第一人称武器永远在最前层
+      vmFaces.length = 0;
+      const showVm = statusRef.current !== 'ready';
+      const muzzleWorld = showVm ? emitViewModel(vmFaces, cam, w, t) : null;
+
+      // 光矛光束：枪口 → 命中点，两端都在世界坐标里算，再投影成屏幕线段
       if (w.beamFx > 0 && w.beamTo) {
-        const muzzle = project(cam, [w.px + Math.cos(w.ang) * 0.4, w.py + Math.sin(w.ang) * 0.4, 0.42]);
+        const muzzle = muzzleWorld ? project(cam, muzzleWorld) : null;
         const end = project(cam, w.beamTo);
         if (muzzle && end) {
           const a = w.beamFx;
           ctx.strokeStyle = `rgba(150,240,255,${0.25 * a})`;
           ctx.lineWidth = 7;
           ctx.beginPath();
-          ctx.moveTo(RW - 10, RH - 52);
-          ctx.lineTo(muzzle.x, muzzle.y);
+          ctx.moveTo(muzzle.x, muzzle.y);
           ctx.lineTo(end.x, end.y);
           ctx.stroke();
           ctx.strokeStyle = `rgba(238,252,255,${0.9 * a})`;
@@ -1435,6 +1517,15 @@ export default function Gaze3D() {
           ctx.fillStyle = fl;
           ctx.beginPath();
           ctx.arc(end.x, end.y, 15 * a + 3, 0, Math.PI * 2);
+          ctx.fill();
+          // 枪口火光
+          const mf = ctx.createRadialGradient(muzzle.x, muzzle.y, 1, muzzle.x, muzzle.y, 22 * a + 4);
+          mf.addColorStop(0, `rgba(235,252,255,${0.9 * a})`);
+          mf.addColorStop(0.45, `rgba(120,220,255,${0.45 * a})`);
+          mf.addColorStop(1, 'rgba(90,180,255,0)');
+          ctx.fillStyle = mf;
+          ctx.beginPath();
+          ctx.arc(muzzle.x, muzzle.y, 22 * a + 4, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -1451,12 +1542,12 @@ export default function Gaze3D() {
         ctx.fillStyle = ratio > 0.75 ? '#ffe37a' : '#7ee8ff';
         ctx.fillRect(p.x - bw / 2, p.y - 3, bw * ratio, 4);
       }
+      if (showVm) renderScene(ctx, cam, vmFaces, list, sc);
       ctx.restore();
 
       // ---- HUD（不随震动偏移，避免准星/雷达乱跳） ----
       if (statusRef.current !== 'ready') {
         const rec = w.shotFx > 0 ? w.shotFx / 0.1 : 0;
-        ctx.drawImage(weapon, RW - 116, RH - 70 + rec * 7);
 
         const dirX = Math.cos(w.ang);
         const dirY = Math.sin(w.ang);
