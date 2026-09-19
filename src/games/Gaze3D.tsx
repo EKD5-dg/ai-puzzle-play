@@ -19,9 +19,18 @@ import { metaGaze3D } from '../core/gameMetas';
 
 /** 回廊格数 */
 const GRID = 25;
-/** 内部渲染分辨率 */
-const RW = 480;
-const RH = 300;
+/**
+ * 内部渲染分辨率。桌面用 640×400（软 3D 的填充量随像素数线性涨），
+ * 触屏设备退回 480×300：那边 GPU 更弱、面板也更小，看不出这 1.78 倍的细节差。
+ * 两者同为 8:5，画布 CSS 与所有投影常量都按 RW 折算，不需要分支。
+ */
+const HIRES = typeof window !== 'undefined' && !window.matchMedia('(pointer: coarse)').matches;
+const RW = HIRES ? 640 : 480;
+const RH = HIRES ? 400 : 300;
+/** 屏幕控件与字号随内部分辨率等比放大（下面按 480 宽的基准写） */
+const UIS = RW / 480;
+/** 虚拟摇杆最大行程 */
+const STICK_R = 56 * UIS;
 const RADIUS = 0.26;
 const SPEED = 3.1;
 const SPRINT_K = 1.4;
@@ -54,22 +63,24 @@ const CHAIN_WINDOW = 5;
 
 // ============ 软 3D 常量 ============
 
-/** 厅高与视点高度（世界单位 = 格） */
-const WALL_H = 1.55;
-const EYE = 0.74;
-/** 焦距（内部像素）：FOCAL = RW/2 / tan(半视场角)，0.72·RW ≈ 70° */
-const FOCAL = RW * 0.72;
+/** 厅高与视点高度（世界单位 = 格）：通道加宽到 2 格后一并拔高，避免变成低矮地道 */
+const WALL_H = 1.72;
+const EYE = 0.8;
+/** 焦距（内部像素）：FOCAL = RW/2 / tan(半视场角)，0.66·RW ≈ 74°，宽通道要配宽视野 */
+const FOCAL = RW * 0.66;
 /** 画面半宽对应的 tan(半视场角)：判定"石像是否落在画面里"与投影严格同源 */
 const HALF_TAN = RW / (2 * FOCAL);
 /** 近平面：小于该深度的顶点先裁剪 */
 const NEAR = 0.12;
-/** 几何剔除半径：超出即完全融进雾里，不必投影 */
-const CULL_R = 15;
+/** 几何剔除半径：超出即完全融进雾里，不必投影（2 格宽通道可见面更多，这里收紧一点换帧率） */
+const CULL_R = 13;
 const FOG_START = 3;
-const FOG_END = 16;
+const FOG_END = 15;
 /** 雾色（与远处天花板同调，墙面消隐时不露边） */
 const FOGC: RGB = [10, 11, 24];
-const PITCH_MAX = 70;
+/** 边缘光颜色：冷青，专门用来把实体轮廓从暖灰墙面里分离出来 */
+const RIMC: RGB = [88, 176, 214];
+const PITCH_MAX = 70 * UIS;
 
 const DIRS4: Array<[number, number]> = [
   [1, 0],
@@ -193,6 +204,11 @@ interface Face {
   glow?: boolean;
   /** 第一人称视图模型：改用固定的机位打光，不参与雾（否则手里的枪会随距离忽明忽暗） */
   vm?: boolean;
+  /** 自定义轮廓描边（石像用近黑硬边把自己切出来） */
+  edge?: string;
+  edgeW?: number;
+  /** 掠射边缘光强度：实体专属，墙面不给，所以敌人永远不会像墙 */
+  rim?: number;
   /** 墙面砌缝：底边到顶边之间的归一化高度 */
   seams?: number[];
 }
@@ -316,6 +332,72 @@ function pushBox(
 }
 
 /**
+ * 锥形柱（圆柱/圆锥台/棱锥）：以 a→b 为轴、两端各一个正多边形截面。
+ * 有了它才谈得上"非轴对齐几何"——长袍、手臂、尖兜帽都是斜的、收口的，
+ * 剪影因此和轴对齐的墙面彻底分开（只用方块拼的敌人无论怎么配色都像墙）。
+ */
+function pushLimb(faces: Face[], a: Vec3, b: Vec3, rA: number, rB: number, sides: number, col: RGB, cap?: RGB): void {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const dz = b[2] - a[2];
+  const L = Math.hypot(dx, dy, dz) || 1;
+  const ax = dx / L;
+  const ay = dy / L;
+  const az = dz / L;
+  // 截面基：取轴与参考向量的正交组（轴接近竖直时参考取 x，避免退化）
+  const rx = Math.abs(az) > 0.9 ? 1 : 0;
+  const ry = 0;
+  const rz = Math.abs(az) > 0.9 ? 0 : 1;
+  let ux = ay * rz - az * ry;
+  let uy = az * rx - ax * rz;
+  let uz = ax * ry - ay * rx;
+  const ul = Math.hypot(ux, uy, uz) || 1;
+  ux /= ul;
+  uy /= ul;
+  uz /= ul;
+  const vx = ax * uy - ay * uz;
+  const vy = ay * uz - az * ux;
+  const vz = az * ux - ax * uy;
+  const ring = (t: number, out: Vec3[]): void => {
+    const cx = a[0] + dx * t;
+    const cy = a[1] + dy * t;
+    const cz = a[2] + dz * t;
+    const r = rA + (rB - rA) * t;
+    for (let i = 0; i < sides; i++) {
+      const th = (i / sides) * Math.PI * 2;
+      const co = Math.cos(th) * r;
+      const si = Math.sin(th) * r;
+      out.push([cx + ux * co + vx * si, cy + uy * co + vy * si, cz + uz * co + vz * si]);
+    }
+  };
+  const top: Vec3[] = [];
+  const bot: Vec3[] = [];
+  ring(0, bot);
+  ring(1, top);
+  for (let i = 0; i < sides; i++) {
+    const j = (i + 1) % sides;
+    const p = bot[i];
+    const q = bot[j];
+    const r = top[j];
+    const s = top[i];
+    // 外法线 = 侧向半径方向；绕序不确定，按点积翻回来
+    const mx = (p[0] + q[0] + r[0] + s[0]) / 4 - (a[0] + b[0]) / 2;
+    const my = (p[1] + q[1] + r[1] + s[1]) / 4 - (a[1] + b[1]) / 2;
+    const mz = (p[2] + q[2] + r[2] + s[2]) / 4 - (a[2] + b[2]) / 2;
+    const n = faceNormal(p, q, s);
+    if (n[0] * mx + n[1] * my + n[2] * mz < 0) pushQuad(faces, p, s, r, q, col);
+    else pushQuad(faces, p, q, r, s, col);
+  }
+  const cc: Vec3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+  for (let i = 0; i < sides; i++) {
+    const j = (i + 1) % sides;
+    const n = faceNormal(cc, top[i], top[j]);
+    if (n[0] * ax + n[1] * ay + n[2] * az < 0) pushTri(faces, cc, top[j], top[i], cap ?? col);
+    else pushTri(faces, cc, top[i], top[j], cap ?? col);
+  }
+}
+
+/**
  * 着色：环境光 + 手电（沿视线打回相机方向，随距离衰减）+ 顶部微光，再按距离混入雾色。
  * 法线 lambert 用面心到相机的方向，因此正对玩家的墙最亮、侧墙自然压暗。
  */
@@ -325,6 +407,7 @@ function shade(f: Face, cam: Cam): string {
   const vz = cam.eye - f.c[2];
   const dist = Math.hypot(vx, vy, vz) || 1;
   const fog = Math.min(1, Math.max(0, (dist - FOG_START) / (FOG_END - FOG_START)));
+  const lam = Math.max(0, (f.n[0] * vx + f.n[1] * vy + f.n[2] * vz) / dist);
   if (f.glow) {
     const k = 1 - fog * 0.75;
     return `rgb(${Math.round(f.col[0] * k)},${Math.round(f.col[1] * k)},${Math.round(f.col[2] * k)})`;
@@ -342,16 +425,16 @@ function shade(f: Face, cam: Cam): string {
     const rim = Math.max(0, -nR * 0.55 + nF * 0.45);
     lit = Math.min(1.3, 0.26 + key * 0.92 + rim * 0.42);
   } else {
-    const lam = Math.max(0, (f.n[0] * vx + f.n[1] * vy + f.n[2] * vz) / dist);
     const torch = lam / (1 + dist * 0.34);
     const up = Math.max(0, f.n[2]) * 0.22;
     // 上限 1.15：近处墙面不钳制会直接烧成白块
     lit = Math.min(1.15, Math.max(0.08, 0.38 + torch * 1.0 + up));
   }
   // 暖光冷雾：光照分量偏暖、雾与环境偏冷，画面立刻有层次
-  const r = f.col[0] * lit * 1.07 * (1 - fog) + FOGC[0] * fog;
-  const g = f.col[1] * lit * (1 - fog) + FOGC[1] * fog;
-  const b = f.col[2] * lit * 0.92 * (1 - fog) + FOGC[2] * fog;
+  const rimAdd = f.rim ? f.rim * Math.pow(1 - lam, 3) : 0;
+  const r = (f.col[0] * lit * 1.07 + RIMC[0] * rimAdd) * (1 - fog) + FOGC[0] * fog;
+  const g = (f.col[1] * lit + RIMC[1] * rimAdd) * (1 - fog) + FOGC[1] * fog;
+  const b = (f.col[2] * lit * 0.92 + RIMC[2] * rimAdd) * (1 - fog) + FOGC[2] * fog;
   return `rgb(${r < 0 ? 0 : r > 255 ? 255 : r | 0},${g < 0 ? 0 : g > 255 ? 255 : g | 0},${b < 0 ? 0 : b > 255 ? 255 : b | 0})`;
 }
 
@@ -458,8 +541,8 @@ function renderScene(ctx: CanvasRenderingContext2D, cam: Cam, faces: Face[], lis
       ctx.stroke();
     }
     if (!f.glow && n <= 4) {
-      ctx.strokeStyle = 'rgba(0,0,0,0.28)';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = f.edge ?? 'rgba(0,0,0,0.28)';
+      ctx.lineWidth = f.edgeW ?? 1;
       ctx.stroke();
     }
   }
@@ -471,10 +554,13 @@ const MARBLE: RGB = [146, 154, 184];
 const MARBLE_WARM: RGB = [176, 158, 140];
 const FLOOR_A: RGB = [92, 90, 118];
 const FLOOR_B: RGB = [66, 62, 88];
-const STONE: RGB = [178, 182, 200];
-const STONE_DARK: RGB = [104, 108, 130];
-const CREEP: RGB = [162, 142, 182];
-const CREEP_DARK: RGB = [94, 76, 118];
+/** 石像用冷青灰板岩 + 饱和 accent：与暖灰大理石墙拉开色相，而不只是明度 */
+const STONE: RGB = [86, 104, 118];
+const STONE_HI: RGB = [132, 156, 168];
+const STONE_DARK: RGB = [44, 52, 64];
+const CREEP: RGB = [128, 62, 80];
+const CREEP_HI: RGB = [176, 100, 118];
+const CREEP_DARK: RGB = [64, 30, 44];
 
 /** 墙体：从地板格向外看，邻格是墙就贴一面立起的四边形（有厚度感、可带砌缝） */
 function emitRoom(faces: Face[], w: World, cam: Cam): void {
@@ -547,71 +633,84 @@ function tint(base: RGB, k: number): RGB {
   return [base[0] * k, base[1] * k, base[2] * k];
 }
 
-/** 石像：基座 + 腿 + 躯干 + 肩 + 双臂 + 头 + 兜帽 + 双眼，全部绕同一 yaw 组合，转身时整具一起转 */
+/**
+ * 石像：八边锥柱拼出的长袍人形——收口长袍 + 披肩 + 八角头 + 尖兜帽 + 斜垂双臂 + 双眼 + 胸口符。
+ * 关键是别用轴对齐方块：方块和墙是同一套几何语言，配色再不同也会被读成"一块墙"。
+ */
 function emitStatue(faces: Face[], s: Statue, cam: Cam, t: number): void {
   const dx = cam.x - s.x;
   const dy = cam.y - s.y;
   if (Math.hypot(dx, dy) > CULL_R) return;
+  const from = faces.length;
   const yaw = s.faceYaw;
   const c = Math.cos(yaw);
   const sn = Math.sin(yaw);
   /** 石像局部坐标：lat 沿左侧轴、fwd 沿朝向轴（调用处一律"横在前、纵在后"） */
   const off = (lat: number, fwd: number): [number, number] => [s.x + fwd * c - lat * sn, s.y + fwd * sn + lat * c];
+  const P = (lat: number, fwd: number, h: number): Vec3 => {
+    const [x, y] = off(lat, fwd);
+    return [x, y, h];
+  };
   const moving = !s.frozen && s.stagger <= 0;
   const body = moving ? CREEP : STONE;
+  const hi = moving ? CREEP_HI : STONE_HI;
   const dark = moving ? CREEP_DARK : STONE_DARK;
-  const z = moving ? Math.sin(t * 9 + s.phase) * 0.016 : 0;
-  let [bx, by] = off(0, 0);
-  pushBox(faces, bx, by, 0.045, 0.25, 0.25, 0.045, yaw, dark, tint(dark, 1.3));
-  [bx, by] = off(0, 0);
-  pushBox(faces, bx, by, z + 0.3, 0.13, 0.09, 0.2, yaw, tint(body, 0.82)); // 腿
-  [bx, by] = off(0, moving ? 0.04 : 0);
-  pushBox(faces, bx, by, z + 0.72, 0.15, 0.1, 0.22, yaw, body, tint(body, 1.1)); // 躯干
-  const [sx2, sy2] = off(0, moving ? 0.04 : 0);
-  pushBox(faces, sx2, sy2, z + 0.95, 0.2, 0.1, 0.05, yaw, tint(body, 0.94)); // 肩
-  // 手臂：前扑时向前抬，冻结时垂在体侧
-  const armF = moving ? 0.17 : 0;
-  const armHz = moving ? 0.14 : 0.23;
+  const bob = moving ? Math.sin(t * 9 + s.phase) * 0.018 : 0;
+  const lean = moving ? 0.07 : 0;
+  // 长袍半径随身高收口，贴片要贴到锥面上就得按同一公式取半径
+  const robeR = (h: number) => 0.32 - 0.17 * Math.min(1, Math.max(0, (h - 0.1) / 0.88));
+  pushLimb(faces, P(0, 0, 0.02), P(0, 0, 0.1 + bob), 0.28, 0.25, 8, dark, tint(dark, 1.4)); // 基座
+  pushLimb(faces, P(0, 0, 0.1 + bob), P(0, lean, 0.98 + bob), 0.32, 0.15, 8, body, tint(body, 1.35)); // 长袍
+  pushLimb(faces, P(0, lean, 1.0 + bob), P(0, lean * 1.3, 1.1 + bob), 0.21, 0.13, 8, tint(body, 0.92), hi); // 披肩
+  pushLimb(faces, P(0, 0.02 + lean * 1.4, 1.12 + bob), P(0, 0.02 + lean * 1.6, 1.3 + bob), 0.095, 0.078, 8, hi); // 头
+  pushLimb(faces, P(0, 0.015 + lean * 1.5, 1.27 + bob), P(0, -0.015 + lean * 1.2, 1.47 + bob), 0.108, 0.006, 8, dark); // 尖兜帽
   for (const side of [-1, 1]) {
-    const [ax, ay] = off(side * 0.22, armF);
-    pushBox(faces, ax, ay, z + 0.74 - (moving ? 0.08 : 0), 0.055, 0.055, armHz, yaw + side * (moving ? 0.22 : 0.05), tint(body, side < 0 ? 1.04 : 0.88));
+    // 手臂：冻结时贴着体侧下垂，扑过来时整条抬到身前
+    const base = P(side * 0.19, lean * 0.6, 1.03 + bob);
+    const tip = moving ? P(side * 0.12, 0.33, 0.92 + bob) : P(side * 0.245, 0.02 + lean, 0.54 + bob);
+    pushLimb(faces, base, tip, 0.055, 0.034, 6, side < 0 ? tint(body, 1.1) : tint(body, 0.86));
   }
-  const [hx, hy] = off(0, moving ? 0.06 : 0);
-  pushBox(faces, hx, hy, z + 1.08, 0.095, 0.095, 0.1, yaw, tint(body, 1.06), tint(body, 1.16)); // 头
-  const [cx2, cy2] = off(0, moving ? 0.02 : -0.02);
-  pushBox(faces, cx2, cy2, z + 1.19, 0.108, 0.108, 0.035, yaw, dark); // 兜帽
-  // 眼睛：只有会动的石像才亮红眼——这是"它在逼近"的核心视觉信号
-  const eyeCol: RGB = moving ? [255, 74, 92] : s.stagger > 0 ? [130, 240, 255] : [34, 36, 50];
-  for (const side of [-1, 1]) {
-    const [ex, ey] = off(side * 0.042, 0.096);
-    pushBox(faces, ex, ey, z + 1.1, 0.021, 0.008, 0.016, yaw, eyeCol, eyeCol);
-  }
-  // 凝视裂纹：盯得越久身上亮起的缝越多，让机制本身在画面里可读。
-  // 贴片沿朝向前移一点，靠"更近"赢过身体的排序，否则会被自己那具石像挡住
+  /** 贴在锥面上的自发光小片（双眼与胸口符）：双面发，转身时背面也不会突然消失 */
+  const decal = (lat: number, fwd: number, h: number, wl: number, wh: number, col: RGB): void => {
+    pushQuad2(faces, P(lat - wl, fwd, h - wh), P(lat + wl, fwd, h - wh), P(lat + wl, fwd, h + wh), P(lat - wl, fwd, h + wh), col, true);
+  };
+  const eyeCol: RGB = moving ? [255, 84, 96] : s.stagger > 0 ? [130, 240, 255] : [58, 64, 82];
+  for (const side of [-1, 1]) decal(side * 0.042, 0.082 + lean * 1.6, 1.22 + bob, 0.019, 0.014, eyeCol);
+  decal(0, robeR(0.84) + 0.012, 0.84 + bob, 0.048, 0.048, moving ? [255, 132, 92] : [86, 190, 222]);
+  // 凝视裂纹：盯得越久身上亮起的缝越多，让机制本身在画面里可读
   const crackN = Math.min(5, Math.floor((s.stare / STARE_KILL) * 5.5));
-  if (crackN > 0) {
-    const rgx = -sn;
-    const rgy = c;
-    const CRACKS: Array<[number, number, number]> = [
-      [0.03, 0.62, 0.11],
-      [-0.05, 0.72, 0.13],
-      [0.02, 0.88, 0.07],
-      [0.07, 0.5, 0.1],
-      [-0.03, 1.0, 0.06],
-    ];
-    for (let i = 0; i < crackN; i++) {
-      const [ox, cz, half] = CRACKS[i];
-      const px = s.x + c * 0.112 + rgx * ox;
-      const py = s.y + sn * 0.112 + rgy * ox;
-      pushQuad2(
-        faces,
-        [px - rgx * 0.012, py - rgy * 0.012, z + cz - half],
-        [px + rgx * 0.012, py + rgy * 0.012, z + cz - half],
-        [px + rgx * 0.012, py + rgy * 0.012, z + cz + half],
-        [px - rgx * 0.012, py - rgy * 0.012, z + cz + half],
-        s.stagger > 0 ? [150, 246, 255] : [126, 232, 255],
-        true,
-      );
+  const CRACKS: Array<[number, number, number]> = [
+    [0.03, 0.62, 0.11],
+    [-0.05, 0.72, 0.13],
+    [0.02, 0.88, 0.07],
+    [0.07, 0.5, 0.1],
+    [-0.03, 0.98, 0.06],
+  ];
+  const rgx = -sn;
+  const rgy = c;
+  for (let i = 0; i < crackN; i++) {
+    const [ox, cz, half] = CRACKS[i];
+    // 沿朝向前移一个"该高度的袍面半径"，靠更近赢过身体的排序，否则被自己那具石像挡住
+    const rr = robeR(cz) + 0.012;
+    const px = s.x + c * rr + rgx * ox;
+    const py = s.y + sn * rr + rgy * ox;
+    pushQuad2(
+      faces,
+      [px - rgx * 0.012, py - rgy * 0.012, bob + cz - half],
+      [px + rgx * 0.012, py + rgy * 0.012, bob + cz - half],
+      [px + rgx * 0.012, py + rgy * 0.012, bob + cz + half],
+      [px - rgx * 0.012, py - rgy * 0.012, bob + cz + half],
+      s.stagger > 0 ? [150, 246, 255] : [126, 232, 255],
+      true,
+    );
+  }
+  // 硬边剪影 + 掠射边缘光：无论墙面被手电打得多亮，石像轮廓都被"描"出来
+  for (let i = from; i < faces.length; i++) {
+    const f = faces[i];
+    if (!f.glow) {
+      f.edge = 'rgba(5,6,12,0.92)';
+      f.edgeW = 1.6;
+      f.rim = 0.6;
     }
   }
 }
@@ -664,40 +763,63 @@ function emitPortal(faces: Face[], x: number, y: number, open: boolean, t: numbe
 // ============ 回廊生成 ============
 
 /**
- * 完美迷宫 + 打通部分隔断 + 三座开阔大厅 + 柱子。
- * 大厅给石像冲刺距离，柱子提供视线遮挡——两者是"注视冻结"能玩起来的前提。
+ * 房间块迷宫：每间房是 2×2 格，走廊因此有 2 格宽。
+ * 沿用"1 格宽走廊"的格点约定会让侧墙永远贴在眼睛两侧 0.26 单位处，
+ * 70° 视场里墙面吃掉大半画面，石像也被埋进墙里——所以这里直接把通道加宽。
  */
+const PITCH = 4;
+
 function genGrid(): Uint8Array {
   const g = new Uint8Array(GRID * GRID).fill(1);
-  const start = 1 * GRID + 1;
-  g[start] = 0;
-  const stack: number[] = [start];
+  const N = Math.floor((GRID - 3) / PITCH) + 1;
+  const room = (i: number, j: number) => {
+    for (let y = 0; y < 2; y++)
+      for (let x = 0; x < 2; x++) g[(1 + PITCH * j + y) * GRID + (1 + PITCH * i + x)] = 0;
+  };
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) room(i, j);
+  // 打通两房间之间的 2×2 缺口
+  const link = (i: number, j: number, horiz: boolean) => {
+    const x0 = 1 + PITCH * i;
+    const y0 = 1 + PITCH * j;
+    if (horiz) {
+      for (const gx of [x0 + 2, x0 + 3]) for (let y = 0; y < 2; y++) g[(y0 + y) * GRID + gx] = 0;
+    } else {
+      for (const gy of [y0 + 2, y0 + 3]) for (let x = 0; x < 2; x++) g[gy * GRID + (x0 + x)] = 0;
+    }
+  };
+  const seen = new Uint8Array(N * N);
+  const stack: Array<[number, number]> = [[0, 0]];
+  seen[0] = 1;
   while (stack.length > 0) {
-    const cur = stack[stack.length - 1];
-    const cx = cur % GRID;
-    const cy = (cur / GRID) | 0;
-    const dirs = [...DIRS4].sort(() => Math.random() - 0.5);
+    const [ci, cj] = stack[stack.length - 1];
+    const dirs = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ].sort(() => Math.random() - 0.5);
     let moved = false;
-    for (const [dx, dy] of dirs) {
-      const nx = cx + dx * 2;
-      const ny = cy + dy * 2;
-      if (nx <= 0 || ny <= 0 || nx >= GRID - 1 || ny >= GRID - 1) continue;
-      if (g[ny * GRID + nx] === 0) continue;
-      g[ny * GRID + nx] = 0;
-      g[(cy + dy) * GRID + (cx + dx)] = 0;
-      stack.push(ny * GRID + nx);
+    for (const [di, dj] of dirs) {
+      const ni = ci + di;
+      const nj = cj + dj;
+      if (ni < 0 || nj < 0 || ni >= N || nj >= N || seen[nj * N + ni]) continue;
+      seen[nj * N + ni] = 1;
+      // link 只在给定节点的 +x/+y 侧开缺口，所以必须传两房间里下标较小的那个，
+      // 否则向左/向上走会开错位置：真通道没打通，还平白多出一截 stub
+      link(Math.min(ci, ni), Math.min(cj, nj), di !== 0);
+      stack.push([ni, nj]);
       moved = true;
       break;
     }
     if (!moved) stack.pop();
   }
-  // 回环越多越能绕到背后，纯树状迷宫会让石像永远堵在死路里
-  for (let y = 1; y < GRID - 1; y++)
-    for (let x = 1; x < GRID - 1; x++) {
-      const idx = y * GRID + x;
-      if (g[idx] !== 1 || (x % 2 === 1 && y % 2 === 1)) continue;
-      if (Math.random() < 0.22) g[idx] = 0;
+  // 回环：再多打通三成隔断，纯树状会让石像永远堵在死路里，也少了绕后的可能
+  for (let i = 0; i < N; i++)
+    for (let j = 0; j < N; j++) {
+      if (i + 1 < N && Math.random() < 0.34) link(i, j, true);
+      if (j + 1 < N && Math.random() < 0.34) link(i, j, false);
     }
+  // 大厅：几处矩形清空，给石像冲刺距离与长视线
   for (let r = 0; r < 3; r++) {
     const w = 5 + 2 * Math.floor(Math.random() * 2);
     const h = 5 + 2 * Math.floor(Math.random() * 2);
@@ -706,20 +828,31 @@ function genGrid(): Uint8Array {
     for (let y = y0; y < y0 + h; y++)
       for (let x = x0; x < x0 + w; x++) if (x > 0 && y > 0 && x < GRID - 1 && y < GRID - 1) g[y * GRID + x] = 0;
   }
-  // 柱子：只放在四邻皆通路的格上，并验证"封掉本格后其余格仍全部可达"，
-  // 否则一个十字路口的中心格会把半张图变成永远拿不到的孤岛
-  let reach = reachCount(g, start);
+  // 柱子：2 格宽的通道里放一根正好留出半格可走，既当掩体又不堵路；
+  // 仍要验证"封掉本格后其余格全部可达"，否则十字路口中心会把半张图变成孤岛
+  let reach = reachCount(g, 1 * GRID + 1);
   for (let y = 2; y < GRID - 2; y++)
     for (let x = 2; x < GRID - 2; x++) {
       const idx = y * GRID + x;
       if (g[idx] !== 0) continue;
       if (DIRS4.some(([dx, dy]) => g[(y + dy) * GRID + (x + dx)] !== 0)) continue;
-      if (Math.random() > 0.3) continue;
+      if (Math.random() > 0.16) continue;
       g[idx] = 1;
-      const after = reachCount(g, start);
+      const after = reachCount(g, 1 * GRID + 1);
       if (after === reach - 1) reach = after;
       else g[idx] = 0;
     }
+  // 兜底：外圈强制是墙（任何一步都不该打穿边界），再把与起点隔断的地板格退回墙，
+  // 免得留下永远拿不到的孤岛格
+  for (let k = 0; k < GRID; k++) {
+    g[k] = 1;
+    g[(GRID - 1) * GRID + k] = 1;
+    g[k * GRID] = 1;
+    g[k * GRID + GRID - 1] = 1;
+  }
+  const d0 = bfs(g, 1 * GRID + 1);
+  // 起点本身是墙时 bfs 全 -1，那样会把整张图抹掉——真发生就保留原样交给上层重生成
+  if (d0[1 * GRID + 1] === 0) for (let i = 0; i < g.length; i++) if (g[i] === 0 && d0[i] < 0) g[i] = 1;
   return g;
 }
 
@@ -1146,9 +1279,11 @@ function emitViewModel(faces: Face[], cam: Cam, w: World, t: number): Vec3 {
   for (let i = 0; i < 4; i++) {
     const x = FING[i];
     const droop = 0.0035 * (i - 1.5); // 中指最高、小指最低，排成一条指节弧
-    box(x, -0.098 + droop, 0.622, 0.013, 0.016, 0.014, 0, SKIN_TOP, SKIN);
-    box(x, -0.135 + droop, 0.646, 0.012, 0.013, 0.017, 0.15, SKIN_DARK, SKIN);
-    box(x, -0.15 + droop, 0.66, 0.009, 0.0075, 0.005, 0.15, SKIN_NAIL); // 指甲
+    // 三节包握：指节压在握把上方 → 中段沿前侧下行 → 末节绕到下方，指尖指甲朝内
+    box(x, -0.094 + droop, 0.617, 0.0135, 0.0155, 0.0125, 0, SKIN, SKIN_TOP);
+    box(x, -0.124 + droop, 0.648, 0.0125, 0.0125, 0.016, 0.1, SKIN, SKIN_TOP);
+    box(x, -0.15 + droop, 0.634, 0.0115, 0.014, 0.011, 0, SKIN_DARK, SKIN);
+    box(x, -0.152 + droop, 0.62, 0.0085, 0.006, 0.0055, 0, SKIN_NAIL); // 指甲
   }
   // 拇指压在机匣侧面
   box(0.205, -0.098, 0.65, 0.014, 0.034, 0.014, -0.25, SKIN, SKIN_TOP);
@@ -1374,7 +1509,7 @@ export default function Gaze3D() {
       const dx = p.x - stick.ox;
       const dy = p.y - stick.oy;
       const len = Math.hypot(dx, dy);
-      const R = 56;
+      const R = STICK_R;
       stick.dx = len > R ? (dx / len) * R : dx;
       stick.dy = len > R ? (dy / len) * R : dy;
       return;
@@ -1386,7 +1521,7 @@ export default function Gaze3D() {
       const dy = p.y - look.lastY;
       look.lastX = p.x;
       look.lastY = p.y;
-      if (Math.hypot(p.x - look.x0, p.y - look.y0) > 9) look.moved = true;
+      if (Math.hypot(p.x - look.x0, p.y - look.y0) > 9 * UIS) look.moved = true;
       const w = worldRef.current;
       // 拖过整幅画布 ≈ 转 130°（dx 已是内部像素，须按渲染宽度折算，与 CSS 宽度无关）
       w.ang += (dx / RW) * 2.3;
@@ -1417,7 +1552,7 @@ export default function Gaze3D() {
     const vmFaces: Face[] = [];
     const grainPat = ctx.createPattern(grainSprite(), 'repeat')!;
     const drnd = mulberry(99);
-    const dust = Array.from({ length: 70 }, () => ({
+    const dust = Array.from({ length: 95 }, () => ({
       x: (drnd() - 0.5) * 2.6,
       y: (drnd() - 0.5) * 1.6 + 0.15,
       z: 0.5 + drnd() * 5.5,
@@ -1450,9 +1585,9 @@ export default function Gaze3D() {
         let mf = (keys.fwd ? 1 : 0) - (keys.back ? 1 : 0);
         let ms = (keys.strafeR ? 1 : 0) - (keys.strafeL ? 1 : 0);
         const stick = stickRef.current;
-        if (stick && Math.hypot(stick.dx, stick.dy) / 56 > 0.14) {
-          mf += -stick.dy / 56; // 上推 = 前进
-          ms += stick.dx / 56;
+        if (stick && Math.hypot(stick.dx, stick.dy) / STICK_R > 0.14) {
+          mf += -stick.dy / STICK_R; // 上推 = 前进
+          ms += stick.dx / STICK_R;
         }
         mf = Math.max(-1, Math.min(1, mf));
         ms = Math.max(-1, Math.min(1, ms));
@@ -1549,7 +1684,7 @@ export default function Gaze3D() {
 
       const horizon = RH / 2 + cam.pitch;
       ctx.save();
-      if (w.shake > 0.01) ctx.translate((Math.random() - 0.5) * 11 * w.shake, (Math.random() - 0.5) * 8 * w.shake);
+      if (w.shake > 0.01) ctx.translate((Math.random() - 0.5) * 11 * UIS * w.shake, (Math.random() - 0.5) * 8 * UIS * w.shake);
       // 天空/屋顶与地面底色：以地平线为界，俯仰时一起移动
       const up = ctx.createLinearGradient(0, Math.min(0, horizon - RH), 0, Math.max(0, horizon));
       up.addColorStop(0, '#04050c');
@@ -1603,29 +1738,29 @@ export default function Gaze3D() {
         if (muzzle && end) {
           const a = w.beamFx;
           ctx.strokeStyle = `rgba(150,240,255,${0.25 * a})`;
-          ctx.lineWidth = 7;
+          ctx.lineWidth = 7 * UIS;
           ctx.beginPath();
           ctx.moveTo(muzzle.x, muzzle.y);
           ctx.lineTo(end.x, end.y);
           ctx.stroke();
           ctx.strokeStyle = `rgba(238,252,255,${0.9 * a})`;
-          ctx.lineWidth = 1.6;
+          ctx.lineWidth = 1.6 * UIS;
           ctx.stroke();
-          const fl = ctx.createRadialGradient(end.x, end.y, 1, end.x, end.y, 15 * a + 3);
+          const fl = ctx.createRadialGradient(end.x, end.y, 1, end.x, end.y, (15 * a + 3) * UIS);
           fl.addColorStop(0, `rgba(220,250,255,${0.85 * a})`);
           fl.addColorStop(1, 'rgba(120,200,255,0)');
           ctx.fillStyle = fl;
           ctx.beginPath();
-          ctx.arc(end.x, end.y, 15 * a + 3, 0, Math.PI * 2);
+          ctx.arc(end.x, end.y, (15 * a + 3) * UIS, 0, Math.PI * 2);
           ctx.fill();
           // 枪口火光
-          const mf = ctx.createRadialGradient(muzzle.x, muzzle.y, 1, muzzle.x, muzzle.y, 22 * a + 4);
+          const mf = ctx.createRadialGradient(muzzle.x, muzzle.y, 1, muzzle.x, muzzle.y, (22 * a + 4) * UIS);
           mf.addColorStop(0, `rgba(235,252,255,${0.9 * a})`);
           mf.addColorStop(0.45, `rgba(120,220,255,${0.45 * a})`);
           mf.addColorStop(1, 'rgba(90,180,255,0)');
           ctx.fillStyle = mf;
           ctx.beginPath();
-          ctx.arc(muzzle.x, muzzle.y, 22 * a + 4, 0, Math.PI * 2);
+          ctx.arc(muzzle.x, muzzle.y, (22 * a + 4) * UIS, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -1633,14 +1768,14 @@ export default function Gaze3D() {
       // 凝视进度：把石像头顶投影到屏幕上画一条
       for (const s of w.statues) {
         if (!s.alive || s.stare <= 0.25 || s.stagger > 0) continue;
-        const p = project(cam, [s.x, s.y, 1.06]);
+        const p = project(cam, [s.x, s.y, 1.62]);
         if (!p) continue;
-        const bw = Math.max(16, (FOCAL / p.z) * 0.5);
+        const bw = Math.max(16 * UIS, (FOCAL / p.z) * 0.5);
         const ratio = Math.min(1, s.stare / STARE_KILL);
         ctx.fillStyle = 'rgba(6,8,18,0.72)';
-        ctx.fillRect(p.x - bw / 2 - 1, p.y - 4, bw + 2, 6);
+        ctx.fillRect(p.x - bw / 2 - UIS, p.y - 4 * UIS, bw + 2 * UIS, 6 * UIS);
         ctx.fillStyle = ratio > 0.75 ? '#ffe37a' : '#7ee8ff';
-        ctx.fillRect(p.x - bw / 2, p.y - 3, bw * ratio, 4);
+        ctx.fillRect(p.x - bw / 2, p.y - 3 * UIS, bw * ratio, 4 * UIS);
       }
       if (showVm) renderScene(ctx, cam, vmFaces, list, sc);
 
@@ -1662,7 +1797,7 @@ export default function Gaze3D() {
         if (!s) continue;
         const big = s.z < 1.6;
         ctx.fillStyle = `rgba(196,220,255,${Math.max(0, 0.42 - d.z * 0.062)})`;
-        ctx.fillRect(s.x, s.y, big ? 2 : 1, big ? 2 : 1);
+        ctx.fillRect(s.x, s.y, big ? 2 * UIS : UIS, big ? 2 * UIS : UIS);
       }
       ctx.globalCompositeOperation = 'source-over';
       ctx.save();
@@ -1686,9 +1821,9 @@ export default function Gaze3D() {
           const along = rx * dirX + ry * dirY;
           return along > 0.15 && Math.abs(-rx * dirY + ry * dirX) <= BEAM_HALF;
         });
-        const gap = 5 + rec * 9;
+        const gap = (5 + rec * 9) * UIS;
         ctx.strokeStyle = w.hitFx > 0 ? '#ffd166' : aimHot ? '#ff6b81' : 'rgba(200,240,255,0.85)';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.5 * UIS;
         ctx.beginPath();
         for (const [ax, ay] of [
           [-1, 0],
@@ -1697,14 +1832,14 @@ export default function Gaze3D() {
           [0, 1],
         ] as Array<[number, number]>) {
           ctx.moveTo(RW / 2 + ax * gap, RH / 2 + ay * gap);
-          ctx.lineTo(RW / 2 + ax * (gap + 7), RH / 2 + ay * (gap + 7));
+          ctx.lineTo(RW / 2 + ax * (gap + 7 * UIS), RH / 2 + ay * (gap + 7 * UIS));
         }
         ctx.stroke();
         ctx.fillStyle = aimHot ? 'rgba(255,107,129,0.9)' : 'rgba(200,240,255,0.5)';
-        ctx.fillRect(RW / 2 - 1, RH / 2 - 1, 2, 2);
+        ctx.fillRect(RW / 2 - UIS, RH / 2 - UIS, 2 * UIS, 2 * UIS);
         if (w.hitFx > 0) {
           ctx.strokeStyle = `rgba(255,225,140,${Math.min(1, w.hitFx * 4)})`;
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 2 * UIS;
           ctx.beginPath();
           for (const [sx, sy] of [
             [1, 1],
@@ -1712,32 +1847,34 @@ export default function Gaze3D() {
             [-1, 1],
             [-1, -1],
           ] as Array<[number, number]>) {
-            ctx.moveTo(RW / 2 + sx * 4, RH / 2 + sy * 4);
-            ctx.lineTo(RW / 2 + sx * 10, RH / 2 + sy * 10);
+            ctx.moveTo(RW / 2 + sx * 4 * UIS, RH / 2 + sy * 4 * UIS);
+            ctx.lineTo(RW / 2 + sx * 10 * UIS, RH / 2 + sy * 10 * UIS);
           }
           ctx.stroke();
         }
 
         // 能量条
-        const bx = 14;
-        const by = RH - 22;
+        const ebw = 130 * UIS;
+        const ebh = 10 * UIS;
+        const bx = 14 * UIS;
+        const by = RH - 22 * UIS;
         ctx.fillStyle = 'rgba(6,8,18,0.66)';
-        ctx.fillRect(bx - 1, by - 1, 132, 12);
+        ctx.fillRect(bx - UIS, by - UIS, ebw + 2 * UIS, ebh + 2 * UIS);
         ctx.fillStyle = w.energy >= SHOT_COST ? '#7ee8ff' : '#5a6a8a';
-        ctx.fillRect(bx, by, 130 * (w.energy / ENERGY_MAX), 10);
+        ctx.fillRect(bx, by, ebw * (w.energy / ENERGY_MAX), ebh);
         ctx.fillStyle = 'rgba(4,6,14,0.55)';
-        for (let i = 1; i < 4; i++) ctx.fillRect(bx + (130 * i) / 4, by, 1, 10);
+        for (let i = 1; i < 4; i++) ctx.fillRect(bx + (ebw * i) / 4, by, UIS, ebh);
         ctx.strokeStyle = 'rgba(255,255,255,0.28)';
         ctx.lineWidth = 1;
-        ctx.strokeRect(bx - 1.5, by - 1.5, 133, 13);
+        ctx.strokeRect(bx - 1.5 * UIS, by - 1.5 * UIS, ebw + 3 * UIS, ebh + 3 * UIS);
         ctx.fillStyle = 'rgba(220,235,255,0.75)';
-        ctx.font = '9px "Segoe UI", sans-serif';
-        ctx.fillText('光矛能量', bx, by - 4);
+        ctx.font = `${Math.round(9 * UIS)}px "Segoe UI", sans-serif`;
+        ctx.fillText('光矛能量', bx, by - 4 * UIS);
 
         // 逼近雷达（右上角，与枪模错开）：红=视线外逼近，青=被你盯住，黄=打瘫中
-        const rcx = RW - 48;
-        const rcy = 48;
-        const rr = 34;
+        const rcx = RW - 48 * UIS;
+        const rcy = 48 * UIS;
+        const rr = 34 * UIS;
         ctx.fillStyle = 'rgba(8,10,20,0.6)';
         ctx.beginPath();
         ctx.arc(rcx, rcy, rr, 0, Math.PI * 2);
@@ -1765,17 +1902,17 @@ export default function Gaze3D() {
           ctx.arc(rcx + (ru / len) * k * rr, rcy - (fv / len) * k * rr, r, 0, Math.PI * 2);
           ctx.fill();
         };
-        for (const c of w.cores) if (!c.taken) plot(c.x, c.y, 2.2, '#ffd75e');
-        if (w.open) plot(w.portalX, w.portalY, 3.2, '#3ef0a2');
+        for (const c of w.cores) if (!c.taken) plot(c.x, c.y, 2.2 * UIS, '#ffd75e');
+        if (w.open) plot(w.portalX, w.portalY, 3.2 * UIS, '#3ef0a2');
         for (const s of w.statues) {
           if (!s.alive) continue;
-          plot(s.x, s.y, 3.4, s.stagger > 0 ? '#ffe37a' : s.frozen ? '#7ee8ff' : '#ff4d63');
+          plot(s.x, s.y, 3.4 * UIS, s.stagger > 0 ? '#ffe37a' : s.frozen ? '#7ee8ff' : '#ff4d63');
         }
 
         if (w.bannerT > 0) {
           ctx.globalAlpha = Math.min(1, w.bannerT * 1.4);
           ctx.fillStyle = 'rgba(230,240,255,0.92)';
-          ctx.font = 'bold 17px "Segoe UI", "Microsoft YaHei", sans-serif';
+          ctx.font = `bold ${Math.round(17 * UIS)}px "Segoe UI", "Microsoft YaHei", sans-serif`;
           ctx.textAlign = 'center';
           ctx.fillText(w.banner, RW / 2, RH * 0.28);
           ctx.textAlign = 'left';
@@ -1794,19 +1931,19 @@ export default function Gaze3D() {
         }
         if (w.invuln > 0 && playing) {
           ctx.strokeStyle = `rgba(126,232,255,${0.25 + 0.25 * Math.sin(t * 12)})`;
-          ctx.lineWidth = 3;
-          ctx.strokeRect(2, 2, RW - 4, RH - 4);
+          ctx.lineWidth = 3 * UIS;
+          ctx.strokeRect(2 * UIS, 2 * UIS, RW - 4 * UIS, RH - 4 * UIS);
         }
         const stick = stickRef.current;
         if (stick) {
           ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 2 * UIS;
           ctx.beginPath();
-          ctx.arc(stick.ox, stick.oy, 56, 0, Math.PI * 2);
+          ctx.arc(stick.ox, stick.oy, STICK_R, 0, Math.PI * 2);
           ctx.stroke();
           ctx.fillStyle = 'rgba(255,255,255,0.45)';
           ctx.beginPath();
-          ctx.arc(stick.ox + stick.dx, stick.oy + stick.dy, 18, 0, Math.PI * 2);
+          ctx.arc(stick.ox + stick.dx, stick.oy + stick.dy, 18 * UIS, 0, Math.PI * 2);
           ctx.fill();
         }
       }
