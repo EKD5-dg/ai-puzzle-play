@@ -348,9 +348,10 @@ function shade(f: Face, cam: Cam): string {
     // 上限 1.15：近处墙面不钳制会直接烧成白块
     lit = Math.min(1.15, Math.max(0.08, 0.38 + torch * 1.0 + up));
   }
-  const r = f.col[0] * lit * (1 - fog) + FOGC[0] * fog;
+  // 暖光冷雾：光照分量偏暖、雾与环境偏冷，画面立刻有层次
+  const r = f.col[0] * lit * 1.07 * (1 - fog) + FOGC[0] * fog;
   const g = f.col[1] * lit * (1 - fog) + FOGC[1] * fog;
-  const b = f.col[2] * lit * (1 - fog) + FOGC[2] * fog;
+  const b = f.col[2] * lit * 0.92 * (1 - fog) + FOGC[2] * fog;
   return `rgb(${r < 0 ? 0 : r > 255 ? 255 : r | 0},${g < 0 ? 0 : g > 255 ? 255 : g | 0},${b < 0 ? 0 : b > 255 ? 255 : b | 0})`;
 }
 
@@ -426,16 +427,33 @@ function renderScene(ctx: CanvasRenderingContext2D, cam: Cam, faces: Face[], lis
       // 连线自然跟着梯形一起透视变形，就是墙上的砌缝
       ctx.strokeStyle = 'rgba(4,5,14,0.5)';
       ctx.lineWidth = 1;
+      const at = (u: number, h: number): [number, number] => {
+        const bx = P[off] + (P[off + 3] - P[off]) * u;
+        const by = P[off + 1] + (P[off + 4] - P[off + 1]) * u;
+        const bz = P[off + 2] + (P[off + 5] - P[off + 2]) * u;
+        const tx = P[off + 9] + (P[off + 6] - P[off + 9]) * u;
+        const ty = P[off + 10] + (P[off + 7] - P[off + 10]) * u;
+        const tz = P[off + 11] + (P[off + 8] - P[off + 11]) * u;
+        const x = bx + (tx - bx) * h;
+        const y = by + (ty - by) * h;
+        const z = bz + (tz - bz) * h;
+        return [RW / 2 + (x * FOCAL) / z, RH / 2 + cam.pitch - (y * FOCAL) / z];
+      };
       ctx.beginPath();
       for (const h of f.seams) {
-        const lx = P[off] + (P[off + 9] - P[off]) * h;
-        const ly = P[off + 1] + (P[off + 10] - P[off + 1]) * h;
-        const lz = P[off + 2] + (P[off + 11] - P[off + 2]) * h;
-        const rx = P[off + 3] + (P[off + 6] - P[off + 3]) * h;
-        const ry = P[off + 4] + (P[off + 7] - P[off + 4]) * h;
-        const rz = P[off + 5] + (P[off + 8] - P[off + 5]) * h;
-        ctx.moveTo(RW / 2 + (lx * FOCAL) / lz, RH / 2 + cam.pitch - (ly * FOCAL) / lz);
-        ctx.lineTo(RW / 2 + (rx * FOCAL) / rz, RH / 2 + cam.pitch - (ry * FOCAL) / rz);
+        const a = at(0, h);
+        const b = at(1, h);
+        ctx.moveTo(a[0], a[1]);
+        ctx.lineTo(b[0], b[1]);
+      }
+      // 竖向砌缝：逐层错开（错缝砌法），一面墙就能读出砖块而不是横条纹
+      const bounds = [0, ...f.seams, 1];
+      for (let i = 0; i + 1 < bounds.length; i++) {
+        const u = i % 2 === 0 ? 0.72 : 0.24;
+        const a = at(u, bounds[i]);
+        const b = at(u, bounds[i + 1]);
+        ctx.moveTo(a[0], a[1]);
+        ctx.lineTo(b[0], b[1]);
       }
       ctx.stroke();
     }
@@ -463,6 +481,11 @@ function emitRoom(faces: Face[], w: World, cam: Cam): void {
   const g = w.grid;
   const fx = Math.cos(cam.yaw);
   const fy = Math.sin(cam.yaw);
+  // 接触阴影：直接压暗实体脚下的地砖。画成地面上的贴片会在画家算法里和
+  // 它所属的砖块争绘制顺序，压砖色则永远正确
+  const pool: Array<{ x: number; y: number; r: number }> = [];
+  for (const s of w.statues) pool.push({ x: s.x, y: s.y, r: s.alive ? 1.4 : 1.05 });
+  for (const c of w.cores) if (!c.taken) pool.push({ x: c.x, y: c.y, r: 0.8 });
   for (let cy = 0; cy < GRID; cy++) {
     for (let cx = 0; cx < GRID; cx++) {
       const idx = cy * GRID + cx;
@@ -476,7 +499,12 @@ function emitRoom(faces: Face[], w: World, cam: Cam): void {
       if (ddx * fx + ddy * fy < -1.4) continue;
       // 地板砖：棋盘双色，给透视一个可读的地面
       const tile = (cx + cy) % 2 === 0 ? FLOOR_A : FLOOR_B;
-      const tint = 0.9 + (((cx * 5 + cy * 11) % 4) * 0.05);
+      let occ = 0;
+      for (const o of pool) {
+        const v = 1 - Math.hypot(mx - o.x, my - o.y) / o.r;
+        if (v > occ) occ = v;
+      }
+      const tint = (0.9 + (((cx * 5 + cy * 11) % 4) * 0.05)) * (1 - 0.55 * occ);
       pushQuad(
         faces,
         [cx, cy, 0],
@@ -527,7 +555,8 @@ function emitStatue(faces: Face[], s: Statue, cam: Cam, t: number): void {
   const yaw = s.faceYaw;
   const c = Math.cos(yaw);
   const sn = Math.sin(yaw);
-  const off = (lx: number, ly: number): [number, number] => [s.x + lx * c - ly * sn, s.y + lx * sn + ly * c];
+  /** 石像局部坐标：lat 沿左侧轴、fwd 沿朝向轴（调用处一律"横在前、纵在后"） */
+  const off = (lat: number, fwd: number): [number, number] => [s.x + fwd * c - lat * sn, s.y + fwd * sn + lat * c];
   const moving = !s.frozen && s.stagger <= 0;
   const body = moving ? CREEP : STONE;
   const dark = moving ? CREEP_DARK : STONE_DARK;
@@ -556,6 +585,34 @@ function emitStatue(faces: Face[], s: Statue, cam: Cam, t: number): void {
   for (const side of [-1, 1]) {
     const [ex, ey] = off(side * 0.042, 0.096);
     pushBox(faces, ex, ey, z + 1.1, 0.021, 0.008, 0.016, yaw, eyeCol, eyeCol);
+  }
+  // 凝视裂纹：盯得越久身上亮起的缝越多，让机制本身在画面里可读。
+  // 贴片沿朝向前移一点，靠"更近"赢过身体的排序，否则会被自己那具石像挡住
+  const crackN = Math.min(5, Math.floor((s.stare / STARE_KILL) * 5.5));
+  if (crackN > 0) {
+    const rgx = -sn;
+    const rgy = c;
+    const CRACKS: Array<[number, number, number]> = [
+      [0.03, 0.62, 0.11],
+      [-0.05, 0.72, 0.13],
+      [0.02, 0.88, 0.07],
+      [0.07, 0.5, 0.1],
+      [-0.03, 1.0, 0.06],
+    ];
+    for (let i = 0; i < crackN; i++) {
+      const [ox, cz, half] = CRACKS[i];
+      const px = s.x + c * 0.112 + rgx * ox;
+      const py = s.y + sn * 0.112 + rgy * ox;
+      pushQuad2(
+        faces,
+        [px - rgx * 0.012, py - rgy * 0.012, z + cz - half],
+        [px + rgx * 0.012, py + rgy * 0.012, z + cz - half],
+        [px + rgx * 0.012, py + rgy * 0.012, z + cz + half],
+        [px - rgx * 0.012, py - rgy * 0.012, z + cz + half],
+        s.stagger > 0 ? [150, 246, 255] : [126, 232, 255],
+        true,
+      );
+    }
   }
 }
 
@@ -1134,6 +1191,41 @@ function vignetteSprite(inner: string, outer: string): HTMLCanvasElement {
   return c;
 }
 
+/** 胶片颗粒：低分辨率平涂最容易出色带，一层细噪点把渐变打散 */
+function grainSprite(): HTMLCanvasElement {
+  const S = 96;
+  const c = makeCanvas(S, S);
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(S, S);
+  const rnd = mulberry(404);
+  for (let i = 0; i < S * S; i++) {
+    const v = 110 + rnd() * 145;
+    img.data[i * 4] = v;
+    img.data[i * 4 + 1] = v;
+    img.data[i * 4 + 2] = v;
+    img.data[i * 4 + 3] = 30;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/** 屏幕空间霓虹溢出：世界点投影后画一圈加法光斑，尺寸随深度收放 */
+function bloomAt(ctx: CanvasRenderingContext2D, cam: Cam, p: Vec3, r: number, col: string, a: number): void {
+  const s = project(cam, p);
+  if (!s) return;
+  const rr = (FOCAL / s.z) * r;
+  if (rr < 1 || s.x < -rr || s.x > RW + rr || s.y < -rr || s.y > RH + rr) return;
+  const fade = Math.max(0, 1 - s.z / (FOG_END + 2));
+  const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, rr);
+  g.addColorStop(0, `rgba(${col},${a * fade})`);
+  g.addColorStop(0.5, `rgba(${col},${a * fade * 0.35})`);
+  g.addColorStop(1, `rgba(${col},0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, rr, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 // ============ 主组件 ============
 
 type Status = 'ready' | 'playing' | 'paused' | 'over';
@@ -1323,6 +1415,14 @@ export default function Gaze3D() {
     ctx.imageSmoothingEnabled = false;
 
     const vmFaces: Face[] = [];
+    const grainPat = ctx.createPattern(grainSprite(), 'repeat')!;
+    const drnd = mulberry(99);
+    const dust = Array.from({ length: 70 }, () => ({
+      x: (drnd() - 0.5) * 2.6,
+      y: (drnd() - 0.5) * 1.6 + 0.15,
+      z: 0.5 + drnd() * 5.5,
+      p: drnd() * 6.28,
+    }));
     const vignette = vignetteSprite('rgba(0,0,0,0)', 'rgba(2,3,10,0.82)');
     const danger = vignetteSprite('rgba(0,0,0,0)', 'rgba(150,10,30,0.9)');
     const faces: Face[] = [];
@@ -1543,6 +1643,34 @@ export default function Gaze3D() {
         ctx.fillRect(p.x - bw / 2, p.y - 3, bw * ratio, 4);
       }
       if (showVm) renderScene(ctx, cam, vmFaces, list, sc);
+
+      // ---- 后期：霓虹溢出 + 浮尘 + 胶片颗粒 ----
+      ctx.globalCompositeOperation = 'lighter';
+      for (const c of w.cores) if (!c.taken) bloomAt(ctx, cam, [c.x, c.y, 0.62], 0.5, '255,196,96', 0.5);
+      bloomAt(ctx, cam, [w.portalX, w.portalY, 0.78], w.open ? 1.5 : 0.85, w.open ? '150,120,255' : '190,60,90', w.open ? 0.5 : 0.16);
+      // 红眼溢出：只有真在逼近的石像会发光，等于给"它在看你"再加一层提示
+      for (const s of w.statues) if (s.alive && s.stagger <= 0 && !s.frozen) bloomAt(ctx, cam, [s.x, s.y, 1.1], 0.34, '255,60,80', 0.42);
+      const dRx = -Math.sin(cam.yaw);
+      const dRy = Math.cos(cam.yaw);
+      const dFx = Math.cos(cam.yaw);
+      const dFy = Math.sin(cam.yaw);
+      for (const d of dust) {
+        const lx = d.x + Math.sin(t * 0.5 + d.p) * 0.08;
+        const ly = d.y + Math.sin(t * 0.37 + d.p) * 0.06;
+        const lz = d.z + Math.cos(t * 0.23 + d.p) * 0.25;
+        const s = project(cam, [cam.x + dRx * lx + dFx * lz, cam.y + dRy * lx + dFy * lz, cam.eye + ly]);
+        if (!s) continue;
+        const big = s.z < 1.6;
+        ctx.fillStyle = `rgba(196,220,255,${Math.max(0, 0.42 - d.z * 0.062)})`;
+        ctx.fillRect(s.x, s.y, big ? 2 : 1, big ? 2 : 1);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      ctx.translate(-((t * 97) % 96), (t * 53) % 96);
+      ctx.fillStyle = grainPat;
+      ctx.fillRect(0, 0, RW + 96, RH + 96);
+      ctx.restore();
       ctx.restore();
 
       // ---- HUD（不随震动偏移，避免准星/雷达乱跳） ----
