@@ -416,6 +416,18 @@ export const metaBreak3D: GameMeta = {
   higherIsBetter: true,
 };
 
+export const metaGaze3D: GameMeta = {
+  id: 'gaze-3d',
+  title: '3D 凝视回廊',
+  description: '被注视的石像不会动：一移开视线它们就扑上来。用光矛击碎或死死盯住它们，收集光核打开星门！',
+  icon: '🗿',
+  difficulty: '中等',
+  category: '反应',
+  tags: ['3D', '射击', '潜行', '恐怖'],
+  bestScoreLabel: '最高分',
+  higherIsBetter: true,
+};
+
 /** 成绩比较方向权威表：false=成绩越小越好（步数/时间类）。由各 meta 派生，云同步服务端也内置了同样白名单（functions/api/sync.js），新增"成绩取小"的游戏需两处同步 */
 export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
   [
@@ -450,6 +462,7 @@ export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
     metaBowling3D,
     metaRacing3D,
     metaBreak3D,
+    metaGaze3D,
   ].map((m) => [m.id, m.higherIsBetter]),
 );
 

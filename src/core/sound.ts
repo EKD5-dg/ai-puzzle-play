@@ -112,6 +112,19 @@ export const sfx = {
   clear(): void {
     arpeggio(440, [1, 1.2, 1.5, 2], 0.055);
   },
+  /** 能量弹发射（下潜的短锯齿音） */
+  shoot(): void {
+    tone({ freq: 1250, dur: 0.08, type: 'sawtooth', slideTo: 240, vol: 0.1 });
+    tone({ freq: 320, dur: 0.05, type: 'square', vol: 0.05 });
+  },
+  /** 命中反馈 */
+  hit(): void {
+    tone({ freq: 1500, dur: 0.05, type: 'square', vol: 0.09 });
+  },
+  /** 闷响：石裂、受击 */
+  thud(): void {
+    tone({ freq: 150, dur: 0.2, type: 'sawtooth', slideTo: 58, vol: 0.13 });
+  },
   /** 踩雷/失败 */
   lose(): void {
     slideDown(440, 80, 0.5);
