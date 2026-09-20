@@ -209,6 +209,8 @@ interface Face {
   edgeW?: number;
   /** 掠射边缘光强度：实体专属，墙面不给，所以敌人永远不会像墙 */
   rim?: number;
+  /** 排序深度偏移（负=当作更近，后画）：贴在表面的发光贴片靠它保证不被本体吞掉 */
+  bias?: number;
   /** 墙面砌缝：底边到顶边之间的归一化高度 */
   seams?: number[];
 }
@@ -388,7 +390,7 @@ function pushLimb(faces: Face[], a: Vec3, b: Vec3, rA: number, rB: number, sides
     if (n[0] * mx + n[1] * my + n[2] * mz < 0) pushQuad(faces, p, s, r, q, col);
     else pushQuad(faces, p, q, r, s, col);
   }
-  const cc: Vec3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+  const cc: Vec3 = [b[0], b[1], b[2]];
   for (let i = 0; i < sides; i++) {
     const j = (i + 1) % sides;
     const n = faceNormal(cc, top[i], top[j]);
@@ -487,7 +489,7 @@ function renderScene(ctx: CanvasRenderingContext2D, cam: Cam, faces: Face[], lis
     for (let i = 0; i < m * 3; i++) sc.pool[used + i] = from[i];
     let depth = 0;
     for (let i = 0; i < m; i++) depth += sc.pool[used + i * 3 + 2];
-    list.push({ f, depth: depth / m, n: m, off: used });
+    list.push({ f, depth: depth / m + (f.bias ?? 0), n: m, off: used });
     used += m * 3;
   }
   list.sort((a, b) => b.depth - a.depth);
@@ -712,11 +714,15 @@ function emitStatue(faces: Face[], s: Statue, cam: Cam, t: number): void {
   // 硬边剪影 + 掠射边缘光：无论墙面被手电打得多亮，石像轮廓都被"描"出来
   for (let i = from; i < faces.length; i++) {
     const f = faces[i];
-    if (!f.glow) {
-      f.edge = 'rgba(5,6,12,0.92)';
-      f.edgeW = 1.6;
-      f.rim = 0.6;
+    if (f.glow) {
+      // 眼睛/胸符/裂纹是贴在八边面上的薄片，八边体的棱面会让它们在部分角度陷进本体，
+      // 靠深度偏移保证永远最后画，而不是去赌那 1cm 的前移量
+      f.bias = -0.12;
+      continue;
     }
+    f.edge = 'rgba(5,6,12,0.92)';
+    f.edgeW = 1.6;
+    f.rim = 0.6;
   }
 }
 
