@@ -2045,18 +2045,17 @@ export default function Gaze3D() {
             <div className="g3d-overlay">
               <h2>🗿 3D 凝视回廊</h2>
               <p>
-                被你的视线锁定的石像不会动
+                被注视的石像不会动；一移开视线就直冲过来
                 <br />
-                一旦移开目光、或它们绕到墙后，就会直冲过来
-                <br />
-                收集全部光核打开星门，逐层深入
+                集齐光核开星门，逐层深入
               </p>
               <p className="g3d-keys">
-                W/S 前进后退 · A/D 侧移 · ←/→ 转向 · Shift 疾跑 · 空格/点击 光矛 · P 暂停
+                W/S 前后 · A/D 侧移 · ←/→ 转向 · 空格 光矛 · P 暂停
                 <br />
-                光矛两发碎裂；<b>走近了死盯</b>也能让它裂开，但别的石像会趁虚而入
+                光矛两发碎裂，<b>走近死盯</b>也能压裂
+                <br />
+                📱 左摇杆移动 · 右拖拽转向 · 轻点开火
               </p>
-              <p className="g3d-keys">📱 左半屏拖动 = 移动摇杆 · 右半屏拖动 = 转向/俯仰 · 右半屏轻点 = 开火</p>
               <button className="btn btn-primary" onClick={start}>
                 进入回廊
               </button>
@@ -2114,7 +2113,7 @@ export default function Gaze3D() {
           </button>
         </div>
         <p className="hint">
-          右上角雷达：红点 = 视线外正在逼近的石像，青点 = 被你盯住的石像 · 星门开在离入口最远处那格
+          Shift 疾跑 · 右上角雷达：红点 = 视线外正在逼近的石像，青点 = 被你盯住的石像 · 星门开在离入口最远处那格
         </p>
       </div>
     </GameShell>

@@ -4296,7 +4296,12 @@ html {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* 内容高于舞台时（窄面板必然发生）从顶部排并可内滚：
+     纯 center 会让文字同时向上下溢出，压到页面标题与下方按钮上 */
+  justify-content: flex-start;
+  justify-content: safe center;
+  overflow: auto;
+  overscroll-behavior: contain;
   gap: 12px;
   background: rgba(6, 7, 16, 0.88);
   border-radius: var(--radius);
@@ -4342,5 +4347,36 @@ html {
 
   .g3d-keys {
     font-size: 11.5px;
+  }
+}
+
+/* 舞台高度随画布 8:5 缩放，窄面板里只有约 215px：遮罩必须同步收紧字号与间距 */
+@media (max-width: 560px) {
+  .g3d-overlay {
+    gap: 6px;
+    padding: 7px;
+  }
+
+  .g3d-overlay h2 {
+    font-size: 16px;
+  }
+
+  .g3d-overlay p {
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+
+  .g3d-keys {
+    font-size: 10px;
+    line-height: 1.4;
+  }
+
+  /* 内容溢出时按钮必须始终可达：钉在遮罩底部，正文在上方内滚 */
+  .g3d-overlay .btn {
+    padding: 7px 14px;
+    font-size: 13px;
+    position: sticky;
+    bottom: 0;
+    box-shadow: 0 -10px 12px rgba(6, 7, 16, 0.88);
   }
 }
