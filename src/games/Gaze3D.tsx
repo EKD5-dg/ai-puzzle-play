@@ -1792,10 +1792,22 @@ export default function Gaze3D() {
 
       // ---- 后期：霓虹溢出 + 浮尘 + 胶片颗粒 ----
       ctx.globalCompositeOperation = 'lighter';
-      for (const c of w.cores) if (!c.taken) bloomAt(ctx, cam, [c.x, c.y, 0.62], 0.5, '255,168,54', 0.5);
-      bloomAt(ctx, cam, [w.portalX, w.portalY, 0.78], w.open ? 1.5 : 0.85, w.open ? '150,120,255' : '190,60,90', w.open ? 0.5 : 0.16);
-      // 红眼溢出：只有真在逼近的石像会发光，等于给"它在看你"再加一层提示
-      for (const s of w.statues) if (s.alive && s.stagger <= 0 && !s.frozen) bloomAt(ctx, cam, [s.x, s.y, 1.1], 0.34, '255,60,80', 0.42);
+      // 泛光是纯屏幕空间的，不做遮挡就会穿墙浮出一团光（看起来像"敌人在部分视角显示有问题"）
+      const vfx = cam.yaw;
+      const vfxC = Math.cos(vfx);
+      const vfxS = Math.sin(vfx);
+      const visibleAt = (x: number, y: number): boolean => {
+        const dx = x - cam.x;
+        const dy = y - cam.y;
+        const along = dx * vfxC + dy * vfxS;
+        if (along < 0.3 || Math.abs(-dx * vfxS + dy * vfxC) > along * HALF_TAN * 1.25) return false;
+        return losClear(w.grid, cam.x, cam.y, x, y);
+      };
+      for (const c of w.cores) if (!c.taken && visibleAt(c.x, c.y)) bloomAt(ctx, cam, [c.x, c.y, 0.62], 0.5, '255,168,54', 0.5);
+      if (visibleAt(w.portalX, w.portalY))
+        bloomAt(ctx, cam, [w.portalX, w.portalY, 0.78], w.open ? 1.5 : 0.85, w.open ? '150,120,255' : '190,60,90', w.open ? 0.5 : 0.16);
+      // 红眼溢出：只有真在逼近且看得见的石像会发光，等于给"它在逼近"再加一层提示
+      for (const s of w.statues) if (s.alive && s.stagger <= 0 && !s.frozen && visibleAt(s.x, s.y)) bloomAt(ctx, cam, [s.x, s.y, 1.1], 0.34, '255,60,80', 0.42);
       const dRx = -Math.sin(cam.yaw);
       const dRy = Math.cos(cam.yaw);
       const dFx = Math.cos(cam.yaw);
