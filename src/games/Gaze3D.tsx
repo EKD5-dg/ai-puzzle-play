@@ -77,9 +77,9 @@ const CULL_R = 13;
 const FOG_START = 3;
 const FOG_END = 15;
 /** 雾色（与远处天花板同调，墙面消隐时不露边） */
-const FOGC: RGB = [10, 11, 24];
-/** 边缘光颜色：冷青，专门用来把实体轮廓从暖灰墙面里分离出来 */
-const RIMC: RGB = [88, 176, 214];
+const FOGC: RGB = [7, 10, 20];
+/** 边缘光颜色：冷青，专门用来把实体轮廓从墙面里"描"出来 */
+const RIMC: RGB = [96, 190, 236];
 const PITCH_MAX = 70 * UIS;
 
 const DIRS4: Array<[number, number]> = [
@@ -550,17 +550,22 @@ function renderScene(ctx: CanvasRenderingContext2D, cam: Cam, faces: Face[], lis
 
 // ============ 场景几何 ============
 
-const MARBLE: RGB = [146, 154, 184];
-const MARBLE_WARM: RGB = [176, 158, 140];
-const FLOOR_A: RGB = [92, 90, 118];
-const FLOOR_B: RGB = [66, 62, 88];
-/** 石像用冷青灰板岩 + 饱和 accent：与暖灰大理石墙拉开色相，而不只是明度 */
-const STONE: RGB = [86, 104, 118];
-const STONE_HI: RGB = [132, 156, 168];
-const STONE_DARK: RGB = [44, 52, 64];
-const CREEP: RGB = [128, 62, 80];
-const CREEP_HI: RGB = [176, 100, 118];
-const CREEP_DARK: RGB = [64, 30, 44];
+/**
+ * 按功能分色，而不是按"好看"配色：
+ * 墙=低明度冷板岩蓝/灰紫（两种同明度不同色相，退成背景）；
+ * 地=墨绿青（与墙换色相族，地面不再像"倒过来的墙"）；
+ * 石像=骨白（明度直接盖过一切环境，一眼扫到就是活物），追人时转血色。
+ */
+const MARBLE: RGB = [98, 110, 146];
+const MARBLE_WARM: RGB = [116, 100, 134];
+const FLOOR_A: RGB = [48, 78, 80];
+const FLOOR_B: RGB = [34, 58, 64];
+const STONE: RGB = [206, 197, 174];
+const STONE_HI: RGB = [238, 230, 208];
+const STONE_DARK: RGB = [146, 139, 124];
+const CREEP: RGB = [216, 148, 136];
+const CREEP_HI: RGB = [246, 190, 172];
+const CREEP_DARK: RGB = [152, 88, 84];
 
 /** 墙体：从地板格向外看，邻格是墙就贴一面立起的四边形（有厚度感、可带砌缝） */
 function emitRoom(faces: Face[], w: World, cam: Cam): void {
@@ -1687,13 +1692,13 @@ export default function Gaze3D() {
       if (w.shake > 0.01) ctx.translate((Math.random() - 0.5) * 11 * UIS * w.shake, (Math.random() - 0.5) * 8 * UIS * w.shake);
       // 天空/屋顶与地面底色：以地平线为界，俯仰时一起移动
       const up = ctx.createLinearGradient(0, Math.min(0, horizon - RH), 0, Math.max(0, horizon));
-      up.addColorStop(0, '#04050c');
-      up.addColorStop(1, '#191533');
+      up.addColorStop(0, '#04060d');
+      up.addColorStop(1, '#16203a');
       ctx.fillStyle = up;
       ctx.fillRect(-12, -12, RW + 24, horizon + 12);
       const dn = ctx.createLinearGradient(0, Math.min(RH, horizon), 0, Math.max(RH, horizon + RH));
-      dn.addColorStop(0, '#241f31');
-      dn.addColorStop(1, '#090710');
+      dn.addColorStop(0, '#122b2d');
+      dn.addColorStop(1, '#050a0b');
       ctx.fillStyle = dn;
       ctx.fillRect(-12, horizon, RW + 24, RH - horizon + 12);
 
@@ -1718,8 +1723,8 @@ export default function Gaze3D() {
         for (let i = 0; i < 4; i++) {
           const a = ring[i];
           const b = ring[(i + 1) % 4];
-          pushTri(faces, a, b, top, [255, 214, 120], true);
-          pushTri(faces, b, a, bot, [236, 168, 60], true);
+          pushTri(faces, a, b, top, [255, 198, 72], true);
+          pushTri(faces, b, a, bot, [255, 146, 34], true);
         }
       }
       emitPortal(faces, w.portalX, w.portalY, w.open, t);
@@ -1781,7 +1786,7 @@ export default function Gaze3D() {
 
       // ---- 后期：霓虹溢出 + 浮尘 + 胶片颗粒 ----
       ctx.globalCompositeOperation = 'lighter';
-      for (const c of w.cores) if (!c.taken) bloomAt(ctx, cam, [c.x, c.y, 0.62], 0.5, '255,196,96', 0.5);
+      for (const c of w.cores) if (!c.taken) bloomAt(ctx, cam, [c.x, c.y, 0.62], 0.5, '255,168,54', 0.5);
       bloomAt(ctx, cam, [w.portalX, w.portalY, 0.78], w.open ? 1.5 : 0.85, w.open ? '150,120,255' : '190,60,90', w.open ? 0.5 : 0.16);
       // 红眼溢出：只有真在逼近的石像会发光，等于给"它在看你"再加一层提示
       for (const s of w.statues) if (s.alive && s.stagger <= 0 && !s.frozen) bloomAt(ctx, cam, [s.x, s.y, 1.1], 0.34, '255,60,80', 0.42);
