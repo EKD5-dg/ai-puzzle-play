@@ -357,9 +357,11 @@ function pushLimb(faces: Face[], a: Vec3, b: Vec3, rA: number, rB: number, sides
   ux /= ul;
   uy /= ul;
   uz /= ul;
-  const vx = ax * uy - ay * uz;
-  const vy = ay * uz - az * ux;
-  const vz = az * ux - ax * uy;
+  // v = axis × u，必须是标准叉乘：先前写成分量配错的版本，竖直轴会算出 (0,0,0)，
+  // 截面退化成一条线，长袍与双臂因此被画成纸片
+  const vx = ay * uz - az * uy;
+  const vy = az * ux - ax * uz;
+  const vz = ax * uy - ay * ux;
   const ring = (t: number, out: Vec3[]): void => {
     const cx = a[0] + dx * t;
     const cy = a[1] + dy * t;
@@ -664,18 +666,23 @@ function emitStatue(faces: Face[], s: Statue, cam: Cam, t: number): void {
   const dark = moving ? CREEP_DARK : STONE_DARK;
   const bob = moving ? Math.sin(t * 9 + s.phase) * 0.018 : 0;
   const lean = moving ? 0.07 : 0;
-  // 长袍半径随身高收口，贴片要贴到锥面上就得按同一公式取半径
-  const robeR = (h: number) => 0.32 - 0.17 * Math.min(1, Math.max(0, (h - 0.1) / 0.88));
+  // 袍面半径按两段收口分别插值：贴片（胸口符、裂纹）要贴到实际锥面上
+  const robeR = (h: number): number => {
+    if (h <= 0.56) return 0.33 - 0.11 * Math.min(1, Math.max(0, (h - 0.1) / 0.46));
+    return 0.22 - 0.095 * Math.min(1, Math.max(0, (h - 0.56) / 0.42));
+  };
   pushLimb(faces, P(0, 0, 0.02), P(0, 0, 0.1 + bob), 0.28, 0.25, 8, dark, tint(dark, 1.4)); // 基座
-  pushLimb(faces, P(0, 0, 0.1 + bob), P(0, lean, 0.98 + bob), 0.32, 0.15, 8, body, tint(body, 1.35)); // 长袍
-  pushLimb(faces, P(0, lean, 1.0 + bob), P(0, lean * 1.3, 1.1 + bob), 0.21, 0.13, 8, tint(body, 0.92), hi); // 披肩
+  // 长袍分两段（下摆→膝→肩）：一整段平滑锥没有腰胯，剪影会读成标枪而不是袍子
+  pushLimb(faces, P(0, 0, 0.1 + bob), P(0, lean * 0.4, 0.56 + bob), 0.33, 0.22, 8, tint(body, 0.94), tint(body, 1.2));
+  pushLimb(faces, P(0, lean * 0.4, 0.56 + bob), P(0, lean, 0.98 + bob), 0.22, 0.125, 8, body, tint(body, 1.35));
+  pushLimb(faces, P(0, lean, 1.0 + bob), P(0, lean * 1.3, 1.1 + bob), 0.2, 0.125, 8, tint(body, 0.92), hi); // 披肩
   pushLimb(faces, P(0, 0.02 + lean * 1.4, 1.12 + bob), P(0, 0.02 + lean * 1.6, 1.3 + bob), 0.095, 0.078, 8, hi); // 头
-  pushLimb(faces, P(0, 0.015 + lean * 1.5, 1.27 + bob), P(0, -0.015 + lean * 1.2, 1.47 + bob), 0.108, 0.006, 8, dark); // 尖兜帽
+  pushLimb(faces, P(0, 0.015 + lean * 1.5, 1.27 + bob), P(0, -0.015 + lean * 1.2, 1.42 + bob), 0.106, 0.022, 8, dark); // 兜帽
   for (const side of [-1, 1]) {
-    // 手臂：冻结时贴着体侧下垂，扑过来时整条抬到身前
-    const base = P(side * 0.19, lean * 0.6, 1.03 + bob);
-    const tip = moving ? P(side * 0.12, 0.33, 0.92 + bob) : P(side * 0.245, 0.02 + lean, 0.54 + bob);
-    pushLimb(faces, base, tip, 0.055, 0.034, 6, side < 0 ? tint(body, 1.1) : tint(body, 0.86));
+    // 手臂：冻结时贴着体侧下垂，扑过来时整条抬到身前（0.235 在袍身之外，否则会被袍子吞掉）
+    const base = P(side * 0.2, lean * 0.6, 1.02 + bob);
+    const tip = moving ? P(side * 0.13, 0.33, 0.92 + bob) : P(side * 0.235, 0.02 + lean, 0.56 + bob);
+    pushLimb(faces, base, tip, 0.058, 0.036, 6, side < 0 ? tint(body, 1.1) : tint(body, 0.86));
   }
   /** 贴在锥面上的自发光小片（双眼与胸口符）：双面发，转身时背面也不会突然消失 */
   const decal = (lat: number, fwd: number, h: number, wl: number, wh: number, col: RGB): void => {
