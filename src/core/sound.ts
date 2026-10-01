@@ -125,6 +125,15 @@ export const sfx = {
   thud(): void {
     tone({ freq: 150, dur: 0.2, type: 'sawtooth', slideTo: 58, vol: 0.13 });
   },
+  /** 石步：粗砂面摩擦的短促双音，只在视线外的石像逼近时响 */
+  stone(): void {
+    tone({ freq: 104, dur: 0.075, type: 'sawtooth', slideTo: 66, vol: 0.05 });
+    tone({ freq: 640, dur: 0.045, type: 'square', vol: 0.012 });
+  },
+  /** 被目光钉住的一下闷响：石像想动但动不了 */
+  strain(): void {
+    tone({ freq: 196, dur: 0.13, type: 'sawtooth', slideTo: 118, vol: 0.045 });
+  },
   /** 踩雷/失败 */
   lose(): void {
     slideDown(440, 80, 0.5);

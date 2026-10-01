@@ -95,6 +95,11 @@ type Vec3 = [number, number, number];
 
 // ============ 通用工具 ============
 
+/** 线性插值 */
+function lerp(a: number, b: number, k: number): number {
+  return a + (b - a) * k;
+}
+
 function mulberry(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -647,11 +652,16 @@ function tint(base: RGB, k: number): RGB {
  * 关键是别用轴对齐方块：方块和墙是同一套几何语言，配色再不同也会被读成"一块墙"。
  */
 function emitStatue(faces: Face[], s: Statue, cam: Cam, t: number): void {
-  const dx = cam.x - s.x;
-  const dy = cam.y - s.y;
-  if (Math.hypot(dx, dy) > CULL_R) return;
+  const dist = Math.hypot(cam.x - s.x, cam.y - s.y);
+  if (dist > CULL_R) return;
   const from = faces.length;
-  const yaw = s.faceYaw;
+  const moving = !s.frozen && s.stagger <= 0;
+  const dart = moving && s.mode === MODE_DART;
+  const lurk = moving && s.mode === MODE_LURK;
+  // 姿态全部由 s.stride 驱动，而它只在没人看的时候前进：被目光扫到就停在一步之间，
+  // 而不是弹回中立姿势——"卡在迈步中途"才是凝视类恐怖的全部信息量
+  const stride = s.stride;
+  const yaw = s.faceYaw + s.splay;
   const c = Math.cos(yaw);
   const sn = Math.sin(yaw);
   /** 石像局部坐标：lat 沿左侧轴、fwd 沿朝向轴（调用处一律"横在前、纵在后"） */
@@ -660,37 +670,83 @@ function emitStatue(faces: Face[], s: Statue, cam: Cam, t: number): void {
     const [x, y] = off(lat, fwd);
     return [x, y, h];
   };
-  const moving = !s.frozen && s.stagger <= 0;
-  const body = moving ? CREEP : STONE;
+  const body = moving ? (dart ? CREEP_HI : CREEP) : STONE;
   const hi = moving ? CREEP_HI : STONE_HI;
   const dark = moving ? CREEP_DARK : STONE_DARK;
-  const bob = moving ? Math.sin(t * 9 + s.phase) * 0.018 : 0;
-  const lean = moving ? 0.07 : 0;
+  const bob = Math.sin(stride * 2) * 0.021;
+  const hipLat = Math.sin(stride) * 0.026;
+  const chestLat = Math.sin(stride) * 0.014;
+  const lean = s.lean;
+  const k = s.settle;
+  // 袍摆飘动：迈步时甩，静止时只剩一层极慢的荡
+  const hem = Math.sin(stride * 2 + 1.2) * 0.024 * (1 - k * 0.75) + Math.sin(t * 1.5 + s.phase) * 0.006;
+  // 挣一下：刚被钉住的那零点几秒上身发一顿力（基座与下摆不动，所以不构成位移）
+  const shake = s.judder > 0 ? Math.sin(t * 52 + s.phase) * 0.05 * Math.min(1, s.judder / 0.2) : 0;
+  // 极慢的起伏：被注视的石像不是贴图，是憋着不动的活物
+  const breath = Math.sin(t * (moving ? 3.2 : 1.35) + s.phase) * (moving ? 0.005 : 0.0085);
   // 袍面半径按两段收口分别插值：贴片（胸口符、裂纹）要贴到实际锥面上
   const robeR = (h: number): number => {
     if (h <= 0.56) return 0.33 - 0.11 * Math.min(1, Math.max(0, (h - 0.1) / 0.46));
     return 0.22 - 0.095 * Math.min(1, Math.max(0, (h - 0.56) / 0.42));
   };
-  pushLimb(faces, P(0, 0, 0.02), P(0, 0, 0.1 + bob), 0.28, 0.25, 8, dark, tint(dark, 1.4)); // 基座
+  /** 袍轴在该高度的横移与前倾：贴片跟着轴走，摆胯时才不会飘出身体 */
+  const latAt = (h: number): number => (h <= 0.56 ? hipLat * (h / 0.56) : lerp(hipLat, chestLat, Math.min(1, (h - 0.56) / 0.42)));
+  const leanAt = (h: number): number => lean * Math.min(1, 0.4 + h * 0.62);
+  const knee = 0.56 + bob;
+  const hemF = 0.1 + bob;
+  pushLimb(faces, P(0, 0, 0.02), P(0, 0, hemF), 0.28, 0.25, 8, dark, tint(dark, 1.4)); // 基座
   // 长袍分两段（下摆→膝→肩）：一整段平滑锥没有腰胯，剪影会读成标枪而不是袍子
-  pushLimb(faces, P(0, 0, 0.1 + bob), P(0, lean * 0.4, 0.56 + bob), 0.33, 0.22, 8, tint(body, 0.94), tint(body, 1.2));
-  pushLimb(faces, P(0, lean * 0.4, 0.56 + bob), P(0, lean, 0.98 + bob), 0.22, 0.125, 8, body, tint(body, 1.35));
-  pushLimb(faces, P(0, lean, 1.0 + bob), P(0, lean * 1.3, 1.1 + bob), 0.2, 0.125, 8, tint(body, 0.92), hi); // 披肩
-  pushLimb(faces, P(0, 0.02 + lean * 1.4, 1.12 + bob), P(0, 0.02 + lean * 1.6, 1.3 + bob), 0.095, 0.078, 8, hi); // 头
-  pushLimb(faces, P(0, 0.015 + lean * 1.5, 1.27 + bob), P(0, -0.015 + lean * 1.2, 1.42 + bob), 0.106, 0.022, 8, dark); // 兜帽
+  pushLimb(faces, P(hipLat * 0.3 + hem, hem, hemF), P(hipLat, lean * 0.4 - hem, knee), 0.33, 0.22, 8, tint(body, 0.94), tint(body, 1.2));
+  pushLimb(faces, P(hipLat, lean * 0.4 - hem, knee), P(chestLat + shake * 0.5, lean, 0.98 + bob), 0.22, 0.125, 8, body, tint(body, 1.35));
+  pushLimb(faces, P(chestLat + shake, lean, 1.0 + bob), P(chestLat + shake, lean * 1.3, 1.1 + bob), 0.2 + breath, 0.125, 8, tint(body, 0.92), hi); // 披肩
+  /** 头部局部系：绕颈竖轴在身体朝向上再转 headYaw，所以身体定住时脸仍能跟着你 */
+  const neckZ = 1.05 + bob;
+  // 转头时脖子要把整个头横着带出去：八角头近似旋转对称，只转不移在屏幕上根本看不出它转了头
+  const peekLat = Math.sin(s.headYaw) * 0.055;
+  const peekFwd = (Math.cos(s.headYaw) - 1) * 0.05;
+  const [neckX, neckY] = off(chestLat + shake + peekLat, lean * 1.45 + peekFwd);
+  const hYaw = yaw + s.headYaw;
+  const hzc = Math.cos(hYaw);
+  const hzs = Math.sin(hYaw);
+  const H = (lat: number, fwd: number, h: number): Vec3 => [neckX + fwd * hzc - lat * hzs, neckY + fwd * hzs + lat * hzc, neckZ + h];
+  const tilt = Math.sin(stride) * 0.018;
+  pushLimb(faces, H(0, 0.02, 0.06), H(tilt, 0.03, 0.25), 0.095, 0.078, 8, hi); // 头
+  pushLimb(faces, H(0, 0.015, 0.21), H(0, -0.02, 0.37), 0.106, 0.022, 8, dark); // 兜帽
   for (const side of [-1, 1]) {
-    // 手臂：冻结时贴着体侧下垂，扑过来时整条抬到身前（0.235 在袍身之外，否则会被袍子吞掉）
-    const base = P(side * 0.2, lean * 0.6, 1.02 + bob);
-    const tip = moving ? P(side * 0.13, 0.33, 0.92 + bob) : P(side * 0.235, 0.02 + lean, 0.56 + bob);
-    pushLimb(faces, base, tip, 0.058, 0.036, 6, side < 0 ? tint(body, 1.1) : tint(body, 0.86));
+    const sw = Math.sin(stride + (side < 0 ? 0 : Math.PI)) * 0.12;
+    const base = P(side * (0.2 + breath) + chestLat + shake, lean * 0.6, 1.02 + bob);
+    // 追人时手臂在身侧甩、冲刺时整条扑到身前、潜行时双手端在胸前（侧身 + 抬手 = 蹭墙潜行的读数）；
+    // 被盯住后 0.8 秒垂回体侧（0.235 在袍身之外，否则被袍子吞掉）
+    const lat = lerp(side * (dart ? 0.13 : lurk ? 0.11 : 0.19), side * 0.235, k);
+    const fwd = lerp(dart ? 0.42 : lurk ? 0.26 : 0.1 + sw, 0.03 + lean, k);
+    const h = lerp(0.9 + sw * 0.5, 0.56, k) + bob;
+    pushLimb(faces, base, P(lat + chestLat, fwd, h), 0.058, 0.036, 6, side < 0 ? tint(body, 1.1) : tint(body, 0.86));
   }
-  /** 贴在锥面上的自发光小片（双眼与胸口符）：双面发，转身时背面也不会突然消失 */
+  /** 贴在锥面上的自发光小片：双面发，转身时背面也不会突然消失 */
   const decal = (lat: number, fwd: number, h: number, wl: number, wh: number, col: RGB): void => {
     pushQuad2(faces, P(lat - wl, fwd, h - wh), P(lat + wl, fwd, h - wh), P(lat + wl, fwd, h + wh), P(lat - wl, fwd, h + wh), col, true);
   };
-  const eyeCol: RGB = moving ? [255, 84, 96] : s.stagger > 0 ? [130, 240, 255] : [58, 64, 82];
-  for (const side of [-1, 1]) decal(side * 0.042, 0.082 + lean * 1.6, 1.22 + bob, 0.019, 0.014, eyeCol);
-  decal(0, robeR(0.84) + 0.012, 0.84 + bob, 0.048, 0.048, moving ? [255, 132, 92] : [86, 190, 222]);
+  const decalH = (lat: number, fwd: number, h: number, wl: number, wh: number, col: RGB): void => {
+    pushQuad2(faces, H(lat - wl, fwd, h - wh), H(lat + wl, fwd, h - wh), H(lat + wl, fwd, h + wh), H(lat - wl, fwd, h + wh), col, true);
+  };
+  /** 被注视时眼不灭：只留一点将熄的炭火，但随距离明灭——"它在看着你"必须读得出来 */
+  const ember = Math.max(0.4, 0.92 - dist * 0.045) * (0.72 + Math.sin(t * 2.2 + s.phase * 3) * 0.28);
+  const eyeCol: RGB = moving
+    ? dart
+      ? [255, 120, 96]
+      : [255, 84, 96]
+    : s.stagger > 0
+      ? [130, 240, 255]
+      : [112 + 142 * ember, 26 + 42 * ember, 34 + 48 * ember];
+  for (const side of [-1, 1]) decalH(side * 0.042, 0.082, 0.19, 0.019, 0.014, eyeCol);
+  // 胸口符：不动的时候缓慢搏动，等于给"定住"这件事一个会呼吸的锚点
+  const sigil = robeR(0.84) + 0.012;
+  const sigilCol: RGB = moving
+    ? [255, 132, 92]
+    : s.stagger > 0
+      ? [150, 246, 255]
+      : [70 + 90 * ember, 168 + 62 * ember, 205];
+  decal(latAt(0.84), leanAt(0.84) + sigil, 0.84 + bob, 0.048 + breath * 0.6, 0.048 + breath * 0.6, sigilCol);
   // 凝视裂纹：盯得越久身上亮起的缝越多，让机制本身在画面里可读
   const crackN = Math.min(5, Math.floor((s.stare / STARE_KILL) * 5.5));
   const CRACKS: Array<[number, number, number]> = [
@@ -700,20 +756,17 @@ function emitStatue(faces: Face[], s: Statue, cam: Cam, t: number): void {
     [0.07, 0.5, 0.1],
     [-0.03, 0.98, 0.06],
   ];
-  const rgx = -sn;
-  const rgy = c;
   for (let i = 0; i < crackN; i++) {
     const [ox, cz, half] = CRACKS[i];
     // 沿朝向前移一个"该高度的袍面半径"，靠更近赢过身体的排序，否则被自己那具石像挡住
-    const rr = robeR(cz) + 0.012;
-    const px = s.x + c * rr + rgx * ox;
-    const py = s.y + sn * rr + rgy * ox;
+    const lat = latAt(cz) + ox;
+    const fwd = leanAt(cz) + robeR(cz) + 0.012;
     pushQuad2(
       faces,
-      [px - rgx * 0.012, py - rgy * 0.012, bob + cz - half],
-      [px + rgx * 0.012, py + rgy * 0.012, bob + cz - half],
-      [px + rgx * 0.012, py + rgy * 0.012, bob + cz + half],
-      [px - rgx * 0.012, py - rgy * 0.012, bob + cz + half],
+      P(lat - 0.012, fwd, cz + bob - half),
+      P(lat + 0.012, fwd, cz + bob - half),
+      P(lat + 0.012, fwd, cz + bob + half),
+      P(lat - 0.012, fwd, cz + bob + half),
       s.stagger > 0 ? [150, 246, 255] : [126, 232, 255],
       true,
     );
@@ -899,6 +952,24 @@ interface Core {
   taken: boolean;
 }
 
+/** 石像行为：全部只在无人注视时生效——被看到就必须定在原地，这是本作的规则而不是装饰 */
+const MODE_LURK = 0;
+const MODE_CREEP = 1;
+const MODE_DART = 2;
+
+/** 角度差归一到 (-π, π]：转向与头部跟踪都要它 */
+function normAng(a: number): number {
+  let x = a;
+  while (x > Math.PI) x -= Math.PI * 2;
+  while (x < -Math.PI) x += Math.PI * 2;
+  return x;
+}
+
+/** 限速逼近：把 cur 朝 target 移动，最多 ±rate*dt */
+function approach(cur: number, target: number, rate: number, dt: number): number {
+  return cur + Math.max(-rate * dt, Math.min(rate * dt, target - cur));
+}
+
 interface Statue {
   x: number;
   y: number;
@@ -913,6 +984,26 @@ interface Statue {
   speed: number;
   /** 石像自身朝向：冻结时定住，追人时转向玩家 */
   faceYaw: number;
+  /** 当前行为（MODE_*）与它的剩余时间 */
+  mode: number;
+  modeT: number;
+  /** 步态时钟：换行为时不清零，动画才不会每半秒重新起势 */
+  stride: number;
+  /** 步频差异：整队石像一起同频摆动会读成复制粘贴 */
+  gait: number;
+  /** 侧身潜行的偏航角（按 phase 定边，撞墙换边） */
+  sideBias: number;
+  /** 平滑后的前倾与侧身量：换行为或被注视时姿态不会"啪"地弹位 */
+  lean: number;
+  splay: number;
+  /** 头/兜帽相对身体的独立转向：身体被钉住时脸仍会跟着你转 */
+  headYaw: number;
+  /** 0 = 正在动作，1 = 已彻底摆成雕像姿势。被注视后缓缓收手垂臂，先定住、再"变成石头" */
+  settle: number;
+  /** >0 = 刚被目光钉住的余震，原地抖一下（不产生位移） */
+  judder: number;
+  /** 已累计的位移，够一步就落一声石步 */
+  foot: number;
 }
 
 interface World {
@@ -949,6 +1040,9 @@ interface World {
   flow: Int16Array;
   flowT: number;
   warnT: number;
+  /** 石步与挣动的发声冷却：七具石像同时落步会变成 60 次/秒的白噪 */
+  stoneT: number;
+  strainT: number;
   stepAcc: number;
   banner: string;
   bannerT: number;
@@ -956,6 +1050,22 @@ interface World {
 
 function statueSpeed(floor: number): number {
   return Math.min(2.5, 1.4 + 0.12 * floor);
+}
+
+/** 重置一具石像的行为与动画状态（新建世界与重生都要调，否则会把上一次的步态带过来） */
+function seedStatue(s: Statue): void {
+  s.phase = Math.random() * 6.28;
+  s.mode = MODE_CREEP;
+  s.modeT = 0.6 + Math.random() * 1.6;
+  s.stride = Math.random() * 6.28;
+  s.gait = 0.75 + Math.random() * 0.55;
+  s.sideBias = (s.phase > 3.14 ? 1 : -1) * (0.42 + Math.random() * 0.22);
+  s.lean = 0.11;
+  s.splay = 0;
+  s.headYaw = 0;
+  s.settle = 0;
+  s.judder = 0;
+  s.foot = 0;
 }
 
 function makeWorld(floor: number, score: number, lives: number): World {
@@ -987,7 +1097,7 @@ function makeWorld(floor: number, score: number, lives: number): World {
   const cellOf = (idx: number) => ({ x: (idx % GRID) + 0.5, y: ((idx / GRID) | 0) + 0.5 });
   const statues: Statue[] = pickSpread(spawnPool.length >= statueTotal ? spawnPool : cells, statueTotal, 3).map((idx) => {
     const p = cellOf(idx);
-    return {
+    const s: Statue = {
       x: p.x,
       y: p.y,
       alive: true,
@@ -995,10 +1105,23 @@ function makeWorld(floor: number, score: number, lives: number): World {
       stagger: 0,
       stare: 0,
       respawn: 0,
-      phase: Math.random() * 6.28,
+      phase: 0,
       speed: statueSpeed(floor),
       faceYaw: Math.atan2(1.5 - p.y, 1.5 - p.x),
+      mode: MODE_CREEP,
+      modeT: 0,
+      stride: 0,
+      gait: 1,
+      sideBias: 0,
+      lean: 0.11,
+      splay: 0,
+      headYaw: 0,
+      settle: 0,
+      judder: 0,
+      foot: 0,
     };
+    seedStatue(s);
+    return s;
   });
 
   const face = DIRS4.find(([dx, dy]) => grid[(1 + dy) * GRID + (1 + dx)] === 0);
@@ -1034,6 +1157,8 @@ function makeWorld(floor: number, score: number, lives: number): World {
     flow: dist,
     flowT: 0,
     warnT: 0,
+    stoneT: 0,
+    strainT: 0,
     stepAcc: 0,
     banner: `第 ${floor} 层 · 盯住它们`,
     bannerT: 2.2,
@@ -1069,48 +1194,102 @@ function reviveStatue(w: World, s: Statue): void {
   s.stagger = 0;
   s.stare = 0;
   s.respawn = 0;
+  s.frozen = false;
   s.speed = statueSpeed(w.floor);
   s.faceYaw = Math.atan2(w.py - s.y, w.px - s.x);
+  seedStatue(s);
 }
 
-/** 看不见的石像沿距离场下坡推进；看得见直线路径时直接抄近道 */
-function chaseStatue(w: World, s: Statue, dt: number): void {
-  const g = w.grid;
+/** 沿距离场下坡取下一跳（绕墙角用）；没有更低的邻居就退回 null，交给直线路径 */
+function flowTarget(w: World, s: Statue): [number, number] | null {
   const cx = Math.floor(s.x);
   const cy = Math.floor(s.y);
   const here = w.flow[cy * GRID + cx];
-  let tx = w.px;
-  let ty = w.py;
-  if (here >= 0 && !losClear(g, s.x, s.y, w.px, w.py)) {
-    let bd = here;
-    let bi = -1;
-    for (const [dx, dy] of DIRS4) {
-      const nx = cx + dx;
-      const ny = cy + dy;
-      if (!inRange(nx, ny)) continue;
-      const idx = ny * GRID + nx;
-      const fd = w.flow[idx];
-      if (fd >= 0 && fd < bd) {
-        bd = fd;
-        bi = idx;
-      }
-    }
-    if (bi >= 0) {
-      tx = (bi % GRID) + 0.5;
-      ty = ((bi / GRID) | 0) + 0.5;
+  if (here < 0) return null;
+  let bd = here;
+  let bi = -1;
+  for (const [dx, dy] of DIRS4) {
+    const nx = cx + dx;
+    const ny = cy + dy;
+    if (!inRange(nx, ny)) continue;
+    const idx = ny * GRID + nx;
+    const fd = w.flow[idx];
+    if (fd >= 0 && fd < bd) {
+      bd = fd;
+      bi = idx;
     }
   }
-  const dx = tx - s.x;
-  const dy = ty - s.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const step = s.speed * dt;
-  slideMove(g, s, (dx / len) * step, (dy / len) * step, 0.3);
+  if (bi < 0) return null;
+  return [(bi % GRID) + 0.5, ((bi / GRID) | 0) + 0.5];
+}
+
+/**
+ * 逼近目标点：与玩家之间有直线时不直冲，而是绕到玩家侧前方一格，
+ * 于是石像从走廊两侧斜插过来，而不是排成一列沿中轴线推——"直线等速"是机械感的主要来源。
+ */
+function approachTarget(w: World, s: Statue): [number, number] {
+  if (!losClear(w.grid, s.x, s.y, w.px, w.py)) return flowTarget(w, s) ?? [w.px, w.py];
+  const d = Math.hypot(w.px - s.x, w.py - s.y);
+  if (d > 6) return [w.px, w.py];
+  const a = Math.atan2(s.y - w.py, s.x - w.px) + (s.sideBias > 0 ? 0.62 : -0.62);
+  const r = Math.max(0.9, d - 1.1);
+  const tx = w.px + Math.cos(a) * r;
+  const ty = w.py + Math.sin(a) * r;
+  return freeAt(w.grid, tx, ty, 0.3) ? [tx, ty] : [w.px, w.py];
+}
+
+/** 行为切换：远的先在墙角徘徊，中间的稳步推进，近的一冲一停 */
+function pickMode(s: Statue, d: number): void {
+  const r = Math.random();
+  const near = d < 3.4;
+  if (r < (near ? 0.14 : 0.34)) {
+    s.mode = MODE_LURK;
+    s.modeT = 0.7 + Math.random() * (near ? 0.9 : 1.9);
+  } else if (r < (near ? 0.7 : 0.8)) {
+    s.mode = MODE_CREEP;
+    s.modeT = 0.9 + Math.random() * 1.5;
+  } else {
+    s.mode = MODE_DART;
+    s.modeT = 0.4 + Math.random() * 0.45;
+  }
+}
+
+/** 无人注视时的推进：三种步态 + 转身 + 踏步计步。返回本帧是否落了一步 */
+function moveStatue(w: World, s: Statue, d: number, dt: number): boolean {
+  s.modeT -= dt;
+  if (s.modeT <= 0) pickMode(s, d);
+  s.settle = approach(s.settle, 0, 5, dt);
+  const g = w.grid;
+  const dart = s.mode === MODE_DART;
+  const lurk = s.mode === MODE_LURK;
+  // 冲刺上限 2.5×1.62=4.05 仍低于疾跑 4.34：跑得过它，但走不掉——高于疾跑就成了"看不见必死"
+  const step = s.speed * (dart ? 1.62 : lurk ? 0.34 : 1) * dt;
+  const ox = s.x;
+  const oy = s.y;
+  if (lurk) {
+    // 侧身横移：贴着墙角来回蹭，绕到"你一转身才看得见"的那一侧
+    const a = Math.atan2(s.y - w.py, s.x - w.px) + (s.sideBias > 0 ? Math.PI / 2 : -Math.PI / 2);
+    slideMove(g, s, Math.cos(a) * step, Math.sin(a) * step, 0.3);
+    if (Math.hypot(s.x - ox, s.y - oy) < step * 0.35) s.sideBias = -s.sideBias;
+  } else {
+    const [tx, ty] = approachTarget(w, s);
+    const len = Math.hypot(tx - s.x, ty - s.y) || 1;
+    slideMove(g, s, ((tx - s.x) / len) * step, ((ty - s.y) / len) * step, 0.3);
+  }
+  s.stride += dt * (5.2 + s.gait * 3.4) * (dart ? 1.9 : lurk ? 0.45 : 1);
+  s.foot += Math.hypot(s.x - ox, s.y - oy);
+  const landed = s.foot >= (dart ? 0.34 : 0.46);
+  if (landed) s.foot = 0;
   // 朝向平滑转向玩家：转身看得见，比瞬移朝向更能提示"它盯上你了"
   const want = Math.atan2(w.py - s.y, w.px - s.x);
-  let diff = want - s.faceYaw;
-  while (diff > Math.PI) diff -= Math.PI * 2;
-  while (diff < -Math.PI) diff += Math.PI * 2;
-  s.faceYaw += Math.max(-4 * dt, Math.min(4 * dt, diff));
+  s.faceYaw = approach(s.faceYaw, s.faceYaw + normAng(want - s.faceYaw), dart ? 5.5 : 2.6, dt);
+  // 姿态目标：冲刺时扑、潜行时侧身蹭墙、常规逼近略前倾。平滑过渡，换行为时不会抽一下
+  s.lean = approach(s.lean, dart ? 0.2 : lurk ? 0.05 : 0.11, 2.6, dt);
+  s.splay = approach(s.splay, lurk ? s.sideBias : 0, 2, dt);
+  // 头单独追玩家：身体侧着走，脸仍然正对着你——石像"假装是装饰"的破绽就在脸上
+  const wantH = Math.max(-1.15, Math.min(1.15, normAng(want - (s.faceYaw + s.splay))));
+  s.headYaw = approach(s.headYaw, wantH, 3.4, dt);
+  return landed;
 }
 
 /** 光矛：一条从眼睛出发的射线，先撞墙就不算命中，取最近的一尊石像 */
@@ -1187,6 +1366,8 @@ interface Step {
 function updateStatues(w: World, dt: number): Step {
   let threat = Infinity;
   let gain = 0;
+  let stepD = Infinity;
+  let strain = false;
   const dirX = Math.cos(w.ang);
   const dirY = Math.sin(w.ang);
   for (const s of w.statues) {
@@ -1195,6 +1376,7 @@ function updateStatues(w: World, dt: number): Step {
       if (s.respawn <= 0) reviveStatue(w, s);
       continue;
     }
+    s.judder = Math.max(0, s.judder - dt);
     if (s.stagger > 0) {
       s.stagger -= dt;
       s.frozen = true;
@@ -1209,16 +1391,40 @@ function updateStatues(w: World, dt: number): Step {
     // 画面半宽对应 |perp| = along * HALF_TAN，与投影用的同一个 FOCAL，所以"看得见"与"会冻结"严格一致
     const seen = along > 0.2 && Math.abs(perp) <= along * HALF_TAN * GAZE_MARGIN && d <= GAZE_RANGE && losClear(w.grid, w.px, w.py, s.x, s.y);
     if (seen) {
+      // frozen 存的是上一帧的值：由它识别"这一眼刚扫到"，那一下余震是石像活着的最强证据
+      const wasFrozen = s.frozen;
       s.frozen = true;
+      if (!wasFrozen) {
+        s.judder = 0.2 + Math.random() * 0.16;
+        strain = true;
+      } else if (Math.random() < dt * (0.25 + 2.4 / Math.max(1.4, d))) {
+        s.judder = Math.max(s.judder, 0.13);
+      }
+      // 身体被钉住，但头仍会越过肩膀慢慢看向你（限制在 ±0.85 rad：转不到背后，也就不会读成"要动了"）
+      const wantH = Math.max(-0.85, Math.min(0.85, normAng(Math.atan2(w.py - s.y, w.px - s.x) - (s.faceYaw + s.splay))));
+      s.headYaw = approach(s.headYaw, wantH, 1.7, dt);
+      // 被盯住后约 0.8 秒收势：手缓缓垂回体侧、身姿收正，摆成"本来就是石头"的样子
+      s.settle = approach(s.settle, 1, 1.3, dt);
       // 只有走近了盯才会长裂纹：否则站着环视就能白刷分
       if (d <= STARE_RANGE) s.stare += dt;
       if (s.stare >= STARE_KILL) gain += collapseStatue(w, s, true);
     } else {
       s.frozen = false;
       s.stare = Math.max(0, s.stare - dt * 1.6);
-      chaseStatue(w, s, dt);
+      if (moveStatue(w, s, d, dt) && d < stepD) stepD = d;
       if (d < threat) threat = d;
     }
+  }
+  // 一帧最多一声石步、一声挣动，再各加一道冷却：多具石像同时发声会糊成白噪，反而听不出逼近
+  w.stoneT = Math.max(0, w.stoneT - dt);
+  w.strainT = Math.max(0, w.strainT - dt);
+  if (stepD < 7.5 && w.stoneT <= 0) {
+    w.stoneT = 0.26;
+    sfx.stone();
+  }
+  if (strain && w.strainT <= 0) {
+    w.strainT = 0.85;
+    sfx.strain();
   }
   return { threat, gain, chain: w.chain };
 }
@@ -1813,8 +2019,10 @@ export default function Gaze3D() {
       for (const c of w.cores) if (!c.taken && visibleAt(c.x, c.y)) bloomAt(ctx, cam, [c.x, c.y, 0.62], 0.5, '255,168,54', 0.5);
       if (visibleAt(w.portalX, w.portalY))
         bloomAt(ctx, cam, [w.portalX, w.portalY, 0.78], w.open ? 1.5 : 0.85, w.open ? '150,120,255' : '190,60,90', w.open ? 0.5 : 0.16);
-      // 红眼溢出：只有真在逼近且看得见的石像会发光，等于给"它在逼近"再加一层提示
-      for (const s of w.statues) if (s.alive && s.stagger <= 0 && !s.frozen && visibleAt(s.x, s.y)) bloomAt(ctx, cam, [s.x, s.y, 1.1], 0.34, '255,60,80', 0.42);
+      // 红眼溢出：真在逼近的最亮，被钉住的留一层余光——否则定住的石像看起来是死的
+      for (const s of w.statues)
+        if (s.alive && s.stagger <= 0 && visibleAt(s.x, s.y))
+          bloomAt(ctx, cam, [s.x, s.y, 1.22], 0.34, s.frozen ? '255,80,96' : '255,60,80', s.frozen ? 0.16 : 0.42);
       const dRx = -Math.sin(cam.yaw);
       const dRy = Math.cos(cam.yaw);
       const dFx = Math.cos(cam.yaw);
@@ -1936,7 +2144,13 @@ export default function Gaze3D() {
         if (w.open) plot(w.portalX, w.portalY, 3.2 * UIS, '#3ef0a2');
         for (const s of w.statues) {
           if (!s.alive) continue;
-          plot(s.x, s.y, 3.4 * UIS, s.stagger > 0 ? '#ffe37a' : s.frozen ? '#7ee8ff' : '#ff4d63');
+          // 小地图顺带读出行为：定住=青、被打瘫=黄、冲刺=亮红、墙角徘徊=紫
+          plot(
+            s.x,
+            s.y,
+            (s.frozen ? 3.4 : s.mode === MODE_DART ? 4 : 3.4) * UIS,
+            s.stagger > 0 ? '#ffe37a' : s.frozen ? '#7ee8ff' : s.mode === MODE_DART ? '#ff2d4a' : s.mode === MODE_LURK ? '#b48bff' : '#ff4d63',
+          );
         }
 
         if (w.bannerT > 0) {
@@ -2120,7 +2334,7 @@ export default function Gaze3D() {
           </button>
         </div>
         <p className="hint">
-          Shift 疾跑 · 右上角雷达：红点 = 视线外正在逼近的石像，青点 = 被你盯住的石像 · 星门开在离入口最远处那格
+          Shift 疾跑 · 雷达：青点 = 被你盯住，红点 = 视线外逼近（亮红 = 冲刺，紫点 = 侧身绕墙角） · 星门开在离入口最远处那格
         </p>
       </div>
     </GameShell>
