@@ -4380,3 +4380,105 @@ html {
     box-shadow: 0 -10px 12px rgba(6, 7, 16, 0.88);
   }
 }
+
+/* ============ 3D 立体井字（Qubic3D） ============ */
+
+.qb3d {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.qb3d-status {
+  font-size: 15px;
+  font-weight: 700;
+  padding: 8px 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  transition: all 0.3s;
+}
+
+.qb3d-status.thinking {
+  color: #a78bfa;
+  border-color: rgba(124, 92, 255, 0.5);
+  animation: dqBreath 1s ease-in-out infinite;
+}
+
+.qb3d-stage {
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+}
+
+.qb3d-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  background: #0b1024;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+
+.qb3d-canvas:active {
+  cursor: grabbing;
+}
+
+.qb3d-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(10, 14, 30, 0.62);
+  border-radius: var(--radius);
+  z-index: 5;
+  text-align: center;
+  padding: 16px;
+}
+
+.qb3d-overlay h2 {
+  font-size: 24px;
+}
+
+.qb3d-overlay p {
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.qb3d-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.qb3d-you {
+  color: #5ad9f5;
+  font-weight: 700;
+}
+
+.qb3d-ai {
+  color: #ff8098;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .qb3d-status {
+    font-size: 13px;
+    padding: 6px 14px;
+  }
+
+  .qb3d-overlay h2 {
+    font-size: 20px;
+  }
+}

@@ -428,6 +428,19 @@ export const metaGaze3D: GameMeta = {
   higherIsBetter: true,
 };
 
+export const metaQubic3D: GameMeta = {
+  id: 'qubic-3d',
+  title: '3D 立体井字',
+  description: '4×4×4 立体棋盘，76 条隐藏直线等你连珠！对手是会算威胁的电脑。',
+  icon: '🎲',
+  difficulty: '困难',
+  category: '策略',
+  tags: ['3D', '对战', 'AI', '推理'],
+  bestScoreLabel: '最高连胜',
+  higherIsBetter: true,
+  bestVariants: ['0', '1'],
+};
+
 /** 成绩比较方向权威表：false=成绩越小越好（步数/时间类）。由各 meta 派生，云同步服务端也内置了同样白名单（functions/api/sync.js），新增"成绩取小"的游戏需两处同步 */
 export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
   [
@@ -463,6 +476,7 @@ export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
     metaRacing3D,
     metaBreak3D,
     metaGaze3D,
+    metaQubic3D,
   ].map((m) => [m.id, m.higherIsBetter]),
 );
 
