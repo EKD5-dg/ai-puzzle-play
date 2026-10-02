@@ -39,20 +39,22 @@ const TURN_SPEED = 2.7;
 const GAZE_RANGE = 12;
 /** 视线锥相对画面的宽出量（1 = 与屏幕严格一致，略大避免"看得见却不动"） */
 const GAZE_MARGIN = 1.06;
-/** 持续凝视致死：累积秒数与生效距离。必须走近了盯，否则站着环视就能刷分 */
-const STARE_KILL = 2.4;
+/** 凝视压裂一层石壳所需的秒数与生效距离。必须走近了盯，否则站着环视就能刷分 */
+const STARE_KILL = 1.9;
 const STARE_RANGE = 7;
 const LIVES_MAX = 3;
 const ENERGY_MAX = 100;
 const SHOT_COST = 24;
 const ENERGY_REGEN = 27;
-/** 命中回充：奖励瞄准，避免无脑按住扫射 */
-const ENERGY_REFUND = 12;
-const SHOT_CD = 0.24;
+/** 命中回充：奖励瞄准但不许白嫖——每中一枪净耗 16 点，按住开火的持续射速被回血压到约 1.7 枪/秒 */
+const ENERGY_REFUND = 8;
+/** 发射间隔：光矛是"充能重武器"不是自动步枪，0.4s 与回血压出的持续射速同量级 */
+const SHOT_CD = 0.4;
 /** 光矛命中半宽：光束粗细固定，比按透视缩放更好瞄 */
 const BEAM_HALF = 0.36;
 const CONTACT = 0.62;
-const STAGGER = 1.5;
+/** 单次命中的打瘫时长：只够补一枪，按住开火连锁处决已经不够用了 */
+const STAGGER = 1.05;
 const RESPAWN_MIN = 4.5;
 const SCORE_CORE = 120;
 const SCORE_SHOT = 100;
@@ -748,7 +750,8 @@ function emitStatue(faces: Face[], s: Statue, cam: Cam, t: number): void {
       : [70 + 90 * ember, 168 + 62 * ember, 205];
   decal(latAt(0.84), leanAt(0.84) + sigil, 0.84 + bob, 0.048 + breath * 0.6, 0.048 + breath * 0.6, sigilCol);
   // 凝视裂纹：盯得越久身上亮起的缝越多，让机制本身在画面里可读
-  const crackN = Math.min(5, Math.floor((s.stare / STARE_KILL) * 5.5));
+  // 裂纹 = 已损比例：光矛与凝视两条路共用同一条进度，玩家才看得懂"它还剩几层"
+  const crackN = Math.min(5, Math.floor(damageFrac(s) * 5.5));
   const CRACKS: Array<[number, number, number]> = [
     [0.03, 0.62, 0.11],
     [-0.05, 0.72, 0.13],
@@ -976,8 +979,12 @@ interface Statue {
   alive: boolean;
   /** 本帧是否被注视（决定动画，也决定它能不能移动） */
   frozen: boolean;
-  /** >0 = 被光矛打瘫；再命中一次即碎裂 */
+  /** >0 = 被光矛打瘫；这段时间它不动，且再中一枪会掉一层壳 */
   stagger: number;
+  /** 剩余石壳层数：光矛每中一枪掉一层，凝视压满一层也掉一层，掉光才碎裂 */
+  hp: number;
+  /** 出生时的总层数（裂纹按"已打掉多少"换算，所以要知道上限） */
+  shells: number;
   stare: number;
   respawn: number;
   phase: number;
@@ -1034,6 +1041,8 @@ interface World {
   open: boolean;
   statues: Statue[];
   collapses: number;
+  /** 本帧新结算的碎裂得分：光矛与凝视两条路都汇到这里，供 toast 用（每帧开头清零） */
+  gain: number;
   chain: number;
   chainT: number;
   /** 以玩家所在格为源的 BFS 距离场：石像靠它绕过墙角 */
@@ -1052,9 +1061,24 @@ function statueSpeed(floor: number): number {
   return Math.min(2.5, 1.4 + 0.12 * floor);
 }
 
+/**
+ * 石壳层数：越深的层石头越硬。起手 3 层就要"两秒专注"才换一尊，到 5 层时
+ * 光矛不再是点击即杀，而是一次需要算能量的处决——凝视那条路同样按层累加。
+ */
+function statueShells(floor: number): number {
+  return Math.min(5, 3 + Math.floor((floor - 1) / 2));
+}
+
+/** 已损比例 0..1：光矛与凝视两条路汇成同一条裂纹进度 */
+function damageFrac(s: Statue): number {
+  return Math.min(1, (s.shells - s.hp + Math.min(1, s.stare / STARE_KILL)) / Math.max(1, s.shells));
+}
+
 /** 重置一具石像的行为与动画状态（新建世界与重生都要调，否则会把上一次的步态带过来） */
-function seedStatue(s: Statue): void {
+function seedStatue(s: Statue, floor: number): void {
   s.phase = Math.random() * 6.28;
+  s.shells = statueShells(floor);
+  s.hp = s.shells;
   s.mode = MODE_CREEP;
   s.modeT = 0.6 + Math.random() * 1.6;
   s.stride = Math.random() * 6.28;
@@ -1107,6 +1131,8 @@ function makeWorld(floor: number, score: number, lives: number): World {
       respawn: 0,
       phase: 0,
       speed: statueSpeed(floor),
+      hp: 2,
+      shells: 2,
       faceYaw: Math.atan2(1.5 - p.y, 1.5 - p.x),
       mode: MODE_CREEP,
       modeT: 0,
@@ -1120,7 +1146,7 @@ function makeWorld(floor: number, score: number, lives: number): World {
       judder: 0,
       foot: 0,
     };
-    seedStatue(s);
+    seedStatue(s, floor);
     return s;
   });
 
@@ -1152,6 +1178,7 @@ function makeWorld(floor: number, score: number, lives: number): World {
     open: false,
     statues,
     collapses: 0,
+    gain: 0,
     chain: 0,
     chainT: 0,
     flow: dist,
@@ -1167,11 +1194,12 @@ function makeWorld(floor: number, score: number, lives: number): World {
 
 // ============ 规则 ============
 
-/** 碎裂：返回本尊带来的得分（连锁倍率已乘进去） */
-function collapseStatue(w: World, s: Statue, byStare: boolean): number {
+/** 碎裂：得分（含连锁倍率）累加到 w.gain，由主循环统一播报 */
+function collapseStatue(w: World, s: Statue, byStare: boolean): void {
   s.alive = false;
   s.stagger = 0;
   s.stare = 0;
+  s.hp = 0;
   s.frozen = false;
   s.respawn = Math.max(RESPAWN_MIN, 8 - 0.4 * w.floor);
   w.collapses += 1;
@@ -1179,8 +1207,17 @@ function collapseStatue(w: World, s: Statue, byStare: boolean): number {
   w.chainT = CHAIN_WINDOW;
   const gain = (byStare ? SCORE_STARE : SCORE_SHOT) * w.chain;
   w.score += gain;
+  w.gain += gain;
   sfx.drop();
-  return gain;
+}
+
+/**
+ * 打掉一层石壳。层数掉光才碎——一枪一个"瘫"，但要 2~4 枪才有一个"碎"，
+ * 中间那几秒它仍在挪，按住开火不再等于自动通关。
+ */
+function crackShell(w: World, s: Statue, byStare: boolean): void {
+  s.hp -= 1;
+  if (s.hp <= 0) collapseStatue(w, s, byStare);
 }
 
 function reviveStatue(w: World, s: Statue): void {
@@ -1197,7 +1234,7 @@ function reviveStatue(w: World, s: Statue): void {
   s.frozen = false;
   s.speed = statueSpeed(w.floor);
   s.faceYaw = Math.atan2(w.py - s.y, w.px - s.x);
-  seedStatue(s);
+  seedStatue(s, w.floor);
 }
 
 /** 沿距离场下坡取下一跳（绕墙角用）；没有更低的邻居就退回 null，交给直线路径 */
@@ -1329,13 +1366,11 @@ function shoot(w: World): boolean {
   w.energy = Math.min(ENERGY_MAX, w.energy + ENERGY_REFUND);
   w.hitFx = 0.22;
   sfx.hit();
-  if (hit.stagger > 0) {
-    collapseStatue(w, hit, false);
-  } else {
-    hit.stagger = STAGGER;
-    hit.stare *= 0.4;
-    slideMove(w.grid, hit, dirX * 0.9, dirY * 0.9, 0.3);
-  }
+  // 每中一枪掉一层壳、往后顿一下，但只给"补一枪"的打瘫窗口：层数掉光才碎
+  hit.stagger = STAGGER;
+  hit.judder = 0.3;
+  slideMove(w.grid, hit, dirX * 0.9, dirY * 0.9, 0.3);
+  crackShell(w, hit, false);
   return true;
 }
 
@@ -1358,14 +1393,12 @@ function hurtPlayer(w: World, s: Statue): void {
 
 interface Step {
   threat: number;
-  gain: number;
   chain: number;
 }
 
-/** 注视/移动判定；返回视线外最近逼远距离与本帧碎裂得分 */
+/** 注视/移动判定；返回视线外最近逼远距离（碎裂得分走 w.gain，两条路共用一个播报口） */
 function updateStatues(w: World, dt: number): Step {
   let threat = Infinity;
-  let gain = 0;
   let stepD = Infinity;
   let strain = false;
   const dirX = Math.cos(w.ang);
@@ -1407,7 +1440,11 @@ function updateStatues(w: World, dt: number): Step {
       s.settle = approach(s.settle, 1, 1.3, dt);
       // 只有走近了盯才会长裂纹：否则站着环视就能白刷分
       if (d <= STARE_RANGE) s.stare += dt;
-      if (s.stare >= STARE_KILL) gain += collapseStatue(w, s, true);
+      if (s.stare >= STARE_KILL) {
+        s.stare = 0; // 凝视的表按"层"清零，溢出的一点点不带进下一层
+        sfx.hit();
+        crackShell(w, s, true);
+      }
     } else {
       s.frozen = false;
       s.stare = Math.max(0, s.stare - dt * 1.6);
@@ -1426,7 +1463,7 @@ function updateStatues(w: World, dt: number): Step {
     w.strainT = 0.85;
     sfx.strain();
   }
-  return { threat, gain, chain: w.chain };
+  return { threat, chain: w.chain };
 }
 
 // ============ 第一人称视图模型（手 + 光矛） ============
@@ -1850,11 +1887,12 @@ export default function Gaze3D() {
           if (w.chainT <= 0) w.chain = 0;
         }
 
+        w.gain = 0;
         if ((keys.fire || btnFireRef.current) && w.cd <= 0 && w.energy >= SHOT_COST) shoot(w);
 
         const step = updateStatues(w, dt);
-        if (step.gain > 0) {
-          toast(step.chain > 1 ? `🗿 连锁碎裂 ×${step.chain}！+${step.gain}` : `🗿 石像碎裂 +${step.gain}`, 'info');
+        if (w.gain > 0) {
+          toast(w.chain > 1 ? `🗿 连锁碎裂 ×${w.chain}！+${w.gain}` : `🗿 石像碎裂 +${w.gain}`, 'info');
         }
         w.warnT -= dt;
         // 只在真的有人贴过来时才提示，否则每 1.6 秒一条 toast 会把屏幕糊满
@@ -1989,13 +2027,14 @@ export default function Gaze3D() {
         }
       }
 
-      // 凝视进度：把石像头顶投影到屏幕上画一条
+      // 石壳余量：把石像头顶投影到屏幕上画一条（光矛与凝视都往同一条上累加）
       for (const s of w.statues) {
-        if (!s.alive || s.stare <= 0.25 || s.stagger > 0) continue;
+        if (!s.alive) continue;
+        const ratio = damageFrac(s);
+        if (ratio <= 0.02) continue;
         const p = project(cam, [s.x, s.y, 1.62]);
         if (!p) continue;
         const bw = Math.max(16 * UIS, (FOCAL / p.z) * 0.5);
-        const ratio = Math.min(1, s.stare / STARE_KILL);
         ctx.fillStyle = 'rgba(6,8,18,0.72)';
         ctx.fillRect(p.x - bw / 2 - UIS, p.y - 4 * UIS, bw + 2 * UIS, 6 * UIS);
         ctx.fillStyle = ratio > 0.75 ? '#ffe37a' : '#7ee8ff';
@@ -2273,7 +2312,7 @@ export default function Gaze3D() {
               <p className="g3d-keys">
                 W/S 前后 · A/D 侧移 · ←/→ 转向 · 空格 光矛 · P 暂停
                 <br />
-                光矛两发碎裂，<b>走近死盯</b>也能压裂
+                石壳要连破 {statueShells(hud.floor)} 层才碎，<b>走近死盯</b>也能压裂
                 <br />
                 📱 左摇杆移动 · 右拖拽转向 · 轻点开火
               </p>
