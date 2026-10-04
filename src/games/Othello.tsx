@@ -97,11 +97,57 @@ function apply(board: Board, x: number, y: number, me: 1 | 2): Board {
   return next;
 }
 
+/**
+ * 终局精确搜索（alpha-beta）：返回值是搜到终局时 (me 的子数 − 对方子数)。
+ * 单层启发式（位置权重 + 翻转数 − 行动力）里根本没有终局计数，
+ * 残局会为了抢角/多翻子而把能赢的棋走输，所以空点少时改用这个。
+ * 某一方无合法手就跳过一手（黑白棋规则），双方都无手即结算。
+ */
+function endgameValue(board: Board, me: 1 | 2, alpha: number, beta: number): number {
+  const opp = me === 1 ? 2 : 1;
+  const moves = legalMoves(board, me);
+  if (moves.length === 0) {
+    if (legalMoves(board, opp).length === 0) {
+      const [b, w] = count(board);
+      const mine = me === 1 ? b : w;
+      const theirs = me === 1 ? w : b;
+      return mine - theirs;
+    }
+    return -endgameValue(board, opp, -beta, -alpha);
+  }
+  let best = -Infinity;
+  for (const m of moves) {
+    const after = apply(board, m % SIZE, Math.floor(m / SIZE), me);
+    const v = -endgameValue(after, opp, -beta, -alpha);
+    if (v > best) best = v;
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+
+/** 空点少于等于此数时改走终局精确搜索（12 个空点 + alpha-beta 在毫秒级） */
+const ENDGAME_EMPTIES = 12;
+
 /** AI：评估每个合法落子的位置权重 + 翻转数 + 行动力 */
 function aiMove(board: Board, me: 1 | 2): number {
   const opp = me === 1 ? 2 : 1;
   const moves = legalMoves(board, me);
   if (moves.length === 0) return -1;
+  // 残局：直接以"最终子数差最大"为目标选点
+  if (board.filter((c) => c === 0).length <= ENDGAME_EMPTIES) {
+    let best = moves[0];
+    let bestV = -Infinity;
+    for (const m of moves) {
+      const after = apply(board, m % SIZE, Math.floor(m / SIZE), me);
+      const v = -endgameValue(after, opp, -Infinity, Infinity);
+      if (v > bestV) {
+        bestV = v;
+        best = m;
+      }
+    }
+    return best;
+  }
   let best = moves[0];
   let bestScore = -Infinity;
   for (const m of moves) {

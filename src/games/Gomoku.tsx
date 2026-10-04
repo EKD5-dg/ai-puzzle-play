@@ -92,6 +92,25 @@ function findBestMove(board: Board, me: 1 | 2): number {
   return best;
 }
 
+/**
+ * 一步成五的空点（没有返回 -1）。用于 AI 的「先秒杀、再堵杀」显式优先级：
+ * evaluate 里堵对方成五只按 0.45 折（45000），低于自己做活四（50000），
+ * 单层贪心会放着对手的一步杀不堵去做活四，必须在这里先处理必杀点。
+ */
+function findFivePoint(board: Board, p: 1 | 2): number {
+  for (let i = 0; i < SIZE * SIZE; i++) {
+    if (board[i] !== 0) continue;
+    const x = i % SIZE;
+    const y = Math.floor(i / SIZE);
+    const b = [...board];
+    b[i] = p;
+    for (const [dx, dy] of DIRECTIONS) {
+      if (lineCount(b, x, y, dx, dy, p)[0] >= 5) return i;
+    }
+  }
+  return -1;
+}
+
 function checkWin(board: Board, last: number): boolean {
   const me = board[last];
   if (me === 0) return false;
@@ -142,7 +161,10 @@ export default function Gomoku() {
     if (turn !== 'ai' || winner !== 0) return;
     setThinking(true);
     const t = window.setTimeout(() => {
-      const move = findBestMove(board, 2);
+      // 先秒杀、再堵杀，最后才走启发式估值（否则会漏堵对手的一步成五）
+      const winMove = findFivePoint(board, 2);
+      const blockMove = winMove < 0 ? findFivePoint(board, 1) : -1;
+      const move = winMove >= 0 ? winMove : blockMove >= 0 ? blockMove : findBestMove(board, 2);
       if (move < 0) {
         setThinking(false);
         return;

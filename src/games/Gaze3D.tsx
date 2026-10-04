@@ -1221,9 +1221,16 @@ function crackShell(w: World, s: Statue, byStare: boolean): void {
 }
 
 function reviveStatue(w: World, s: Statue): void {
-  let pool = w.cells.filter((i) => w.flow[i] >= 9);
-  if (pool.length === 0) pool = w.cells.filter((i) => w.flow[i] >= 5);
-  if (pool.length === 0) pool = w.cells;
+  // 候选格要排除其他活着的石像所在格：否则两尊会完全重叠、同步逼近，
+  // 看起来像分身/穿模，雷达上也只剩一个点
+  const occupied = new Set(
+    w.statues.filter((o) => o !== s && o.alive).map((o) => (Math.floor(o.y) * GRID + Math.floor(o.x))),
+  );
+  const free = (i: number) => !occupied.has(i);
+  let pool = w.cells.filter((i) => w.flow[i] >= 9 && free(i));
+  if (pool.length === 0) pool = w.cells.filter((i) => w.flow[i] >= 5 && free(i));
+  if (pool.length === 0) pool = w.cells.filter(free);
+  if (pool.length === 0) pool = w.cells; // 极端情况下（全被占）退回原逻辑，至少不会崩
   const idx = pool[Math.floor(Math.random() * pool.length)];
   s.x = (idx % GRID) + 0.5;
   s.y = ((idx / GRID) | 0) + 0.5;
@@ -1329,6 +1336,16 @@ function moveStatue(w: World, s: Statue, d: number, dt: number): boolean {
   return landed;
 }
 
+/** 从玩家位置沿当前朝向到第一面墙的距离：弹道与准星热区共用，避免两套规则不一致 */
+function wallDistance(w: World): number {
+  const dirX = Math.cos(w.ang);
+  const dirY = Math.sin(w.ang);
+  for (let d = 0.2; d < 20; d += 0.12) {
+    if (solid(w.grid, w.px + dirX * d, w.py + dirY * d)) return d;
+  }
+  return 20;
+}
+
 /** 光矛：一条从眼睛出发的射线，先撞墙就不算命中，取最近的一尊石像 */
 function shoot(w: World): boolean {
   w.energy -= SHOT_COST;
@@ -1338,13 +1355,7 @@ function shoot(w: World): boolean {
   const dirX = Math.cos(w.ang);
   const dirY = Math.sin(w.ang);
   // 到第一面墙的距离：逐步推进，够密就不会漏判
-  let wallD = 20;
-  for (let d = 0.2; d < 20; d += 0.12) {
-    if (solid(w.grid, w.px + dirX * d, w.py + dirY * d)) {
-      wallD = d;
-      break;
-    }
-  }
+  const wallD = wallDistance(w);
   let hit: Statue | null = null;
   let hitD = Infinity;
   for (const s of w.statues) {
@@ -1651,6 +1662,8 @@ export default function Gaze3D() {
   const stickRef = useRef<{ id: number; ox: number; oy: number; dx: number; dy: number } | null>(null);
   const lookRef = useRef<{ id: number; lastX: number; lastY: number; x0: number; y0: number; t0: number; moved: boolean } | null>(null);
   const btnFireRef = useRef(false);
+  /** 画布视角区按住中（长按持续射击） */
+  const lookHoldRef = useRef(false);
   const settledRef = useRef(false);
 
   statusRef.current = status;
@@ -1683,6 +1696,7 @@ export default function Gaze3D() {
       stickRef.current = null;
       lookRef.current = null;
       btnFireRef.current = false;
+      lookHoldRef.current = false;
     };
     const down = (e: KeyboardEvent) => {
       const k = e.code;
@@ -1754,6 +1768,8 @@ export default function Gaze3D() {
       stickRef.current = { id: e.pointerId, ox: p.x, oy: p.y, dx: 0, dy: 0 };
     } else {
       lookRef.current = { id: e.pointerId, lastX: p.x, lastY: p.y, x0: p.x, y0: p.y, t0: performance.now(), moved: false };
+      // 按住视角区 = 持续射击（帧循环按 cd 节流）：注释一直这么写但只有键盘/光矛按钮接了持续射击
+      lookHoldRef.current = true;
     }
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -1793,9 +1809,10 @@ export default function Gaze3D() {
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const look = lookRef.current;
     if (look && e.pointerId === look.id) {
-      // 没拖动且时间短 = 轻点 = 单发；长按已由帧循环按持续射击处理
+      // 没拖动且时间短 = 轻点 = 单发（长按期间帧循环已经按 cd 持续射击）
       if (!look.moved && performance.now() - look.t0 < 240) fireOnce();
       lookRef.current = null;
+      lookHoldRef.current = false;
     }
     if (stickRef.current?.id === e.pointerId) stickRef.current = null;
   };
@@ -1888,7 +1905,7 @@ export default function Gaze3D() {
         }
 
         w.gain = 0;
-        if ((keys.fire || btnFireRef.current) && w.cd <= 0 && w.energy >= SHOT_COST) shoot(w);
+        if ((keys.fire || btnFireRef.current || lookHoldRef.current) && w.cd <= 0 && w.energy >= SHOT_COST) shoot(w);
 
         const step = updateStatues(w, dt);
         if (w.gain > 0) {
@@ -2027,11 +2044,26 @@ export default function Gaze3D() {
         }
       }
 
+      // 屏幕可见性门控（相机前方 + 画面半宽内 + 视线无遮挡）：血条、泛光、光核、星门共用。
+      // 泛光/血条都是纯屏幕空间绘制，不做遮挡判断就会穿墙浮出来（看起来像渲染故障，
+      // 而且隔着墙就把石像位置和残血读走了）
+      const vfx = cam.yaw;
+      const vfxC = Math.cos(vfx);
+      const vfxS = Math.sin(vfx);
+      const visibleAt = (x: number, y: number): boolean => {
+        const dx = x - cam.x;
+        const dy = y - cam.y;
+        const along = dx * vfxC + dy * vfxS;
+        if (along < 0.3 || Math.abs(-dx * vfxS + dy * vfxC) > along * HALF_TAN * 1.25) return false;
+        return losClear(w.grid, cam.x, cam.y, x, y);
+      };
+
       // 石壳余量：把石像头顶投影到屏幕上画一条（光矛与凝视都往同一条上累加）
       for (const s of w.statues) {
         if (!s.alive) continue;
         const ratio = damageFrac(s);
         if (ratio <= 0.02) continue;
+        if (!visibleAt(s.x, s.y)) continue; // 被墙挡住的石像不画血条
         const p = project(cam, [s.x, s.y, 1.62]);
         if (!p) continue;
         const bw = Math.max(16 * UIS, (FOCAL / p.z) * 0.5);
@@ -2044,17 +2076,7 @@ export default function Gaze3D() {
 
       // ---- 后期：霓虹溢出 + 浮尘 + 胶片颗粒 ----
       ctx.globalCompositeOperation = 'lighter';
-      // 泛光是纯屏幕空间的，不做遮挡就会穿墙浮出一团光（看起来像"敌人在部分视角显示有问题"）
-      const vfx = cam.yaw;
-      const vfxC = Math.cos(vfx);
-      const vfxS = Math.sin(vfx);
-      const visibleAt = (x: number, y: number): boolean => {
-        const dx = x - cam.x;
-        const dy = y - cam.y;
-        const along = dx * vfxC + dy * vfxS;
-        if (along < 0.3 || Math.abs(-dx * vfxS + dy * vfxC) > along * HALF_TAN * 1.25) return false;
-        return losClear(w.grid, cam.x, cam.y, x, y);
-      };
+      // 泛光也是纯屏幕空间的：统一走上面那套 visibleAt 门控，否则会穿墙浮出一团光
       for (const c of w.cores) if (!c.taken && visibleAt(c.x, c.y)) bloomAt(ctx, cam, [c.x, c.y, 0.62], 0.5, '255,168,54', 0.5);
       if (visibleAt(w.portalX, w.portalY))
         bloomAt(ctx, cam, [w.portalX, w.portalY, 0.78], w.open ? 1.5 : 0.85, w.open ? '150,120,255' : '190,60,90', w.open ? 0.5 : 0.16);
@@ -2091,12 +2113,14 @@ export default function Gaze3D() {
 
         const dirX = Math.cos(w.ang);
         const dirY = Math.sin(w.ang);
+        // 准星热区必须与弹道同规则：中间隔着墙时红准星会让玩家白耗 24 点能量开空枪
+        const wallD = wallDistance(w);
         const aimHot = w.statues.some((s) => {
           if (!s.alive) return false;
           const rx = s.x - w.px;
           const ry = s.y - w.py;
           const along = rx * dirX + ry * dirY;
-          return along > 0.15 && Math.abs(-rx * dirY + ry * dirX) <= BEAM_HALF;
+          return along > 0.15 && along < wallD && Math.abs(-rx * dirY + ry * dirX) <= BEAM_HALF;
         });
         const gap = (5 + rec * 9) * UIS;
         ctx.strokeStyle = w.hitFx > 0 ? '#ffd166' : aimHot ? '#ff6b81' : 'rgba(200,240,255,0.85)';

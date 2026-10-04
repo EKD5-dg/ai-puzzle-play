@@ -121,8 +121,9 @@ function enclosedCell(board: number[], i: number): boolean {
 // ============ AI：带 alpha-beta 与节点预算的 negamax ============
 
 const WIN_SCORE = 1_000_000;
-/** 自身某条线上 n 子对应的价值（4 子在搜索里直接判胜，不走这张表） */
-const LINE_W = [0, 1, 14, 240];
+/** 自身某条线上 n 子对应的价值（4 子 = 该线全满 = 直接赢，用 WIN_SCORE 量级兜住，
+ *  否则 LINE_W[4] 越界成 undefined，排序键变 NaN 会把必胜手挤出候选） */
+const LINE_W = [0, 1, 14, 240, 100000];
 /** 开放端权重：两端被堵死的组合几乎连不成，只给四成价 */
 const OPEN_W = [0.4, 0.7, 1, 1, 1];
 
@@ -144,6 +145,7 @@ function evaluate(board: number[], me: number): number {
   for (const line of LINES) {
     const st = lineStat(board, line, me);
     if (st.mine && st.theirs) continue; // 混线：双方都断了，暂不计分
+    if (st.mine >= 4) return WIN_SCORE; // 已成四子 = 赢，主导整个估值
     const w = OPEN_W[st.open] ?? 1;
     if (st.mine) s += LINE_W[st.mine] * w;
     if (st.theirs) s -= LINE_W[st.theirs] * w * 1.08; // 堵住对方的危险线略优先于自己铺活线
@@ -158,6 +160,9 @@ function moveScore(board: number[], m: number, p: number): number {
   for (const li of LINES_THROUGH[m]) {
     const st = lineStat(board, LINES[li], p);
     if (st.mine && st.theirs) continue;
+    // 成四手必须排在候选最前（下一步 winLineAt 才会把它认成胜），
+    // 不能让它落到 slice 之外
+    if (st.mine >= 4) { board[m] = 0; return WIN_SCORE; }
     const w = OPEN_W[st.open] ?? 1;
     if (st.mine) s += LINE_W[st.mine] * w;
     if (st.theirs) s -= LINE_W[st.theirs] * w * 1.08;
@@ -500,6 +505,7 @@ export default function Qubic3D() {
           cam.dist = clamp(cam.dist * (pinchDist / d), DIST_MIN, DIST_MAX);
         }
         pinchDist = d;
+        hoverRef.current = -1; // 捏合期间不显示落子幽灵
         return;
       }
       if (pts.size === 1) {
@@ -514,7 +520,8 @@ export default function Qubic3D() {
           downY = p.y;
         }
       }
-      hoverRef.current = turnRef.current === 'human' && winnerRef.current === 0 ? hitTest(p.x, p.y) : -1;
+      // 拖动转视角期间不显示落子幽灵：它跟手移动会被误读成"已经下子"，而松手其实不落子
+      hoverRef.current = !dragging && turnRef.current === 'human' && winnerRef.current === 0 ? hitTest(p.x, p.y) : -1;
     };
 
     const onUp = (e: PointerEvent) => {
@@ -524,6 +531,15 @@ export default function Qubic3D() {
       // 拿重置后的值判点击，拖拽收手就会被当成一次点击、平白多落一子
       const wasDragging = dragging;
       pts.delete(e.pointerId);
+      // 双指→单指：把剩下的手指当前位置记为新的拖拽基准。否则它一移动就用整段手势的起点
+      // 算位移（双指期间 downX/downY 从没更新过），视角会一次跳几十度
+      if (pts.size === 1) {
+        const rest = pts.values().next().value;
+        if (rest) {
+          downX = rest.x;
+          downY = rest.y;
+        }
+      }
       if (pts.size === 0) dragging = false;
       if (!alone) return;
       const p = local(e);
