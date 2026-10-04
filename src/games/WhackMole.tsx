@@ -35,6 +35,8 @@ export default function WhackMole() {
   const timeRef = useRef(30);
   /** 本轮截止时刻（performance.now）：倒计时以墙钟为准，不靠 tick 累减 */
   const endTimeRef = useRef(0);
+  /** 真实剩余毫秒：暂停/继续时用它重建截止时刻（用整秒显示值重建会被反复暂停白赚时间） */
+  const remainRef = useRef(30000);
 
   timeRef.current = time;
 
@@ -55,6 +57,7 @@ export default function WhackMole() {
     comboRef.current = 0;
     maxComboRef.current = 0;
     timeRef.current = 30;
+    remainRef.current = 30000;
     setMoles(emptyMoles());
     setStatus('playing');
   }, []);
@@ -62,10 +65,13 @@ export default function WhackMole() {
   // 倒计时（按真实时间计算：setInterval 被节流时 tick 累减会与墙钟漂移）
   useEffect(() => {
     if (status !== 'playing') return;
-    // 暂停恢复后从剩余秒数续算（time 是整秒，误差 <1s）
-    endTimeRef.current = performance.now() + timeRef.current * 1000;
+    // 续算用真实剩余毫秒：原来用 timeRef（整秒向上取整）重建截止时刻，
+    // 每次「暂停→继续」都白赚不足 1 秒，亚秒级连点能把 30 秒钉死无限刷分
+    endTimeRef.current = performance.now() + remainRef.current;
     const t = window.setInterval(() => {
-      const left = Math.max(0, Math.ceil((endTimeRef.current - performance.now()) / 1000));
+      const leftMs = Math.max(0, endTimeRef.current - performance.now());
+      remainRef.current = leftMs;
+      const left = Math.ceil(leftMs / 1000);
       if (left === timeRef.current) return;
       timeRef.current = left;
       setTime(left);
@@ -74,7 +80,10 @@ export default function WhackMole() {
         sfx.win();
       }
     }, 200);
-    return () => window.clearInterval(t);
+    return () => {
+      window.clearInterval(t);
+      remainRef.current = Math.max(0, endTimeRef.current - performance.now());
+    };
   }, [status]);
 
   // 地鼠生成
@@ -112,6 +121,16 @@ export default function WhackMole() {
     if (status !== 'playing') return;
     const m = moles[i];
     if (!m.visible) return;
+    // 已到期但还没被生成 tick（260ms 一次）清掉的地鼠：只收走、不给分，
+    // 否则实际可敲窗口比配置的存活时长多 0~260ms
+    if (m.until <= performance.now()) {
+      setMoles((prev) => {
+        const next = [...prev];
+        next[i] = { visible: false, kind: 'normal', until: 0 };
+        return next;
+      });
+      return;
+    }
     // 状态计算与副作用统一放在 updater 之外（StrictMode 下 updater 双执行会导致双倍结算）
     setMoles((prev) => {
       const next = [...prev];
@@ -133,7 +152,9 @@ export default function WhackMole() {
       setMaxCombo(maxComboRef.current); // 金地鼠也计入最高连击
       const pts = 50;
       setScore((s) => s + pts);
-      sfx.record();
+      // 用普通命中音：sfx.record() 会广播 pp:achievement，限时游戏里每次敲中金地鼠
+      // 都弹一次打赏浮层（且不暂停倒计时）
+      sfx.match();
     } else {
       comboRef.current = 0;
       setCombo(0);

@@ -208,7 +208,10 @@ export default function Frogger() {
         // 找浮木：本帧已在移动循环里同步载运过，这里只做成员判定记录引用
         let onLog: { log: { x: number; w: number } } | null = null;
         for (const log of lane.items) {
-          if (f.x + 20 > log.x && f.x + 8 < log.x + log.w && f.y > row * ROW_H && f.y < (row + 1) * ROW_H) {
+          // 要求青蛙身体中心（f.x+14）压在浮木上：原来只要求搭上 8px，
+          // 青蛙会挂在浮木末端外侧，随浮木驶出画面时整只不可见（最长约 0.7 秒），
+          // 这段时间按方向键会被 moveFrog 钳回并清空乘骑引用，随后立即判落水
+          if (f.x + 14 > log.x && f.x + 14 < log.x + log.w && f.y > row * ROW_H && f.y < (row + 1) * ROW_H) {
             onLog = { log };
             break;
           }

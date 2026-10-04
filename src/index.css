@@ -573,6 +573,9 @@ code {
   touch-action: none;
   user-select: none;
   cursor: grab;
+  /* 结算遮罩是 .g2048 的绝对定位子元素：这里必须是定位祖先，
+     否则 inset:0 会一路找到 .game-page，把页头/返回按钮一起盖住 */
+  position: relative;
 }
 
 .g2048-grid {
@@ -634,7 +637,12 @@ code {
 .mines {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* 困难档 30 列比容器宽时必须能滚到左侧：center 对齐 + 溢出会让起始侧永远不可达，
+     safe center 在放不下时退回起点（不支持的浏览器用上一行的 flex-start） */
+  align-items: flex-start;
+  align-items: safe center;
+  overflow: auto;
+  max-width: 100%;
 }
 
 .mines-grid {
@@ -3222,20 +3230,16 @@ code {
     font-size: 26px;
   }
 
+  /* 手机：格子必须保持可点。原来 18px 再对困难档 scale(.55) → 实际约 10px、数字约 5px，
+     误触一格即踩雷；改成 20px 不缩放，放不下就横向滚动（困难档 30 列必然要滚） */
   .mines-grid {
-    --ms-cell: 18px;
-    --ms-font: 9px;
-  }
-
-  /* 困难档 30 列放不下：整体缩小 + 容器横向滚动兜底 */
-  .mines {
-    overflow-x: auto;
+    --ms-cell: 20px;
+    --ms-font: 12px;
   }
 
   .mines-grid.wide {
     align-self: flex-start;
-    transform: scale(0.55);
-    transform-origin: top left;
+    transform: none;
   }
 
   .soko-board {
