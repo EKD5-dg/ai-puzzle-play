@@ -146,8 +146,9 @@ export default function PacMan() {
         return { x, y, dir: 'up', color: GHOST_COLORS[i], mode: 'chase' as const, timer: 0, delay, tx: x, ty: y, released: false };
       });
       gameRef.current.frightTimer = 0;
-      // 幽灵速度随关卡提升但封顶 2.85（玩家 2.6），保证高关卡仍可玩
-      gameRef.current.ghostSpeed = Math.min(2.85, 2 + (lv - 1) * 0.25);
+      // 幽灵速度随关卡提升但必须封顶在玩家速度（2.6）之下：原来封 2.85，
+      // 第 4 关起幽灵比玩家快 9.6%，直线走廊上永远拉不开（注释声称的"仍可玩"在数值上不成立）
+      gameRef.current.ghostSpeed = Math.min(2.55, 2 + (lv - 1) * 0.25);
       if (!keepProgress) {
         livesRef.current = 3;
         setScore(0);

@@ -798,6 +798,49 @@ export default function AngryBirds() {
     // 不能拖到地面以下：否则发射瞬间即触发落地分支，竖直速度被清零只剩贴地滚动
     const MAX_PY = GROUND - BIRD_R - (SLING_Y - BIRD_R);
     if (py > MAX_PY) py = MAX_PY;
+    // 不许把鸟拖进猪/木块里：松手后第一个子步就会判定命中，近距离可以直接"贴脸"白嫖击杀
+    // （第 5 关起新增的猪距弹弓中心只有 75px，在拖拽上限 95px 之内）。
+    // 迭代几次把落点沿背离方向推到刚好不重叠，再重新夹回拉杆范围
+    for (let iter = 0; iter < 3; iter++) {
+      let pushed = false;
+      const bx = SLING_X + px;
+      const by = SLING_Y - BIRD_R + py;
+      for (const p of gg.pigs) {
+        if (!p.alive || p.flying) continue;
+        const dx = bx - p.x;
+        const dy = by - p.y;
+        const minD = p.r + BIRD_R + 2;
+        const d = Math.hypot(dx, dy);
+        if (d >= minD) continue;
+        const ux = d > 0.001 ? dx / d : 1;
+        const uy = d > 0.001 ? dy / d : 0;
+        px += ux * (minD - d);
+        py += uy * (minD - d);
+        pushed = true;
+      }
+      for (const c of gg.crates) {
+        if (!c.alive) continue;
+        const nx = Math.max(c.x, Math.min(bx, c.x + c.w));
+        const ny = Math.max(c.y, Math.min(by, c.y + c.h));
+        const dx = bx - nx;
+        const dy = by - ny;
+        const minD = BIRD_R + 2;
+        const d = Math.hypot(dx, dy);
+        if (d >= minD) continue;
+        const ux = d > 0.001 ? dx / d : 1;
+        const uy = d > 0.001 ? dy / d : 0;
+        px += ux * (minD - d);
+        py += uy * (minD - d);
+        pushed = true;
+      }
+      if (!pushed) break;
+    }
+    const len2 = Math.hypot(px, py);
+    if (len2 > MAX_PULL) {
+      px = (px / len2) * MAX_PULL;
+      py = (py / len2) * MAX_PULL;
+    }
+    if (py > MAX_PY) py = MAX_PY;
     gg.pullX = px;
     gg.pullY = py;
     gg.bird.x = SLING_X + px;

@@ -332,6 +332,9 @@ export default function Frogger() {
     if (status !== 'playing') return;
     if (gameRef.current.deathTimer > 0) return;
     const f = gameRef.current.frog;
+    // 随浮木被带出画面期间不接受输入：钳回坐标会清掉乘骑引用，而浮木已经驶到别处，
+    // 下一帧立刻判落水——玩家在看不见青蛙时按键等于被判死刑
+    if (f.onLog && (f.x < 2 || f.x > W - 30)) return;
     f.x = Math.max(2, Math.min(W - 30, f.x + dx));
     f.y = Math.max(0, Math.min(H - ROW_H + 8, f.y + dy));
     f.onLog = null;

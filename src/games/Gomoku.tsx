@@ -203,6 +203,8 @@ export default function Gomoku() {
       }
     } else if (board.every((c) => c !== 0)) {
       setWinner(3);
+      // 和棋同样中断连胜：对手都逼平了不该继续累积"最多连胜"（原来只有输棋清零）
+      setStreak(0);
       toast('平局！', 'info');
     }
   }, [board, winner, lastMove, streak, toast, best]);

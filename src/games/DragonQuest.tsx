@@ -86,7 +86,10 @@ const MONSTERS = [
 /** 按楼层生成怪物（第 10 层为恶龙 Boss） */
 function makeMonster(floor: number): Monster {
   if (floor >= FLOORS) {
-    return { name: '恶龙', emoji: '🐉', hp: 130, maxHp: 130, atk: 15, def: 7, xp: 200, gold: 300, isBoss: true };
+    // 恶龙必须强过最深的普通怪（9 层缩放后是 192hp/16atk/7def），
+    // 否则"救公主"的高潮反而比上一层更简单；按玩家到第 10 层约 Lv.6（ATK 23/DEF 13/120HP）
+    // 校准：剑伤约 14/回合、恶龙反击约 9/回合，需要靠治疗术和火球术才过得去
+    return { name: '恶龙', emoji: '🐉', hp: 220, maxHp: 220, atk: 22, def: 9, xp: 400, gold: 500, isBoss: true };
   }
   const base = MONSTERS[Math.floor((floor - 1) / 2)] ?? MONSTERS[MONSTERS.length - 1];
   // 成长曲线放缓：5-9 层有压力但配合升级/治疗可过（过陡会让第 9 层变成必死墙）
