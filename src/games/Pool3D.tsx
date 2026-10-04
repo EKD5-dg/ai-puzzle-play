@@ -109,6 +109,9 @@ interface World {
   dragging: boolean;
   /** 本次拖拽是否已超过击球阈值（防轻点误击） */
   dragArmed: boolean;
+  /** 按下点（画布坐标）：判断"是否真的拖过"，与落点到白球的距离无关 */
+  dragX0: number;
+  dragY0: number;
   /** 本杆入袋球 id（不含 cue） */
   shotPotted: number[];
   /** 本杆白球是否碰过目标球 */
@@ -170,6 +173,8 @@ function newWorld(): World {
     power: 0.55,
     dragging: false,
     dragArmed: false,
+    dragX0: 0,
+    dragY0: 0,
     shotPotted: [],
     cueHit: false,
     firstContactId: null,
@@ -469,6 +474,8 @@ export default function Pool3D() {
   if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   const overHandledRef = useRef(false);
+  /** 结算遮罩出现的时刻：用于忽略终局瞬间连点的第二次点击 */
+  const overlayAtRef = useRef(0);
 
   statusRef.current = status;
 
@@ -554,7 +561,6 @@ export default function Pool3D() {
     w.aim = Math.atan2(dz, dx);
     // 指向目标方向越远力度越大
     w.power = clamp(dist / 3.2, 0.12, 1);
-    if (dist >= 0.35) w.dragArmed = true;
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -576,6 +582,8 @@ export default function Pool3D() {
       w.dragging = true;
       w.dragArmed = false;
       const [sx, sy] = pointerToCanvas(e);
+      w.dragX0 = sx;
+      w.dragY0 = sy;
       updateAimFromPointer(sx, sy);
       (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
     }
@@ -592,7 +600,12 @@ export default function Pool3D() {
       return;
     }
     if (w.phase !== 'aim') return;
-    if (w.dragging) updateAimFromPointer(sx, sy);
+    if (w.dragging) {
+      // 用"从按下点移开了多远"判定是否算拖拽：原来用落点到白球的距离，
+      // 于是只要落点离白球够远（台面上很常见），轻点一下不拖动松手也会直接出杆
+      if (Math.hypot(sx - w.dragX0, sy - w.dragY0) > 6) w.dragArmed = true;
+      updateAimFromPointer(sx, sy);
+    }
   };
 
   const onPointerUp = () => {
@@ -695,8 +708,11 @@ export default function Pool3D() {
 
     // 首碰合法性（花色归属后）：8 号只有在全台清空后才是合法目标，
     // 否则会出现"这杆合法、8 号一进袋就判负"的陷阱；己方打完但对方仍有球时放宽（否则每杆皆犯规）
-    const ownLeft = w.group
-      ? w.balls.filter((b) => !b.pocketed && ballGroup(b.id) === w.group).length
+    // 注意要用"本杆开打前"的己方剩余数：finishShot 是在弹道结束后统计的，
+    // 若这一杆把最后一颗己方球打进，ownLeft 会归零，于是"先碰对方球"的那一杆不再判犯规。
+    // 把本杆刚打进的己方球加回来即可还原击球前的数量
+    const ownBallLeftAtShotStart = w.group
+      ? w.balls.filter((b) => b.id !== 0 && ballGroup(b.id) === w.group && (!b.pocketed || potted.includes(b.id))).length
       : 0;
     const eightReady = othersLeft === 0;
     let contactFoul = false;
@@ -705,7 +721,7 @@ export default function Pool3D() {
       const fc = w.firstContactId;
       if (!eightReady && fc === 8) {
         contactFoul = true;
-      } else if (w.group && ownLeft > 0 && fc !== 8 && ballGroup(fc) !== w.group) {
+      } else if (w.group && ownBallLeftAtShotStart > 0 && fc !== 8 && ballGroup(fc) !== w.group) {
         contactFoul = true;
       }
     }
@@ -1233,6 +1249,9 @@ export default function Pool3D() {
     if (status !== 'over' && status !== 'win') return;
     if (overHandledRef.current) return;
     overHandledRef.current = true;
+    // 记下结算遮罩出现的时刻：遮罩整层可点即重开，终局瞬间的连点第二下
+    // 会让结算面板一闪而过直接开新局（Stack3D 已修过同类问题）
+    overlayAtRef.current = performance.now();
     const sc = worldRef.current.score;
     const isNew = sc > 0 && best.updateBest(sc, (a, b) => a > b);
     setNewRecord(isNew);
@@ -1316,7 +1335,13 @@ export default function Pool3D() {
             </div>
           )}
           {(status === 'over' || status === 'win') && (
-            <div className="pl3d-overlay" onClick={start}>
+            <div
+            className="pl3d-overlay"
+            onClick={() => {
+              // 终局瞬间的连点第二下不算"再来一局"，先让结算面板显示出来
+              if (performance.now() - overlayAtRef.current > 400) start();
+            }}
+          >
               <h2>{status === 'win' ? '🏆 清台成功' : '🏁 游戏结束'}</h2>
               <p>
                 得分 {score} · 共 {worldRef.current.shots} 杆

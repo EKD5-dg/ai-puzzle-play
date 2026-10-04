@@ -250,17 +250,19 @@ export default function PacMan() {
       // 幽灵移动：整格寻路——只在格子中心落位决策，且只走向已通过碰撞检查的相邻格心，
       // 消除旧实现“中心±1.5px窗口 + 帧间直线位移无碰撞校验”导致的幽灵随机穿墙
       g.ghosts.forEach((gh, gi) => {
-        // 出房延迟（毫秒）：分批放出，避免开局围杀
-        if (gh.delay > 0) {
-          gh.delay -= dt;
-          return;
-        }
+        // 恐惧计时必须在出房延迟之前推进：否则还在出房延迟里的幽灵被能量豆染蓝后
+        // 出房才开始计时，恢复时间比其他幽灵晚 1.2~3.6 秒
         if (gh.mode === 'fright') {
           gh.timer += dt;
           if (gh.timer > g.frightTimer) {
             gh.mode = 'chase';
             gh.timer = 0;
           }
+        }
+        // 出房延迟（毫秒）：分批放出，避免开局围杀
+        if (gh.delay > 0) {
+          gh.delay -= dt;
+          return;
         }
         // 到格心才决策，到心即精确落位（不保留余量，杜绝超调进墙）
         const gx = Math.floor(gh.x / TILE) * TILE + TILE / 2;
@@ -503,6 +505,7 @@ export default function PacMan() {
         gameRef.current.player.nextDir = dir;
       }
       if (e.key === ' ' && (status === 'ready' || status === 'over' || status === 'win')) {
+        e.preventDefault(); // 不拦的话开始/重开/通关时页面会跟着滚一屏
         // 与遮罩上的主按钮同一个 handler：通关按空格继续下一关，不再把分数/关卡清零
         advance();
       }

@@ -133,6 +133,7 @@ export default function Taiko() {
     if (!bestNote || bestDist > 0.12) {
       // 空打（没有音符却击鼓）：不算 miss，但打断连击？太鼓达人不扣。提示
       sfx.mismatch();
+      g.fx.push({ x: JUDGE_X, text: '空', color: '#94a3b8', t: 0 });
       return;
     }
     const isGood = bestDist <= 0.06;
@@ -183,6 +184,8 @@ export default function Taiko() {
           comboRef.current = 0;
           setCombo(0);
           setResult((r) => ({ ...r, miss: r.miss + 1 }));
+          // 补一声闷响：原来 miss 只有红色文字、没有声音，盯着轨道打时不容易察觉连击已断
+          sfx.thud();
           g.fx.push({ x: JUDGE_X, text: '不可', color: '#ef5350', t: 0 });
         }
       }

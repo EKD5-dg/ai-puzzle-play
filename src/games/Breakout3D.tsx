@@ -50,6 +50,8 @@ const VACC = 0.28;
 const VMAX = 8.5;
 const MIN_KICK = 0.35;
 const LIVES = 3;
+/** 球数上限：三重球可反复拾取叠加，不封顶会让无尽后期"球全丢光才掉命"几乎失效，碰撞开销也线性增长 */
+const MAX_BALLS = 9;
 /** 球速上限（破砖/触板共用），不封顶会让每次触板 +1% 无限加速 */
 const SPEED_CAP_MUL = 1.35;
 /** 子步进：单步位移上限（世界单位），须明显小于挡板最薄碰撞带 0.53，否则高速球直接穿板 */
@@ -341,6 +343,11 @@ export default function Breakout3D() {
     };
     const blur = () => {
       if (statusRef.current === 'playing') setStatus('paused');
+      // 失焦时必须清方向键：不然切窗口回来挡板会一直朝那个方向漂到边界，
+      // 按反向键还会与残留状态抵消，玩家感知为"挡板自己跑、方向键失灵"
+      keysRef.current.left = false;
+      keysRef.current.right = false;
+      pointerRef.current = null;
     };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -645,8 +652,11 @@ export default function Breakout3D() {
               w.message = '时间减速！';
             } else {
               const src = w.balls[0];
-              if (src) {
-                for (let k = 0; k < 2; k++) {
+              // 球数上限：三重球可反复叠加（只增不减，只有丢球/换关才清），
+              // 无尽后期会让"球全丢光才掉命"几乎失效，碰撞检查也随球数线性增长
+              if (src && w.balls.length < MAX_BALLS) {
+                const add = Math.min(2, MAX_BALLS - w.balls.length);
+                for (let k = 0; k < add; k++) {
                   const ang = Math.atan2(src.vz, src.vx) + (k === 0 ? 0.45 : -0.45);
                   const sp = Math.hypot(src.vx, src.vz);
                   w.balls.push({
@@ -899,6 +909,9 @@ export default function Breakout3D() {
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (statusRef.current !== 'playing') return;
+    // 桌面端鼠标"扫过"画布不该把挡板拽走（去点下方暂停按钮时很常见）：
+    // 必须确实按住左键才跟随；触屏的 pointermove 天然只在按下期间触发
+    if (e.pointerType === 'mouse' && (e.buttons & 1) === 0) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();

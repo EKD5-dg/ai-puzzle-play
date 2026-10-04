@@ -577,6 +577,9 @@ export default function RubiksCube() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = e.key;
+      // 带 Ctrl/Cmd/Alt 的组合键一律不接管：否则 Ctrl+S 会把当前一局打乱重来（进度无声丢失），
+      // Ctrl+R/Ctrl+D/Ctrl+F 也会被 preventDefault 吞掉、浏览器功能失效
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const idx = 'udlrfb'.indexOf(k.toLowerCase());
       if (idx >= 0 && k.length === 1) {
         e.preventDefault();

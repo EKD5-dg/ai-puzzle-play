@@ -187,15 +187,15 @@ export default function SpaceInvaders() {
       }
       // 外星人子弹 vs 炮台（按行高分带：尖端/塔身窄、底座全宽，与绘制轮廓一致——
       // 单一窄盒会让底座两翼成幽灵区，单一宽盒又会让尖端旁擦弹误死）
-      // 受击后 1s 无敌（期间敌弹直接穿过）：否则同帧多颗敌弹各自扣命，3 发齐中可一帧清空生命
-      const invuln = now < g.invulnUntil;
+      // 受击后 1s 无敌（期间敌弹直接穿过）：否则同帧多颗敌弹各自扣命，3 发齐中可一帧清空生命。
+      // 无敌必须在循环内逐颗现读——原来在循环外快照，同帧第二颗弹看不到刚写入的 invulnUntil
       for (let i = g.enemyBullets.length - 1; i >= 0; i--) {
         const b = g.enemyBullets[i];
         const inX =
           b.y > g.player.y + 12
             ? b.x > g.player.x && b.x < g.player.x + 40 // 底座两翼
             : b.x > g.player.x + 8 && b.x < g.player.x + 32; // 尖端 + 塔身
-        if (!invuln && inX && b.y > g.player.y + 4 && b.y < g.player.y + 24) {
+        if (now >= g.invulnUntil && inX && b.y > g.player.y + 4 && b.y < g.player.y + 24) {
           g.enemyBullets.splice(i, 1);
           const nl = livesRef.current - 1;
           livesRef.current = nl;
@@ -208,6 +208,7 @@ export default function SpaceInvaders() {
           }
           g.invulnUntil = now + 1000;
           sfx.mismatch();
+          break; // 本帧已扣命并进入无敌，余下敌弹不再结算
         }
       }
 
@@ -238,6 +239,7 @@ export default function SpaceInvaders() {
         ctx.fillRect(inv.x + 20, inv.y + 4, 4, 4);
       });
       // 炮台（无敌期半透明闪烁，提示此刻中弹不掉命）
+      const invuln = now < g.invulnUntil;
       ctx.globalAlpha = invuln ? 0.45 : 1;
       ctx.fillStyle = '#00e676';
       ctx.fillRect(g.player.x, g.player.y + 12, 40, 8);
@@ -278,6 +280,8 @@ export default function SpaceInvaders() {
         }
       }
       if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        // 与左右键一致：不 preventDefault 的话，开始/下一波时按 ↑ 会连带滚动页面
+        e.preventDefault();
         if (status === 'ready' || status === 'over' || status === 'win') advance();
       }
     };

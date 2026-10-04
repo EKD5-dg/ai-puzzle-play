@@ -186,6 +186,7 @@ interface World {
   drag: 'none' | 'stance' | 'aim';
   dragMoved: boolean;
   dragX0: number;
+  dragY0: number;
   dragDragStance: number;
   phase: Phase;
   frames: FrameRec[];
@@ -234,8 +235,9 @@ function newWorld(): World {
     power: 0.62,
     spin: 0,
     drag: 'none',
-    dragMoved: false,
-    dragX0: 0,
+  dragMoved: false,
+  dragX0: 0,
+  dragY0: 0,
     dragDragStance: 0,
     phase: 'aim',
     frames: Array.from({ length: 10 }, () => ({ rolls: [], marks: [] })),
@@ -1032,6 +1034,8 @@ export default function Bowling3D() {
   if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   const overRef = useRef(false);
+  /** 结算遮罩出现的时刻：用于忽略终局瞬间连点的第二次点击 */
+  const overlayAtRef = useRef(0);
   statusRef.current = status;
 
   useEffect(() => {
@@ -1120,6 +1124,9 @@ export default function Bowling3D() {
 
     let raf = 0;
     let last = performance.now();
+    // 相机是模块级共享状态，只靠 start() 复位；若上一局球还在滚时返回大厅再进来，
+    // ready 首屏会用上一局滚到远处的机位（球和犯规线被近平面钳出画面）
+    cam.z = CAM_Z0;
 
     const loop = (nowMs: number) => {
       const dt = Math.min(0.05, (nowMs - last) / 1000);
@@ -1175,6 +1182,8 @@ export default function Bowling3D() {
     if (status !== 'over') return;
     if (overRef.current) return;
     overRef.current = true;
+    // 记下结算遮罩出现的时刻：遮罩整层可点即重开，终局瞬间连点的第二下会让面板一闪而过
+    overlayAtRef.current = performance.now();
     const totals = frameTotals(frames);
     const sc = totals[9] ?? 0;
     const isNew = sc > 0 && best.updateBest(sc, (a, b) => a > b);
@@ -1292,6 +1301,7 @@ export default function Bowling3D() {
     const hitR = Math.max(16, bp.s * BALL_R * 1.9);
     w.dragMoved = false;
     w.dragX0 = sx;
+    w.dragY0 = sy;
     w.dragDragStance = w.stanceX;
     if (Math.hypot(sx - bp.x, sy - bp.y) < hitR) {
       w.drag = 'stance';
@@ -1306,7 +1316,9 @@ export default function Bowling3D() {
     const w = worldRef.current;
     if (statusRef.current !== 'playing' || w.drag === 'none') return;
     const [sx, sy] = pointerToCanvas(e);
-    if (Math.abs(sx - w.dragX0) > 5) w.dragMoved = true;
+    // 二维位移才算"拖过"：原来只看 x 位移，纯竖直向前拖再松手不出球（瞄准线力度条都在动，
+    // 玩家会以为卡住/按钮失灵）
+    if (Math.hypot(sx - w.dragX0, sy - w.dragY0) > 5) w.dragMoved = true;
     if (w.drag === 'stance') {
       const bp = project(w.ball.x, BALL_R, w.ball.z);
       // 从球体向前拖 → 直接转入瞄准
@@ -1406,7 +1418,13 @@ export default function Bowling3D() {
             </div>
           )}
           {status === 'over' && (
-            <div className="bw3d-overlay" onClick={start}>
+            <div
+              className="bw3d-overlay"
+              onClick={() => {
+                // 终局瞬间的连点第二下不算"再来一局"，先让结算面板显示出来
+                if (performance.now() - overlayAtRef.current > 400) start();
+              }}
+            >
               <h2>🏁 十局结束</h2>
               <p>
                 总分 {total} 分 · 全中 {strikes} 次 · 补中 {spares} 次
