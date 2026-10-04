@@ -190,17 +190,25 @@ export default function Game2048() {
     return () => window.removeEventListener('keydown', onKey);
   }, [doMove]);
 
+  // 记录最高分：只在真终局（无路可走）与达成 2048 这两个"一局内的结局点"各结算一次。
+  // 原来挂在 score 上，每合一次都写档 + 弹「新纪录」+ 播 record 音，且中途退出会把半局分算成纪录
+  const settledRef = useRef({ won: false, over: false });
   useEffect(() => {
-    if (score > 0) {
-      const isNew = best.updateBest(score, (a, b) => a > b);
-      if (isNew) {
-        sfx.record();
-        toast(`新纪录！最高分 ${score}`, 'record');
-      }
+    const s = settledRef.current;
+    const milestone = won && !s.won;
+    const finished = over && !s.over;
+    if (score <= 0 || (!milestone && !finished)) return;
+    if (milestone) s.won = true;
+    if (finished) s.over = true;
+    const isNew = best.updateBest(score, (a, b) => a > b);
+    if (isNew) {
+      sfx.record();
+      toast(`新纪录！最高分 ${score}`, 'record');
     }
-  }, [score, best, toast]);
+  }, [over, won, score, best, toast]);
 
   const restart = () => {
+    settledRef.current = { won: false, over: false };
     setBoard(newBoard());
     setScore(0);
     setOver(false);

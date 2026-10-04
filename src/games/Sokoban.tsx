@@ -165,13 +165,13 @@ export default function Sokoban() {
         const finalMoves = moves + 1;
         setWon(true);
         sfx.win();
+        // 成绩立即落库：原来写在 500ms 后的定时器里，而 loadLevel 会 clearTimeout，
+        // 玩家手快（通关后 500ms 内点下一关/重开/R）这次通关的纪录就永远丢了
+        const isNew = best.updateBest(finalMoves, (a, b) => a < b);
+        if (isNew) toast(`新纪录！${finalMoves} 步完成`, 'record');
         winTimerRef.current = window.setTimeout(() => {
           winTimerRef.current = null;
-          const isNew = best.updateBest(finalMoves, (a, b) => a < b);
-          if (isNew) {
-            sfx.record();
-            toast(`新纪录！${finalMoves} 步完成`, 'record');
-          }
+          if (isNew) sfx.record();
           if (levelIdx < LEVELS.length - 1) {
             toast(`第 ${levelIdx + 1} 关完成！进入下一关`, 'success');
             winTimerRef.current = window.setTimeout(() => loadLevel(levelIdx + 1), 900);

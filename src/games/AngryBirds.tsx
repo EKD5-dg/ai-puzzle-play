@@ -245,7 +245,9 @@ export default function AngryBirds() {
     if (pigsAlive === 0) {
       gg.score += 50;
       gg.endTimer = 0;
-      const isNew = bestRef.current.updateBest(gg.level, (a, b) => a > b);
+      // 纪录用"已到达的关卡"（= 刚打完的 +1）：存 gg.level 会让界面显示"关卡 2"时
+      // 最高关卡只有 1，玩家会以为纪录少记了一关
+      const isNew = bestRef.current.updateBest(gg.level + 1, (a, b) => a > b);
       toastRef.current(`🎉 第 ${gg.level} 关通过！+50`, isNew ? 'record' : 'success');
       if (isNew) sfx.record();
       else sfx.win();

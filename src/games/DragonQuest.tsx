@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
-import { useBestScore, getSyncCode, pushProgress, readDqSave } from '../core/sync';
+import { useBestScore, getSyncCode, pushProgress, readDqSave, writeDqSave } from '../core/sync';
 import type { DqSave } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
@@ -33,7 +33,7 @@ preloadPortraits([HERO_PORTRAIT, ...Object.values(MONSTER_PORTRAITS).map((p) => 
 
 
 const FLOORS = 10;
-const SAVE_KEY = 'dq:save';
+// 存档键统一由 core/sync 的 DQ_SAVE_KEY 管理，本文件不再自己拼 localStorage 键
 
 interface PlayerState {
   level: number;
@@ -114,22 +114,20 @@ function loadSave(): DqSave | null {
 }
 
 function saveGame(floor: number, player: PlayerState): void {
-  try {
-    localStorage.setItem(`pp:${SAVE_KEY}`, JSON.stringify({ floor, player }));
-  } catch {
-    /* ignore */
-  }
+  // 统一走 core 的写入入口：写前做结构清洗与区间夹取（脏数据宁可丢弃也不落地）
+  writeDqSave({ floor, player });
   // 已连接云同步时自动上传存档（服务端按优劣合并）
   const code = getSyncCode();
   if (code) pushProgress(code).catch(() => { /* 离线静默 */ });
 }
 
+/** 只写本地、不上云：战斗中每次 HP/MP 变化都要落档，但不该每次都打网络 */
+function persistLocal(floor: number, player: PlayerState): void {
+  writeDqSave({ floor, player });
+}
+
 function clearSave(): void {
-  try {
-    localStorage.removeItem(`pp:${SAVE_KEY}`);
-  } catch {
-    /* ignore */
-  }
+  writeDqSave(null);
   // 通关/死亡/新开局时同步上传本机存档状态（云端始终保留多设备中最优存档，不会因某台设备清档而被删除）
   const code = getSyncCode();
   if (code) pushProgress(code).catch(() => { /* 离线静默 */ });
@@ -160,6 +158,14 @@ export default function DragonQuest() {
   const [monsterAnim, setMonsterAnim] = useState<'idle' | 'attack' | 'hit' | 'dead'>('idle');
   const [floaters, setFloaters] = useState<Array<{ id: number; text: string; kind: 'hero' | 'monster' }>>([]);
   const [saveExists, setSaveExists] = useState(loadSave() !== null);
+
+  // 战斗中每次掉血/耗蓝都立即落本地档：原来只在击杀/逃跑时写档，战斗中刷新页面（或关标签页）
+  // 会用上一次存档把 HP/MP 恢复成战前值——等于免费回满 MP 并撤销本场伤害。
+  // 这里只写本地，上云仍由 saveGame（击杀/逃跑/休息/换层）负责，避免频繁网络请求
+  useEffect(() => {
+    if (!saveExists || player.hp <= 0) return;
+    persistLocal(floor, player);
+  }, [player, floor, saveExists]);
   const best = useBestScore(metaDragon.id);
   const { toast } = useToast();
 

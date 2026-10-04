@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
+import { migrateLegacyBest } from '../core/useLocalStorage';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { metaMines } from '../core/gameMetas';
@@ -103,6 +104,11 @@ export default function Minesweeper() {
   const timerRef = useRef<number | null>(null);
   // 最佳成绩按难度细分（简单档记录不再压住困难档），云端键同步带后缀
   const best = useBestScore(`${metaMines.id}:${levelIdx}`);
+
+  // 改造前三档共用基础键，把旧纪录搬到首档（与其他分档游戏一致；否则大厅能聚合到旧值、游戏页却显示 --）
+  useEffect(() => {
+    migrateLegacyBest(metaMines);
+  }, []);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -116,16 +122,24 @@ export default function Minesweeper() {
   }, [status, firstClick]);
 
   // 通关时记录最佳时间
+  const wonHandledRef = useRef(false);
   useEffect(() => {
     if (status === 'won') {
-      sfx.win();
-      if (time > 0) {
-        const isNew = best.updateBest(time, (a, b) => a < b);
-        if (isNew) {
-          sfx.record();
-          toast(`新纪录！最快 ${time}s 通关`, 'record');
+      // 只结算一次：updateBest 写入后 best 变成新对象会让本 effect 重跑，
+      // 原来会让胜利琶音连播两遍（听起来像连开两次奖）
+      if (!wonHandledRef.current) {
+        wonHandledRef.current = true;
+        sfx.win();
+        if (time > 0) {
+          const isNew = best.updateBest(time, (a, b) => a < b);
+          if (isNew) {
+            sfx.record();
+            toast(`新纪录！最快 ${time}s 通关`, 'record');
+          }
         }
       }
+    } else {
+      wonHandledRef.current = false;
     }
     if (status === 'lost') {
       sfx.lose();

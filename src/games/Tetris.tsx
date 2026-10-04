@@ -282,16 +282,17 @@ export default function Tetris() {
     return () => window.removeEventListener('keydown', onKey);
   }, [move, softDrop, rotate, hardDrop, gameOver]);
 
-  // 记录最高分
+  // 记录最高分：只在游戏结束（新方块无处安放）时结算一次。
+  // 原来只看 score > 0，局内每次加分都会写档 + 弹「新纪录」+ 播 record 音，
+  // 中途退出还会把半局分当纪录存下来并同步到云端
   useEffect(() => {
-    if (score > 0) {
-      const isNew = best.updateBest(score, (a, b) => a > b);
-      if (isNew) {
-        sfx.record();
-        toast(`新纪录！最高分 ${score}`, 'record');
-      }
+    if (!gameOver || score <= 0) return;
+    const isNew = best.updateBest(score, (a, b) => a > b);
+    if (isNew) {
+      sfx.record();
+      toast(`新纪录！最高分 ${score}`, 'record');
     }
-  }, [score, best, toast]);
+  }, [gameOver, score, best, toast]);
 
   const restart = () => {
     bagRef.current = makeBag();

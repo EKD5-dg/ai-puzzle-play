@@ -49,10 +49,12 @@ const CAR_ADD_DIST = 700;
 const CAR_SPEED_MIN = 0.32;
 const CAR_SPEED_MAX = 0.58;
 const CAR_SPAWN_SEG = DRAW_DIST * 1.15;
-/** 车距（前后碰撞判定）/ 横向碰撞半径 / 近失横向判定上限（略小于两倍车道半宽，只算真正贴身） */
+/** 车距（前后碰撞判定）/ 横向碰撞半径 / 近失横向判定上限。
+ *  近失上限必须小于车道间距 0.62：原来写 0.85 比车道间距还大，任何一次变道超车
+ *  都必然判近失（+50 分与冲刺加成变成例行奖励，失去"贴身"的区分度） */
 const CAR_LEN = 105;
 const CAR_HIT_X = 0.5;
-const NEAR_MISS_X = 0.85;
+const NEAR_MISS_X = 0.55;
 /** 近失统计区间：超车过程中（前后 9 段内）记录最小横向间距 */
 const PASS_WINDOW_Z = 900;
 /** 护栏横向位置（路宽倍数）与刮擦后的速度上限。
@@ -1390,10 +1392,11 @@ export default function Racing3D() {
     if (status !== 'over' || overHandledRef.current) return;
     overHandledRef.current = true;
     const w = worldRef.current;
-    // 终局一次性快照：HUD 的里程/近失是 0.12s 节流的旧采样，只补分会和"里程+近失"对不上账
+    // 终局一次性快照：HUD 的里程/速度/生命都是 0.12s 节流的旧采样，
+    // 不补的话结算面板会显示撞前车速、甚至还剩一颗心
     const meters = Math.floor(w.meters);
     const sc = meters + w.nearMiss * NEAR_MISS_SCORE;
-    setHud((h) => ({ ...h, meters, nearMiss: w.nearMiss, score: sc }));
+    setHud((h) => ({ ...h, kmh: 0, meters, nearMiss: w.nearMiss, lives: w.lives, score: sc }));
     const isNew = sc > 0 && best.updateBest(sc, (a, b) => a > b);
     setNewRecord(isNew);
     if (isNew) {

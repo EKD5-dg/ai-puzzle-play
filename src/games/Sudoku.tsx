@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
+import { migrateLegacyBest } from '../core/useLocalStorage';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { metaSudoku } from '../core/gameMetas';
@@ -148,15 +149,24 @@ export default function Sudoku() {
   const [generating, setGenerating] = useState(false);
   /** 生成任务编号：快速连点新一局时丢弃过期任务 */
   const genRef = useRef(0);
+  /** 生成谜题的宏任务句柄：卸载/重开时要清掉，否则组件都没了还在跑几百毫秒的回溯求解 */
+  const genTimerRef = useRef<number | null>(null);
   /** 最佳时间按难度细分（简单档记录不再压住困难档），云端键同步带后缀 */
   const best = useBestScore(`${metaSudoku.id}:${levelIdx}`);
+
+  // 改造前三档共用基础键，把旧纪录搬到首档（与其他分档游戏一致；否则大厅能聚合到旧值、游戏页却显示 --）
+  useEffect(() => {
+    migrateLegacyBest(metaSudoku);
+  }, []);
   const { toast } = useToast();
 
   const startNew = (idx: number) => {
     const gen = ++genRef.current;
     setGenerating(true);
+    if (genTimerRef.current !== null) window.clearTimeout(genTimerRef.current);
     // 生成放到宏任务执行：困难难度回溯求解可能耗时数百毫秒，避免阻塞主线程 UI
-    window.setTimeout(() => {
+    genTimerRef.current = window.setTimeout(() => {
+      genTimerRef.current = null;
       if (gen !== genRef.current) return;
       const { puzzle: p, solution: s } = generatePuzzle(LEVELS[idx].blanks);
       setLevelIdx(idx);
@@ -170,6 +180,14 @@ export default function Sudoku() {
       setGenerating(false);
     }, 0);
   };
+
+  // 卸载时取消待执行的生成任务（生成耗时可达数百毫秒，返回大厅后不该继续占主线程）
+  useEffect(() => {
+    return () => {
+      if (genTimerRef.current !== null) window.clearTimeout(genTimerRef.current);
+      genTimerRef.current = null;
+    };
+  }, []);
 
   // 首次进入生成一局
   useEffect(() => {
@@ -221,6 +239,11 @@ export default function Sudoku() {
         } else {
           toast('数独完成，太棒了！', 'success');
         }
+      } else {
+        // 填满但有错：给出明确反馈，否则玩家看到"满了却没结束"会以为游戏坏了
+        const wrong = next.reduce((n, x, i) => n + (x !== solution[i] ? 1 : 0), 0);
+        sfx.mismatch();
+        toast(`棋盘填满了，但还有 ${wrong} 格是错的（开「错误提示」会标红），改对即通关`, 'info');
       }
     }
   };

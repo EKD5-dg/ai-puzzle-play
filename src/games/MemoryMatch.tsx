@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useBestScore } from '../core/sync';
+import { migrateLegacyBest } from '../core/useLocalStorage';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { metaMemory } from '../core/gameMetas';
@@ -61,7 +62,15 @@ export default function MemoryMatch() {
   /** flipped 的实时镜像：连点第三张卡的防御守卫 */
   const flippedRef = useRef<number[]>([]);
   flippedRef.current = flipped;
+  /** started 的实时镜像：计时 effect 的 cleanup 用它区分"这局结束了"和"换局了" */
+  const startedRef = useRef(false);
+  startedRef.current = started;
   const best = useBestScore(`${metaMemory.id}:${levelIdx}`);
+
+  // 改造前三档共用基础键，把旧纪录搬到首档（与其他分档游戏一致；否则大厅能聚合到旧值、游戏页却显示 --）
+  useEffect(() => {
+    migrateLegacyBest(metaMemory);
+  }, []);
   const { toast } = useToast();
 
   // 计时（首次翻牌开始，胜利停止）
@@ -73,7 +82,10 @@ export default function MemoryMatch() {
     tick();
     timerRef.current = window.setInterval(tick, 500);
     return () => {
-      tick(); // 停止瞬间补一次，避免显示滞后一个刷新周期
+      // 停止瞬间补一次读数，避免显示滞后一个刷新周期。
+      // 但换局（切难度/重开）会先把 started 置 false：那时旧闭包里的 start 还是上一局的
+      // 起点，补读会把新局的 0 覆盖成上一局已经走过的秒数
+      if (startedRef.current) tick();
       if (timerRef.current) window.clearInterval(timerRef.current);
       timerRef.current = null;
     };
