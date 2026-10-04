@@ -50,6 +50,20 @@ export default function DigitMemory() {
 
   /** 展示时长随位数缩放：3 位 2.2 秒起，每多一位 +0.5 秒，最长 6 秒 */
   const showMs = Math.min(6000, 700 + len * 500);
+  /** 重播计数：切后台回来时自增，让展示计时从头开始 */
+  const [replayNonce, setReplayNonce] = useState(0);
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+
+  // 切后台时展示计时会被节流甚至挂起，回到前台才发现数字已经消失、只能盲输：
+  // 隐藏时立刻取消计时，回到前台把这次展示（同样的数字）从头重新计时
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible' && phaseRef.current === 'show') setReplayNonce((n) => n + 1);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
   // 显示阶段：到时进入输入
   useEffect(() => {
@@ -58,8 +72,15 @@ export default function DigitMemory() {
       sfx.flip();
       setPhase('input');
     }, showMs);
-    return () => window.clearTimeout(t);
-  }, [phase, showMs]);
+    const cancelOnHide = () => {
+      if (document.visibilityState === 'hidden') window.clearTimeout(t);
+    };
+    document.addEventListener('visibilitychange', cancelOnHide);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener('visibilitychange', cancelOnHide);
+    };
+  }, [phase, showMs, replayNonce]);
 
   /** 输入完成后的统一判定（仅由 ✓ 按钮或回车手动触发） */
   const finishInput = (next: string) => {

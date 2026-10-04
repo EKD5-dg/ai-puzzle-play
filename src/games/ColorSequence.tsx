@@ -27,11 +27,30 @@ export default function ColorSequence() {
   const best = useBestScore(metaColorSeq.id);
   const { toast } = useToast();
   const timers = useRef<number[]>([]);
+  /** inputIdx 的实时镜像：同一 tick 内连点时渲染闭包里的 inputIdx 已过期，判定必须读 ref
+   *  （Simon 早有这道守卫，这里漏了：旧值会把序列长度多追加一条、轮数与长度永久错位） */
+  const inputIdxRef = useRef(0);
+  /** phase 的实时镜像：visibilitychange 回调里要读当前阶段 */
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  /** 重播计数：切后台回来时自增，让播放 effect 从头重放这一轮 */
+  const [replayNonce, setReplayNonce] = useState(0);
 
   const clearTimers = () => {
     timers.current.forEach((t) => window.clearTimeout(t));
     timers.current = [];
   };
+
+  // 切后台/锁屏时播放链会被定时器节流吞掉，回来时已进入输入阶段、玩家没见过序列只能盲按：
+  // 隐藏时停播，回到前台把这一轮从头重播
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') clearTimers();
+      else if (phaseRef.current === 'show') setReplayNonce((n) => n + 1);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
   const startGame = useCallback(() => {
     clearTimers();
@@ -57,6 +76,7 @@ export default function ColorSequence() {
               if (i === seq.length - 1) {
                 setPhase('input');
                 setInputIdx(0);
+                inputIdxRef.current = 0;
               }
             }, delay * 0.5),
           );
@@ -64,14 +84,15 @@ export default function ColorSequence() {
       );
     });
     return clearTimers;
-  }, [phase, sequence, round]);
+  }, [phase, sequence, round, replayNonce]);
 
   const press = (idx: number) => {
     if (phase !== 'input') return;
     SOUNDS[idx % SOUNDS.length]();
     setLitIdx(idx);
     timers.current.push(window.setTimeout(() => setLitIdx(-1), 200));
-    if (sequence[inputIdx] !== idx) {
+    const cur = inputIdxRef.current;
+    if (sequence[cur] !== idx) {
       sfx.lose();
       setPhase('over');
       // round 在完成本轮时才 +1，失败时已完成轮数为 round - 1；首轮即败不写纪录
@@ -85,7 +106,8 @@ export default function ColorSequence() {
       }
       return;
     }
-    const next = inputIdx + 1;
+    const next = cur + 1;
+    inputIdxRef.current = next;
     if (next >= sequence.length) {
       const nr = round + 1;
       setRound(nr);
