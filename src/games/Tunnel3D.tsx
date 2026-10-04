@@ -355,6 +355,12 @@ export default function Tunnel3D() {
       const seg = 40;
       // 缺口角随接近进度自转：spin 语义=全程总转角(rad)，剩余深度越浅转得越多
       const gapA = ring.gap + (ring.spin * (FAR - z)) / FAR;
+      // gapA 是世界角（判定用 atan2(p.y, p.x)，世界 +y 向上），而 canvas 的 +y 向下。
+      // 以环心水平线为轴翻转一次绘图坐标系，缺口才画在真正能穿过的那一侧（原来上下镜像，
+      // 看着缺口穿过去反而扣命）；翻转后自转方向也与判定一致
+      ctx.save();
+      ctx.translate(0, my * 2);
+      ctx.scale(1, -1);
       // 阻挡面：判定只认缺口角度（半径方向整圆都算撞），所以缺口以外的圆面从轴心到外沿铺一层半透明霓虹膜，
       // 让玩家看得见"只有这道缝能过"（判定与难度不动，只把美术补齐到命中框）
       const mA = 0.22 - fog * 0.16;
@@ -420,6 +426,7 @@ export default function Tunnel3D() {
         ctx.arc(ex, ey, er, 0, TAU);
         ctx.fill();
       }
+      ctx.restore();
     };
 
     /** 漂浮陨石：不规则五边形 + 受光面（极坐标贴壁摆放） */
@@ -954,7 +961,8 @@ export default function Tunnel3D() {
         ctx.fillStyle = 'rgba(190,225,255,0.92)';
         ctx.fillText(`🚀 ${Math.floor(w.dist)} m`, 12, 24);
         ctx.font = '600 12px system-ui, sans-serif';
-        ctx.fillText(`${Math.round(w.speed * 12)} km/h`, 12, 42);
+        // speed 单位是 m/s，换算 km/h 是 ×3.6（原来写 ×12，起飞速 10m/s 就显示 120km/h）
+        ctx.fillText(`${Math.round(w.speed * 3.6)} km/h`, 12, 42);
         if (w.combo > 1) {
           ctx.fillStyle = '#ffd35c';
           ctx.fillText(`✨ 连击 ×${w.combo}`, 12, 59);
@@ -998,7 +1006,7 @@ export default function Tunnel3D() {
           </div>
           <div className="stat-box">
             <span>时速</span>
-            <strong>{Math.round(speed * 12)}km/h</strong>
+            <strong>{Math.round(speed * 3.6)}km/h</strong>
           </div>
           <div className="stat-box">
             <span>核心</span>
