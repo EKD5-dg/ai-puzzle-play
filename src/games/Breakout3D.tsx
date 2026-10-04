@@ -112,7 +112,7 @@ interface Powerup {
 }
 
 type Phase = 'serve' | 'live';
-type Status = 'ready' | 'playing' | 'paused' | 'over' | 'win';
+type Status = 'ready' | 'playing' | 'paused' | 'over';
 
 interface World {
   bricks: Brick[];
@@ -275,6 +275,8 @@ export default function Breakout3D() {
   if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   const overHandledRef = useRef(false);
+  /** 结算遮罩出现的时刻：用于忽略终局瞬间连点的第二次点击 */
+  const overlayAtRef = useRef(0);
   const keysRef = useRef({ left: false, right: false });
   const pointerRef = useRef<number | null>(null);
 
@@ -329,7 +331,7 @@ export default function Breakout3D() {
         e.preventDefault();
         if (statusRef.current === 'playing') {
           if (worldRef.current.phase === 'serve') serve();
-        } else if (statusRef.current === 'ready' || statusRef.current === 'over' || statusRef.current === 'win') {
+        } else if (statusRef.current === 'ready' || statusRef.current === 'over') {
           start();
         }
       }
@@ -360,9 +362,11 @@ export default function Breakout3D() {
   }, [serve, start, togglePause]);
 
   useEffect(() => {
-    if (status !== 'over' && status !== 'win') return;
+    if (status !== 'over') return;
     if (overHandledRef.current) return;
     overHandledRef.current = true;
+    // 记下结算遮罩出现的时刻：整层可点即重开，终局瞬间连点的第二下会让结算面板一闪而过
+    overlayAtRef.current = performance.now();
     const sc = worldRef.current.score;
     const isNew = sc > 0 && best.updateBest(sc, (a, b) => a > b);
     setNewRecord(isNew);
@@ -543,6 +547,9 @@ export default function Breakout3D() {
         const speedMul = w.slowT > 0 ? 0.72 : 1;
         for (let bi = w.balls.length - 1; bi >= 0; bi--) {
           const b = w.balls[bi];
+          // 发球阶段球被吸在挡板上：只吸附不积分（速度要留给发射那一刻，不能清零），
+          // 否则每帧先吸附、又按 vx/vz 走一步、下一帧再拉回，形成约 2px 的 60Hz 抖动
+          if (w.phase === 'serve') continue;
           b.vy -= 14 * dt;
           b.y += b.vy * dt;
           if (b.y < BALL_R) {
@@ -768,76 +775,100 @@ export default function Breakout3D() {
       drawBox(HW, HW + SIDE, 0, 0.22, NEAR, FAR, 220, 40, 38);
       drawBox(-HW - SIDE, HW + SIDE, 0, 0.35, FAR, FAR + 0.18, 265, 50, 42);
 
-      // 砖块：远 → 近
-      const alive = w.bricks
-        .filter((b) => b.alive)
-        .slice()
-        .sort((a, b) => b.z - a.z);
-      for (const b of alive) {
+      // 砖块/挡板/强化/球/粒子统一收集后按深度远 → 近画一次：
+      // 原来砖块先排一次序，挡板与球却在砖块之后无条件绘制，
+      // 球打到砖墙后面时会被画在砖面上（遮挡关系反转）
+      const items: Array<{ d: number; draw: () => void }> = [];
+      for (const b of w.bricks) {
+        if (!b.alive) continue;
         const dmg = b.maxHp > 1 ? (b.hp - 1) / b.maxHp : 0;
         const lig = 48 + b.hp * 6 - dmg * 8;
-        drawBox(
-          b.x - BRICK_W / 2,
-          b.x + BRICK_W / 2,
-          0.02,
-          BRICK_H,
-          b.z - BRICK_D / 2,
-          b.z + BRICK_D / 2,
-          b.hue,
-          78,
-          lig,
-          b.hp >= 2,
-        );
+        items.push({
+          d: b.z,
+          draw: () =>
+            drawBox(
+              b.x - BRICK_W / 2,
+              b.x + BRICK_W / 2,
+              0.02,
+              BRICK_H,
+              b.z - BRICK_D / 2,
+              b.z + BRICK_D / 2,
+              b.hue,
+              78,
+              lig,
+              b.hp >= 2,
+            ),
+        });
       }
 
       // 挡板（俯视下需要足够高度才可见）
-      drawBox(
-        w.paddleX - w.paddleW - PAD_T,
-        w.paddleX + w.paddleW + PAD_T,
-        0.04,
-        PAD_H,
-        PAD_Z - PAD_T,
-        PAD_Z + PAD_T,
-        190,
-        90,
-        62,
-        true,
-      );
+      items.push({
+        d: PAD_Z,
+        draw: () =>
+          drawBox(
+            w.paddleX - w.paddleW - PAD_T,
+            w.paddleX + w.paddleW + PAD_T,
+            0.04,
+            PAD_H,
+            PAD_Z - PAD_T,
+            PAD_Z + PAD_T,
+            190,
+            90,
+            62,
+            true,
+          ),
+      });
 
       // 强化
       for (const p of w.powerups) {
         const hue = p.kind === 'wide' ? 140 : p.kind === 'slow' ? 200 : 48;
         const bob = Math.sin(t * 6 + p.x) * 0.04;
-        drawBox(p.x - 0.18, p.x + 0.18, 0.25 + bob, 0.55 + bob, p.z - 0.18, p.z + 0.18, hue, 90, 58, true);
+        items.push({
+          d: p.z,
+          draw: () => drawBox(p.x - 0.18, p.x + 0.18, 0.25 + bob, 0.55 + bob, p.z - 0.18, p.z + 0.18, hue, 90, 58, true),
+        });
       }
 
       // 球
       for (const b of w.balls) {
-        const sp = projAt(b.x, b.y, b.z);
-        const r = Math.max(2.2, BALL_R * sp.s * 1.15);
-        const g = ctx.createRadialGradient(sp.x - r * 0.3, sp.y - r * 0.3, r * 0.15, sp.x, sp.y, r);
-        g.addColorStop(0, '#ffffff');
-        g.addColorStop(0.45, '#ffe9a8');
-        g.addColorStop(1, '#ff9a3c');
-        ctx.shadowColor = 'rgba(255,180,80,0.9)';
-        ctx.shadowBlur = 14;
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        items.push({
+          d: b.z,
+          draw: () => {
+            const sp = projAt(b.x, b.y, b.z);
+            const r = Math.max(2.2, BALL_R * sp.s * 1.15);
+            const g = ctx.createRadialGradient(sp.x - r * 0.3, sp.y - r * 0.3, r * 0.15, sp.x, sp.y, r);
+            g.addColorStop(0, '#ffffff');
+            g.addColorStop(0.45, '#ffe9a8');
+            g.addColorStop(1, '#ff9a3c');
+            ctx.shadowColor = 'rgba(255,180,80,0.9)';
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          },
+        });
       }
 
       // 粒子
       for (const p of w.particles) {
-        const sp = projAt(p.x, p.y, p.z);
-        ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
-        ctx.fillStyle = `hsl(${p.hue} 90% 62%)`;
-        ctx.beginPath();
-        ctx.arc(sp.x, sp.y, Math.max(1, 1.8 * sp.s * 0.03), 0, Math.PI * 2);
-        ctx.fill();
+        items.push({
+          d: p.z,
+          draw: () => {
+            const sp = projAt(p.x, p.y, p.z);
+            ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+            ctx.fillStyle = `hsl(${p.hue} 90% 62%)`;
+            ctx.beginPath();
+            ctx.arc(sp.x, sp.y, Math.max(1, 1.8 * sp.s * 0.03), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+          },
+        });
       }
-      ctx.globalAlpha = 1;
+
+      items.sort((a, b) => b.d - a.d);
+      for (const it of items) it.draw();
 
       if (playing && w.phase === 'serve') {
         ctx.font = '600 13px system-ui, sans-serif';
@@ -1000,9 +1031,15 @@ export default function Breakout3D() {
               </button>
             </div>
           )}
-          {(status === 'over' || status === 'win') && (
-            <div className="brk-overlay" onClick={start}>
-              <h2>{status === 'win' ? '🏆 通关！' : '💥 游戏结束'}</h2>
+          {status === 'over' && (
+            <div
+              className="brk-overlay"
+              onClick={() => {
+                // 终局瞬间的连点第二下不算"再来一局"，先让结算面板显示出来
+                if (performance.now() - overlayAtRef.current > 400) start();
+              }}
+            >
+              <h2>💥 游戏结束</h2>
               <p>
                 得分 {score} · 到达关卡 {level}
                 {newRecord ? ' · 🏆 新纪录！' : best.value != null ? ` · 最佳 ${best.value}` : ''}

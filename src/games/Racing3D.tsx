@@ -23,8 +23,10 @@ const CAM_DEPTH = 1 / Math.tan(((100 / 2) * Math.PI) / 180);
 const PLAYER_Z = CAM_H / CAM_DEPTH;
 /** 同屏渲染段数 */
 const DRAW_DIST = 80;
-/** 赛道主体目标段数（收尾回平段另加，总长以建成赛道为准） */
-const SEG_TARGET = 360;
+/** 赛道主体目标段数（收尾回平段另加，总长以建成赛道为准）。
+ *  360 段 ≈ 654m，满速约 6 秒就绕回起点，景物/弯道序列原样复读很明显；
+ *  1080 段 ≈ 2km（满速约 17 秒一圈），内存与生成时间仍然可以忽略 */
+const SEG_TARGET = 1080;
 
 /** 车道中心（路宽归一化 -1..1，共三车道） */
 const LANES = [-0.62, 0, 0.62];
@@ -168,6 +170,27 @@ function buildTrack(): Segment[] {
   return segs;
 }
 
+/** 重新撒一遍路边树木/岩石（保留弯道指示牌）：赛道是定长环，
+ *  每跑完一圈换一批景物，不然"5 秒一循环"的观感复读很明显 */
+function reshuffleScenery(segs: Segment[]): void {
+  for (const s of segs) s.sprites = s.sprites.filter((sp) => sp.type === 'sign');
+  for (let i = 4; i < segs.length; i += 2) {
+    if (Math.random() < 0.62) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      segs[i].sprites.push({
+        type: Math.random() < 0.78 ? 'tree' : 'rock',
+        offset: side * rand(TREE_MIN_X, 3.4),
+      });
+      if (Math.random() < 0.35) {
+        segs[i].sprites.push({
+          type: 'tree',
+          offset: -side * rand(TREE_MIN_X, 3.6),
+        });
+      }
+    }
+  }
+}
+
 /** 世界 → 屏幕；dz 下限避免相机脚下的段爆掉多边形；scale 上限防止巨大路径拖垮光栅 */
 function project(p: Pt, camX: number, camY: number, camZ: number) {
   const dz = Math.max(20, p.world.z - camZ);
@@ -223,6 +246,8 @@ interface World {
   /** 车身倾斜（-1..1，随转向） */
   tilt: number;
   meters: number;
+  /** 已经跑完的圈数：跨圈时换一批路边景物 */
+  lap: number;
   over: boolean;
 }
 
@@ -257,6 +282,7 @@ function newWorld(): World {
     msgGood: true,
     tilt: 0,
     meters: 0,
+    lap: 0,
     over: false,
   };
 }
@@ -270,8 +296,30 @@ function targetCars(meters: number): number {
   return Math.min(CARS_MAX, CARS0 + Math.floor(meters / CAR_ADD_DIST));
 }
 
-function spawnCar(w: World, aheadZ: number): Car {
-  const lane = LANES[Math.floor(Math.random() * 3)] + rand(-0.06, 0.06);
+/**
+ * 挑一条不会把三条车道同时堵死的横向位置（返回带抖动的 offset）；三条都堵时返回 null，由调用方推迟生成。
+ * 车宽（碰撞半宽 0.5 → 全宽 1.0）大于车道间距 0.62：相邻车道的碰撞盒必然重叠，
+ * 三车道同现时玩家既挤不过去、又只能越野（越野 42% 限速），实际是被迫急刹甚至丢命。
+ */
+function pickFreeLane(cars: Car[], z: number, exclude: Car | null): number | null {
+  const used = new Set<number>();
+  for (const c of cars) {
+    if (c === exclude) continue;
+    if (Math.abs(c.z - z) > CAR_LEN * 1.8) continue;
+    let bi = 0;
+    for (let i = 1; i < LANES.length; i++) {
+      if (Math.abs(LANES[i] - c.offset) < Math.abs(LANES[bi] - c.offset)) bi = i;
+    }
+    used.add(bi);
+  }
+  const free: number[] = [];
+  for (let i = 0; i < LANES.length; i++) if (!used.has(i)) free.push(i);
+  if (free.length === 0) return null;
+  return LANES[free[Math.floor(Math.random() * free.length)]] + rand(-0.06, 0.06);
+}
+
+function spawnCar(w: World, aheadZ: number, laneOffset?: number): Car {
+  const lane = laneOffset ?? LANES[Math.floor(Math.random() * 3)] + rand(-0.06, 0.06);
   const { color, kind } = rollCar();
   return {
     offset: lane,
@@ -341,7 +389,10 @@ function substep(w: World, dt: number, tNow: number) {
   // 车流：补充 / 回收
   const want = targetCars(w.meters);
   while (w.cars.length < want) {
-    w.cars.push(spawnCar(w, w.position + PLAYER_Z + rand(CAR_SPAWN_SEG, DRAW_DIST * 2.4) * SEG_LEN));
+    const nz = w.position + PLAYER_Z + rand(CAR_SPAWN_SEG, DRAW_DIST * 2.4) * SEG_LEN;
+    const lane = pickFreeLane(w.cars, nz, null);
+    if (lane === null) break; // 这一刻三条道都堵着，下一帧再补
+    w.cars.push(spawnCar(w, nz, lane));
   }
   for (const c of w.cars) c.z += c.speed * dt;
   for (let i = w.cars.length - 1; i >= 0; i--) {
@@ -350,8 +401,10 @@ function substep(w: World, dt: number, tNow: number) {
       if (w.cars.length > want) w.cars.splice(i, 1);
       else {
         const next = rollCar();
-        c.z = w.position + PLAYER_Z + rand(CAR_SPAWN_SEG, DRAW_DIST * 2.4) * SEG_LEN;
-        c.offset = LANES[Math.floor(Math.random() * 3)] + rand(-0.06, 0.06);
+        const nz = w.position + PLAYER_Z + rand(CAR_SPAWN_SEG, DRAW_DIST * 2.4) * SEG_LEN;
+        const lane = pickFreeLane(w.cars, nz, c);
+        c.z = nz;
+        if (lane !== null) c.offset = lane; // 三条道都堵时保留原车道，下一帧再挑
         c.speed = MAX_SPEED * carSpeedFrac(next.kind) * (1 + Math.min(0.35, w.meters / 6000));
         c.color = next.color;
         c.kind = next.kind;
@@ -359,6 +412,13 @@ function substep(w: World, dt: number, tNow: number) {
         c.minGap = Infinity;
       }
     }
+  }
+
+  // 每跑完一圈换一批路边景物：赛道是定长环，景物原样复读最容易暴露"几秒一循环"
+  const lap = Math.floor(w.position / w.trackLen);
+  if (lap !== w.lap) {
+    w.lap = lap;
+    reshuffleScenery(w.segs);
   }
 
   // 碰撞 / 近失（relZ 判定窗只有 2×CAR_LEN，靠 step 的子步保证一帧不会整辆跨过）

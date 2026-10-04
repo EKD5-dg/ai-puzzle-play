@@ -2123,6 +2123,11 @@ export default function Gaze3D() {
           return along > 0.15 && along < wallD && Math.abs(-rx * dirY + ry * dirX) <= BEAM_HALF;
         });
         const gap = (5 + rec * 9) * UIS;
+        // 准星画在"水平弹道真正指向的那条线"上：project 的 y = RH/2 + pitch − …，
+        // 眼睛高度的无穷远点落在 RH/2 + pitch，所以拖动俯仰后准星必须跟着走，
+        // 否则竖直方向最多差 93px，把石像压在准星下其实打的是另一条水平线
+        const cxs = RW / 2;
+        const cys = RH / 2 + cam.pitch;
         ctx.strokeStyle = w.hitFx > 0 ? '#ffd166' : aimHot ? '#ff6b81' : 'rgba(200,240,255,0.85)';
         ctx.lineWidth = 1.5 * UIS;
         ctx.beginPath();
@@ -2132,12 +2137,12 @@ export default function Gaze3D() {
           [0, -1],
           [0, 1],
         ] as Array<[number, number]>) {
-          ctx.moveTo(RW / 2 + ax * gap, RH / 2 + ay * gap);
-          ctx.lineTo(RW / 2 + ax * (gap + 7 * UIS), RH / 2 + ay * (gap + 7 * UIS));
+          ctx.moveTo(cxs + ax * gap, cys + ay * gap);
+          ctx.lineTo(cxs + ax * (gap + 7 * UIS), cys + ay * (gap + 7 * UIS));
         }
         ctx.stroke();
         ctx.fillStyle = aimHot ? 'rgba(255,107,129,0.9)' : 'rgba(200,240,255,0.5)';
-        ctx.fillRect(RW / 2 - UIS, RH / 2 - UIS, 2 * UIS, 2 * UIS);
+        ctx.fillRect(cxs - UIS, cys - UIS, 2 * UIS, 2 * UIS);
         if (w.hitFx > 0) {
           ctx.strokeStyle = `rgba(255,225,140,${Math.min(1, w.hitFx * 4)})`;
           ctx.lineWidth = 2 * UIS;
@@ -2148,8 +2153,8 @@ export default function Gaze3D() {
             [-1, 1],
             [-1, -1],
           ] as Array<[number, number]>) {
-            ctx.moveTo(RW / 2 + sx * 4 * UIS, RH / 2 + sy * 4 * UIS);
-            ctx.lineTo(RW / 2 + sx * 10 * UIS, RH / 2 + sy * 10 * UIS);
+            ctx.moveTo(cxs + sx * 4 * UIS, cys + sy * 4 * UIS);
+            ctx.lineTo(cxs + sx * 10 * UIS, cys + sy * 10 * UIS);
           }
           ctx.stroke();
         }
