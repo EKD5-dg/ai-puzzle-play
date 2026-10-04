@@ -14,8 +14,11 @@ const RH = 360;
 /** 地平线 y（世界 z → ∞ 的投影极限 = CAM·FOCAL/CAMH） */
 const HOR = 180;
 const FOCAL = RH * 1.1;
-/** 相机高度 / 相机到玩家的 z 距离 */
-const CAMH = 1.7;
+/** 相机高度 / 相机到玩家的 z 距离。
+ *  CAMH 不能太大：玩家脚下的地面（y=0, z=PZ）投影在 HOR + CAMH·FOCAL/(PZ+CAM)，
+ *  取 1.7 时等于 429 > RH=360，整个雪板/雪靴/雪杖/落地影全被画到画布外（人只剩上半身）。
+ *  取 1.15 时玩家脚底落在 ~349，刚好完整可见。 */
+const CAMH = 1.15;
 const CAM = 2.2;
 /** 玩家所在深度与横向移动范围（滑道半宽 4，留边距） */
 const PZ = 0.5;
@@ -775,10 +778,12 @@ export default function Ski3D() {
               const jump = 15 * w.combo;
               w.dist += jump;
               // 里程瞬间前跳会把前方障碍直接甩到身后、或把玩家瞬移到障碍跟前，
-              // 玩家没有躲避机会：被掠过及落点前方 3.5m 内的障碍免判碰撞，
-              // 避免"吃宝石却被撞"的不公平体验
+              // 玩家没有躲避机会：被掠过及落点前方的障碍免判碰撞。
+              // 豁免距离随速度放大（26m/s 时约 13m）：固定 3.5m 只够 0.13s，高速下
+              // 横向挪出判定余量都要 0.27s，等于吃宝石必撞
+              const clearAhead = PZ + Math.max(3.5, w.speed * 0.5);
               for (const o of w.obstacles) {
-                if (!o.judged && o.z - w.dist <= PZ + 3.5) o.judged = true;
+                if (!o.judged && o.z - w.dist <= clearAhead) o.judged = true;
               }
               w.gemFlash = t;
               setGems(w.gems);

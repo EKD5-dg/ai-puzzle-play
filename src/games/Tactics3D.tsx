@@ -886,9 +886,13 @@ export default function Tactics3D() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    canvas.width = RW;
-    canvas.height = RH;
+    // 与其余 3D 游戏一致按 DPR 放大 backing store：否则 HiDPI 屏上 640×530 的位图
+    // 被 CSS 拉到更大尺寸显示，线条/精灵明显发虚
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = RW * dpr;
+    canvas.height = RH * dpr;
     const ctx = canvas.getContext('2d')!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const wq = () => worldRef.current;
 
     const tops = [0, 1, 2, 3].flatMap((t) => [tileTop(t, 0), tileTop(t, 1)]);
