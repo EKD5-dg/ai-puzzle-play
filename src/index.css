@@ -4486,3 +4486,469 @@ html {
     font-size: 20px;
   }
 }
+
+/* ============ 3D 晶核防线（CrystalDefense3D） ============ */
+
+.td3d {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.td3d-stage {
+  position: relative;
+  width: 100%;
+  max-width: 800px;
+}
+
+.td3d-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 820 / 560;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  background: #04070f;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: crosshair;
+}
+
+.td3d-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  background: rgba(4, 9, 16, 0.87);
+  border-radius: var(--radius);
+  z-index: 5;
+  text-align: center;
+}
+
+.td3d-overlay h2 {
+  font-size: 24px;
+}
+
+.td3d-overlay p {
+  color: var(--text-dim);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.td3d-pause {
+  background: rgba(4, 9, 16, 0.7);
+}
+
+.td3d-lead {
+  max-width: 560px;
+}
+
+.td3d-guide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 580px;
+  width: 100%;
+}
+
+.td3d-guide div {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.td3d-guide b {
+  display: block;
+  color: var(--text);
+  font-size: 12.5px;
+  margin-bottom: 2px;
+}
+
+.td3d-keys {
+  font-size: 12px !important;
+  opacity: 0.8;
+}
+
+.td3d-mobile-roles {
+  display: none;
+}
+
+.td3d-scoreline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.td3d-scoreline strong {
+  font-size: 26px;
+  color: #ffd684;
+}
+
+.td3d-newrecord {
+  background: rgba(255, 196, 94, 0.15);
+  border: 1px solid rgba(255, 196, 94, 0.45);
+  color: #ffd684;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.td3d-gold {
+  color: #ffd684;
+}
+
+.td3d-danger {
+  color: #ff7a8a;
+}
+
+.td3d-top {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  max-width: 800px;
+  flex-wrap: wrap;
+}
+
+.td3d-wave {
+  flex: 1 1 300px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.td3d-wave-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.td3d-wave-text strong {
+  font-size: 14px;
+}
+
+.td3d-wave-text span {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.td3d-bonus {
+  color: #ffd684;
+  font-weight: 700;
+}
+
+.td3d-tools {
+  display: flex;
+  gap: 8px;
+}
+
+.td3d-build {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 800px;
+  flex-wrap: wrap;
+}
+
+.td3d-card {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+}
+
+.td3d-card:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.td3d-card.on {
+  border-color: var(--tc);
+  box-shadow: inset 0 0 0 1px var(--tc), 0 0 18px rgba(140, 232, 255, 0.13);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.td3d-card:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.td3d .btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  filter: saturate(0.5);
+}
+
+.td3d-card-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  font-size: 18px;
+  line-height: 1;
+  border: 1px solid var(--tc);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--tc);
+}
+
+.td3d-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.td3d-card-text strong {
+  font-size: 13px;
+}
+
+.td3d-card-text small {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.td3d-card-cost {
+  font-size: 12px;
+  color: #ffd684;
+  font-weight: 700;
+}
+
+.td3d-info {
+  width: 100%;
+  max-width: 800px;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 7px 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.td3d-sel {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--tc);
+  border-radius: 10px;
+}
+
+.td3d-sel-info {
+  flex: 1 1 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.td3d-sel-info strong {
+  font-size: 13.5px;
+  color: var(--tc);
+}
+
+.td3d-sel-info span {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.td3d-sel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.td3d-sel-actions .btn {
+  padding: 6px 12px;
+  font-size: 12.5px;
+}
+
+.td3d-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.td3d-close:hover {
+  color: var(--text);
+}
+
+.td3d .hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+@media (max-width: 560px) {
+  .td3d-overlay {
+    gap: 7px;
+    padding: 10px;
+  }
+
+  .td3d-overlay h2 {
+    font-size: 19px;
+  }
+
+  .td3d-overlay p {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .td3d-lead,
+  .td3d-guide {
+    display: none;
+  }
+
+  .td3d-keys {
+    font-size: 10.5px !important;
+  }
+
+  .td3d-mobile-roles {
+    display: block;
+  }
+
+  .td3d-overlay .btn {
+    padding: 7px 18px;
+    font-size: 13px;
+  }
+
+  .td3d-scoreline strong {
+    font-size: 22px;
+  }
+
+  .td3d-best-stat {
+    display: none;
+  }
+
+  .td3d-card-icon {
+    width: 24px;
+    height: 24px;
+    font-size: 15px;
+    border-radius: 7px;
+  }
+
+  .td3d-build {
+    gap: 6px;
+  }
+
+  .td3d-card {
+    flex: 1 1 100px;
+    padding: 7px 8px;
+    gap: 6px;
+  }
+
+  .td3d-card-text small {
+    display: none;
+  }
+
+  .td3d-card-text strong {
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .td3d-card-icon {
+    font-size: 16px;
+  }
+
+  .td3d-card-cost {
+    font-size: 11px;
+  }
+
+  .td3d-top {
+    gap: 7px;
+  }
+
+  .td3d-wave {
+    flex: 1 1 100%;
+    padding: 7px 10px;
+  }
+
+  .td3d-wave-text strong {
+    font-size: 13px;
+  }
+
+  .td3d-wave .btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .td3d-tools {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+
+  .td3d-tools .btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .td3d-info {
+    font-size: 11.5px;
+    padding: 6px 9px;
+  }
+
+  .td3d-sel-info {
+    flex: 1 1 100%;
+  }
+
+  .td3d-sel-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .td3d .hint {
+    display: none;
+  }
+}

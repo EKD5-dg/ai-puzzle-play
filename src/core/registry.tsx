@@ -34,6 +34,7 @@ import {
   metaBreak3D,
   metaGaze3D,
   metaQubic3D,
+  metaCrystalDefense,
 } from './gameMetas';
 
 /**
@@ -77,6 +78,7 @@ export const games: GameDefinition[] = [
   { meta: metaBreak3D, component: lazy(() => import('../games/Breakout3D')) },
   { meta: metaGaze3D, component: lazy(() => import('../games/Gaze3D')) },
   { meta: metaQubic3D, component: lazy(() => import('../games/Qubic3D')) },
+  { meta: metaCrystalDefense, component: lazy(() => import('../games/CrystalDefense3D')) },
 ];
 
 /** 按 id 查找游戏 */

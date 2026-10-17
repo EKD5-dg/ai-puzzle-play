@@ -35,6 +35,23 @@ export function RedBirdIcon() {
   );
 }
 
+/** 晶核防线图标：塔座 + 青晶，避免使用主题差异大的 emoji */
+export function CrystalTowerIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 64 64" aria-hidden>
+      <circle cx="32" cy="30" r="26" fill="rgba(99,230,255,0.08)" />
+      <path d="M32 6l12 16-6 21-6 8-6-8-6-21z" fill="#63e6ff" />
+      <path d="M32 6l12 16-6 21-6 8z" fill="#1b8f9e" opacity=".72" />
+      <path d="M32 6l-12 16 6 21 6 8z" fill="#c9fff8" opacity=".55" />
+      <path d="M32 6l-4 12 4 27 4-27z" fill="rgba(255,255,255,0.45)" />
+      <path d="M14 43l18-8 18 8-18 8z" fill="#1c3038" stroke="#63e6ff" strokeOpacity=".45" />
+      <path d="M14 43v6l18 8 18-8v-6l-18 8z" fill="#0a141a" />
+      <path d="M12 27l4 6-4 6-4-6z" fill="#63e6ff" opacity=".65" />
+      <path d="M52 23l3 5-3 5-3-5z" fill="#9ffcf1" opacity=".6" />
+    </svg>
+  );
+}
+
 export const meta2048: GameMeta = {
   id: 'game-2048',
   title: '2048',
@@ -441,6 +458,18 @@ export const metaQubic3D: GameMeta = {
   bestVariants: ['0', '1'],
 };
 
+export const metaCrystalDefense: GameMeta = {
+  id: 'crystal-defense-3d',
+  title: '3D 晶核防线',
+  description: '在浮空遗迹的塔座上布防：脉冲、霜华、裂地炮三系晶塔，守住晶核撑过十二波兽潮！',
+  icon: <CrystalTowerIcon />,
+  difficulty: '中等',
+  category: '策略',
+  tags: ['3D', '塔防', '策略'],
+  bestScoreLabel: '最高分',
+  higherIsBetter: true,
+};
+
 /** 成绩比较方向权威表：false=成绩越小越好（步数/时间类）。由各 meta 派生，云同步服务端也内置了同样白名单（functions/api/sync.js），新增"成绩取小"的游戏需两处同步 */
 export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
   [
@@ -477,6 +506,7 @@ export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
     metaBreak3D,
     metaGaze3D,
     metaQubic3D,
+    metaCrystalDefense,
   ].map((m) => [m.id, m.higherIsBetter]),
 );
 
