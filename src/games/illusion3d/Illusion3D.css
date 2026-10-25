@@ -1,0 +1,272 @@
+.illusion-game {
+  width: min(1120px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 278px;
+  gap: 16px;
+  align-items: start;
+}
+
+.illusion-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 8 / 5;
+  overflow: hidden;
+  border: 1px solid rgba(126, 190, 190, 0.28);
+  border-radius: 18px;
+  background: #0a202e;
+  box-shadow: 0 20px 54px rgba(3, 12, 24, 0.28);
+}
+
+.illusion-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+  outline: none;
+}
+
+.illusion-canvas:active {
+  cursor: grabbing;
+}
+
+.illusion-canvas:focus-visible {
+  box-shadow: inset 0 0 0 2px #e7c77e;
+}
+
+.illusion-hud {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  pointer-events: none;
+  color: #e5f0e9;
+  font-size: 12px;
+  text-shadow: 0 1px 4px #071521;
+}
+
+.illusion-hud span {
+  padding: 5px 8px;
+  border: 1px solid rgba(178, 217, 208, 0.14);
+  border-radius: 8px;
+  background: rgba(5, 22, 31, 0.48);
+  backdrop-filter: blur(5px);
+}
+
+.illusion-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+}
+
+.illusion-levels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.illusion-level {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.illusion-level span,
+.illusion-level small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.illusion-level span {
+  font-size: 12px;
+}
+
+.illusion-level small {
+  margin-top: 3px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.illusion-level.active {
+  border-color: rgba(236, 193, 111, 0.75);
+  background: rgba(236, 193, 111, 0.1);
+}
+
+.illusion-level:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.illusion-objective {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(91, 170, 165, 0.07);
+}
+
+.illusion-panel-label {
+  display: block;
+  margin-bottom: 5px;
+  color: #8bc9c1;
+  font-size: 11px;
+}
+
+.illusion-objective strong {
+  font-size: 14px;
+}
+
+.illusion-objective p {
+  min-height: 40px;
+  margin: 7px 0 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.illusion-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.illusion-tools .btn {
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.illusion-help {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.illusion-complete {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: flex-start;
+  align-items: safe center;
+  justify-content: center;
+  overflow: auto;
+  padding: 12px;
+  background: rgba(3, 14, 23, 0.68);
+  backdrop-filter: blur(4px);
+}
+
+.illusion-complete-card {
+  width: min(360px, 100%);
+  padding: 20px;
+  border: 1px solid rgba(237, 197, 119, 0.45);
+  border-radius: 16px;
+  background: rgba(7, 26, 35, 0.95);
+  color: #edf3eb;
+  text-align: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+}
+
+.illusion-complete-card h2 {
+  margin: 4px 0 8px;
+  font-size: 24px;
+}
+
+.illusion-complete-card p {
+  margin: 0;
+  color: #baccc8;
+  font-size: 13px;
+}
+
+.illusion-complete-card .illusion-complete-kicker {
+  color: #e9c479;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+
+.illusion-complete-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .illusion-game {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .illusion-levels {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .illusion-objective p {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .illusion-game {
+    gap: 10px;
+  }
+
+  .illusion-stage {
+    border-radius: 13px;
+  }
+
+  .illusion-hud {
+    top: 6px;
+    left: 6px;
+    right: 6px;
+    gap: 6px;
+    font-size: 10px;
+  }
+
+  .illusion-hud span {
+    padding: 4px 6px;
+  }
+
+  .illusion-panel {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .illusion-levels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .illusion-complete {
+    padding: 8px;
+  }
+
+  .illusion-complete-card {
+    padding: 12px;
+  }
+
+  .illusion-complete-card h2 {
+    font-size: 18px;
+  }
+
+  .illusion-complete-actions {
+    margin-top: 10px;
+  }
+
+  .illusion-complete-actions .btn {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+}

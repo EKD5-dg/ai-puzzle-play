@@ -470,6 +470,26 @@ export const metaCrystalDefense: GameMeta = {
   higherIsBetter: true,
 };
 
+export const metaIllusion3D: GameMeta = {
+  id: 'illusion-3d',
+  title: '3D 错视遗迹',
+  description: '转动浮空遗迹，让断口光环在视野里重合成桥；收集星核，找出最短归途！',
+  icon: (
+    <svg width="1em" height="1em" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="3.5" aria-hidden>
+      <path d="M8 39 27 29 48 39 29 50Z" />
+      <path d="M16 27 34 17 56 28" strokeDasharray="5 5" />
+      <path d="M27 29V15l7-4 7 4v15" />
+      <path d="M29 50v7" />
+    </svg>
+  ),
+  difficulty: '中等',
+  category: '逻辑',
+  tags: ['3D', '空间', '解谜', '错视'],
+  bestScoreLabel: '最高单关星级',
+  higherIsBetter: true,
+  bestVariants: ['0', '1', '2', '3', '4', '5'],
+};
+
 /** 成绩比较方向权威表：false=成绩越小越好（步数/时间类）。由各 meta 派生，云同步服务端也内置了同样白名单（functions/api/sync.js），新增"成绩取小"的游戏需两处同步 */
 export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
   [
@@ -507,6 +527,7 @@ export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
     metaGaze3D,
     metaQubic3D,
     metaCrystalDefense,
+    metaIllusion3D,
   ].map((m) => [m.id, m.higherIsBetter]),
 );
 
