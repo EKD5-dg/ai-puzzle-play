@@ -490,6 +490,24 @@ export const metaIllusion3D: GameMeta = {
   bestVariants: ['0', '1', '2', '3', '4', '5'],
 };
 
+export const metaLabyrinth3D: GameMeta = {
+  id: 'labyrinth-3d',
+  title: '3D 滚球迷宫',
+  description: '倾斜悬浮星盘让钢珠滚进金色终点：冰面打滑、沙地减速、铜杆横扫，八关冲分！',
+  icon: (
+    <svg width="1em" height="1em" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="3.5" aria-hidden>
+      <path d="M6 41 30 26 58 38 34 54Z" />
+      <circle cx="25" cy="36" r="4.6" fill="currentColor" stroke="none" />
+      <ellipse cx="43" cy="42" rx="5.2" ry="2.7" />
+    </svg>
+  ),
+  difficulty: '中等',
+  category: '经典',
+  tags: ['3D', '物理', '滚球', '迷宫'],
+  bestScoreLabel: '最高分',
+  higherIsBetter: true,
+};
+
 export const metaMatch3: GameMeta = {
   id: 'match-3',
   title: '宝石三消',
@@ -540,6 +558,7 @@ export const HIGHER_IS_BETTER: Record<string, boolean> = Object.fromEntries(
     metaQubic3D,
     metaCrystalDefense,
     metaIllusion3D,
+    metaLabyrinth3D,
     metaMatch3,
   ].map((m) => [m.id, m.higherIsBetter]),
 );
