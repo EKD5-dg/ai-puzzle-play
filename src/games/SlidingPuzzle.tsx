@@ -57,8 +57,9 @@ export default function SlidingPuzzle() {
   const [board, setBoard] = useState<Board>(() => shuffleBoard(LEVELS[1].size));
   const [moves, setMoves] = useState(0);
   const [won, setWon] = useState(false);
-  // 窄屏（≤640px）缩小方块尺寸，避免棋盘溢出 375px 视口
+  // 窄屏（≤640px）缩小方块尺寸；viewportW 用于 320px 级窄屏继续收缩 4×4/5×5 棋盘
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 640);
+  const [viewportW, setViewportW] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 360));
   // 每种棋盘独立记键：3×3 的二十几步会永久压住 5×5，共用一键则大棋盘永不破纪录
   const best = useBestScore(`${metaSliding.id}:${sizeIdx}`);
   const { toast } = useToast();
@@ -106,15 +107,21 @@ export default function SlidingPuzzle() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [won]);
 
-  // 转屏/改窗口只动视口不动状态，需订阅 resize 重新计算 narrow
+  // 转屏/改窗口只动视口不动状态，需订阅 resize 重新计算
   useEffect(() => {
-    const onResize = () => setNarrow(window.innerWidth <= 640);
+    const onResize = () => {
+      setNarrow(window.innerWidth <= 640);
+      setViewportW(window.innerWidth);
+    };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const tileSize = size === 5 ? (narrow ? 58 : 72) : size === 4 ? (narrow ? 78 : 92) : narrow ? 94 : 108;
   const pad = 3; // 内边距偏移
+  const baseTile = size === 5 ? (narrow ? 58 : 72) : size === 4 ? (narrow ? 78 : 92) : narrow ? 94 : 108;
+  // 可用宽度按视口减页面左右内边距估算；320px 下 4×4 从 78 收缩到约 70，避免右侧被裁
+  const available = Math.max(160, Math.min(viewportW - 32, 640));
+  const tileSize = Math.min(baseTile, Math.floor((available - pad * 2) / size));
 
   return (
     <GameShell

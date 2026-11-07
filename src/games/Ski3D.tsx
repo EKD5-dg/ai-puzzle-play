@@ -938,7 +938,8 @@ export default function Ski3D() {
       }
 
       items.sort((a, b) => b.z - a.z);
-      for (const it of items) it.draw();
+      // 玩家 z=PZ：比玩家远的先画，比玩家近的等玩家画完再覆盖
+      for (const it of items) if (it.z >= PZ) it.draw();
 
       // ---- 滑雪者（背面视角，近端中央偏下） ----
       const p = w.player;
@@ -1103,6 +1104,9 @@ export default function Ski3D() {
         ctx.ellipse(headX, neckY, u * 0.1, u * 0.04, 0, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      // 已经越过玩家平面的近处障碍要画在玩家前面
+      for (const it of items) if (it.z < PZ) it.draw();
 
       // 雪花前景
       ctx.fillStyle = 'rgba(255,255,255,0.85)';

@@ -526,10 +526,14 @@ export default function Pong3D() {
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, RW, RH);
 
-      const n1 = proj(-HX, -HY, 0);
-      const n2 = proj(HX, HY, 0);
-      const f1 = proj(-HX, -HY, D);
-      const f2 = proj(HX, HY, D);
+      const n1 = proj(-HX, -HY, 0); // 近端左下
+      const n2 = proj(HX, HY, 0); // 近端右上
+      const n3 = proj(HX, -HY, 0); // 近端右下
+      const nTL = proj(-HX, HY, 0); // 近端左上
+      const f1 = proj(-HX, -HY, D); // 远端左下
+      const f2 = proj(HX, HY, D); // 远端右上
+      const f3 = proj(HX, -HY, D); // 远端右下
+      const fTL = proj(-HX, HY, D); // 远端左上
 
       // 尽头端墙（AI 侧，红色呼吸框）
       ctx.fillStyle = '#0c1126';
@@ -540,10 +544,10 @@ export default function Pong3D() {
       ctx.strokeRect(f1.x, f2.y, f2.x - f1.x, f1.y - f2.y);
 
       // 四面隧道壁（近深远浅的蓝灰，营造纵深）
-      quad([{ x: n1.x, y: n2.y }, { x: n2.x, y: n2.y }, { x: f2.x, y: f2.y }, { x: f1.x, y: f2.y }], 'rgba(13,18,42,0.88)'); // 顶
-      quad([n1, n2, f2, f1], 'rgba(24,32,66,0.88)'); // 底
-      quad([{ x: n1.x, y: n2.y }, n1, f1, { x: f1.x, y: f2.y }], 'rgba(17,23,50,0.88)'); // 左
-      quad([{ x: n2.x, y: n2.y }, n2, f2, { x: f2.x, y: f2.y }], 'rgba(21,27,56,0.88)'); // 右
+      quad([nTL, n2, f2, fTL], 'rgba(13,18,42,0.88)'); // 顶
+      quad([n1, n3, f3, f1], 'rgba(24,32,66,0.88)'); // 底
+      quad([nTL, n1, f1, fTL], 'rgba(17,23,50,0.88)'); // 左
+      quad([n2, n3, f3, f2], 'rgba(21,27,56,0.88)'); // 右
 
       // 横向网格环：随深度衰减；球所在的环增亮 = 击球时机提示
       for (let z = 1; z < D; z++) {

@@ -1662,8 +1662,9 @@ export default function Gaze3D() {
   const stickRef = useRef<{ id: number; ox: number; oy: number; dx: number; dy: number } | null>(null);
   const lookRef = useRef<{ id: number; lastX: number; lastY: number; x0: number; y0: number; t0: number; moved: boolean } | null>(null);
   const btnFireRef = useRef(false);
-  /** 画布视角区按住中（长按持续射击） */
+  /** 画布视角区按住中（长按持续射击）；id 用于暂停/结算后可靠清掉按住状态 */
   const lookHoldRef = useRef(false);
+  const lookHoldIdRef = useRef<number | null>(null);
   const settledRef = useRef(false);
 
   statusRef.current = status;
@@ -1672,16 +1673,32 @@ export default function Gaze3D() {
     setHud({ floor: w.floor, lives: w.lives, cores: w.coresTaken, total: w.cores.length, score: w.score });
   }, []);
 
+  const releaseLookHold = useCallback(() => {
+    lookHoldRef.current = false;
+    lookHoldIdRef.current = null;
+    lookRef.current = null;
+  }, []);
+
   const start = useCallback(() => {
     worldRef.current = makeWorld(1, 0, LIVES_MAX);
     settledRef.current = false;
     keysRef.current = { fwd: false, back: false, strafeL: false, strafeR: false, turnL: false, turnR: false, run: false, fire: false };
     stickRef.current = null;
-    lookRef.current = null;
     btnFireRef.current = false;
+    releaseLookHold();
     syncHud(worldRef.current);
     setStatus('playing');
-  }, [syncHud]);
+  }, [releaseLookHold, syncHud]);
+
+  const togglePause = useCallback(() => {
+    const s = statusRef.current;
+    if (s === 'playing') {
+      releaseLookHold();
+      setStatus('paused');
+    } else if (s === 'paused') {
+      setStatus('playing');
+    }
+  }, [releaseLookHold]);
 
   const fireOnce = useCallback(() => {
     const w = worldRef.current;
@@ -1697,6 +1714,7 @@ export default function Gaze3D() {
       lookRef.current = null;
       btnFireRef.current = false;
       lookHoldRef.current = false;
+      lookHoldIdRef.current = null;
     };
     const down = (e: KeyboardEvent) => {
       const k = e.code;
@@ -1713,9 +1731,7 @@ export default function Gaze3D() {
       else if (k === 'ShiftLeft' || k === 'ShiftRight') keys.run = true;
       else if (k === 'Space' || k === 'KeyF' || k === 'KeyJ') keys.fire = true;
       else if (k === 'KeyP' && !e.repeat) {
-        const s = statusRef.current;
-        if (s === 'playing') setStatus('paused');
-        else if (s === 'paused') setStatus('playing');
+        togglePause();
       } else if (k === 'Enter' && !e.repeat) {
         const s = statusRef.current;
         if (s === 'ready' || s === 'over') start();
@@ -1752,7 +1768,7 @@ export default function Gaze3D() {
       window.removeEventListener('blur', blur);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [start]);
+  }, [start, togglePause]);
 
   // ============ 指针（转向 / 俯仰 / 摇杆 / 点按开火） ============
 
@@ -1770,6 +1786,7 @@ export default function Gaze3D() {
       lookRef.current = { id: e.pointerId, lastX: p.x, lastY: p.y, x0: p.x, y0: p.y, t0: performance.now(), moved: false };
       // 按住视角区 = 持续射击（帧循环按 cd 节流）：注释一直这么写但只有键盘/光矛按钮接了持续射击
       lookHoldRef.current = true;
+      lookHoldIdRef.current = e.pointerId;
     }
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -1777,7 +1794,7 @@ export default function Gaze3D() {
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     // 非游玩态丢掉拖拽：暂停/结束后仍能转视角，恢复时会把跨暂停期的位移一次性累加上
     if (statusRef.current !== 'playing') {
-      lookRef.current = null;
+      releaseLookHold();
       return;
     }
     const stick = stickRef.current;
@@ -1807,12 +1824,16 @@ export default function Gaze3D() {
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // 即使 lookRef 已被暂停/结算清空，也要按 pointerId 清掉持续开火标记
+    if (lookHoldIdRef.current === e.pointerId) {
+      lookHoldRef.current = false;
+      lookHoldIdRef.current = null;
+    }
     const look = lookRef.current;
     if (look && e.pointerId === look.id) {
       // 没拖动且时间短 = 轻点 = 单发（长按期间帧循环已经按 cd 持续射击）
       if (!look.moved && performance.now() - look.t0 < 240) fireOnce();
       lookRef.current = null;
-      lookHoldRef.current = false;
     }
     if (stickRef.current?.id === e.pointerId) stickRef.current = null;
   };
@@ -2376,7 +2397,7 @@ export default function Gaze3D() {
         <div className="g3d-actions">
           <button
             className="btn btn-ghost"
-            onClick={() => setStatus((s) => (s === 'playing' ? 'paused' : s === 'paused' ? 'playing' : s))}
+            onClick={togglePause}
           >
             {status === 'paused' ? '▶ 继续' : '⏸ 暂停'}
           </button>

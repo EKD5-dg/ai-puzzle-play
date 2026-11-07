@@ -712,8 +712,9 @@ export default function Tunnel3D() {
 
       // 背景星点闪烁（装饰，不受 playing 门控）
       for (const st of w.stars) {
-        st.x -= (playing ? w.speed : 1.2) * st.depth * 2.4 * dt * ((st.x - CX) / RW + (Math.random() - 0.5) * 0.02);
-        st.y -= (playing ? w.speed : 1.2) * st.depth * 2.4 * dt * ((st.y - CY) / RH);
+        // 从灭点向外放射：对 (st.x-CX) 做加法，而不是减法把星星吸向中心
+        st.x += (playing ? w.speed : 1.2) * st.depth * 2.4 * dt * ((st.x - CX) / RW + (Math.random() - 0.5) * 0.02);
+        st.y += (playing ? w.speed : 1.2) * st.depth * 2.4 * dt * ((st.y - CY) / RH);
         // 漂出屏幕的星点从中心附近重生（放射状星流强化速度感）
         if (st.x < -4 || st.x > RW + 4 || st.y < -4 || st.y > RH + 4) {
           const a = Math.random() * TAU;

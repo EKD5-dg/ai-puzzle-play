@@ -4,7 +4,12 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Content-Type': 'application/json',
+  'Cache-Control': 'no-store',
+  'X-Content-Type-Options': 'nosniff',
 };
+
+/** 配对请求体只需要一个 6 位码 + 可选 join 标志 */
+const MAX_BODY = 4 * 1024;
 
 function codeValid(code) {
   return typeof code === 'string' && /^[A-Z0-9]{6}$/.test(code);
@@ -17,9 +22,20 @@ export async function onRequestOptions() {
 export async function onRequestPost({ request, env }) {
   let body;
   try {
-    body = await request.json();
+    const declared = Number(request.headers.get('content-length') || 0);
+    if (declared > MAX_BODY) {
+      return new Response(JSON.stringify({ error: 'payload too large' }), { status: 413, headers: CORS_HEADERS });
+    }
+    const raw = await request.text();
+    if (raw.length > MAX_BODY) {
+      return new Response(JSON.stringify({ error: 'payload too large' }), { status: 413, headers: CORS_HEADERS });
+    }
+    body = JSON.parse(raw);
   } catch {
     return new Response(JSON.stringify({ error: 'bad json' }), { status: 400, headers: CORS_HEADERS });
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return new Response(JSON.stringify({ error: 'invalid payload' }), { status: 400, headers: CORS_HEADERS });
   }
   const code = String(body.code || '').toUpperCase();
   if (!codeValid(code)) {

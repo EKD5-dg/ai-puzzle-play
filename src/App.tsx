@@ -217,7 +217,7 @@ export default function App() {
       // 遍历云端所有成绩键（支持 `id:后缀` 细分键，如扫雷按难度），按各游戏比较方向合并
       for (const [cid, cv] of Object.entries(cloud)) {
         // 云端值必须是有意义的正数：0 对"取小"的成绩是必胜值，会把本地真纪录冲掉
-        if (typeof cv !== 'number' || !Number.isFinite(cv) || cv <= 0) continue;
+        if (typeof cv !== 'number' || !Number.isFinite(cv) || cv <= 0 || cv > 1e9) continue;
         // 与存储层同源的解析（值是 JSON 序列化的）：Number() 会把脏值当成 0，导致云端小值覆盖本地好成绩
         const lv = readBestKey(`best:${cid}`);
         if (lv === null || isBetterScore(cid, cv, lv)) {
@@ -243,13 +243,17 @@ export default function App() {
         setSoundOn(!data.prefs.soundMuted);
       }
       // 回传本机更优成绩到云端（服务端按权威方向表合并，幂等安全），保证第三台设备加入时拿到最新数据
-      pushLocalScores(code).catch(() => {
-        /* 离线静默：新纪录会自动补传 */
-      });
+      let uploadNote = '';
+      try {
+        await pushLocalScores(code);
+      } catch {
+        uploadNote = '（本机成绩回传失败，联网后会再次尝试）';
+      }
       showSyncMsg(
-        merged > 0 || progressMsg
+        (merged > 0 || progressMsg
           ? `同步完成！合并了 ${merged} 条云端成绩${progressMsg}`
-          : '已连接，云端与本地一致',
+          : '已连接，云端与本地一致') + uploadNote,
+        !!uploadNote,
       );
       // 广播成绩变更：首页卡片、大厅统计等自动刷新
       notifyScoresUpdated();

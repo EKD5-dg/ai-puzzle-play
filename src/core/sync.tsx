@@ -1,14 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useLocalStorage } from './useLocalStorage';
+import { useCallback, useEffect, useMemo } from 'react';
+import { readBestKey, useLocalStorage } from './useLocalStorage';
 import { HIGHER_IS_BETTER } from './gameMetas';
 import { setMuted as applySoundMuted } from './sound';
+import { isBetterDqSave, sanitizeDqSave } from './dqSave';
+import type { DqSave } from './dqSave';
+
+// 保持原导出面：App/DragonQuest 仍从 core/sync 取这些符号
+export { isBetterDqSave, sanitizeDqSave };
+export type { DqSave };
 
 /**
  * 跨设备成绩云同步（Cloudflare Pages Functions + KV）
  * 用法：const best = useBestScore(meta.id) → { value, updateBest }（与 useLocalStorage 兼容）
  */
-const API = 'https://puzzle-play.pages.dev/api/sync';
-const PAIR_API = 'https://puzzle-play.pages.dev/api/pair';
+// 同源相对路径：生产走 pages.dev/自定义域名，避免本地开发误写生产 KV。
+// 注意 vite dev/preview 本身不提供 Pages Functions，本地联调云同步需用 wrangler pages dev。
+const API = '/api/sync';
+const PAIR_API = '/api/pair';
 const CODE_KEY = 'pp:sync-code';
 
 /** 取 gameId 的基础 id（支持 `id:后缀` 形式，如扫雷按难度细分 `minesweeper:0`，方向判断只看基础 id） */
@@ -22,21 +30,9 @@ export function isBetterScore(gameId: string, next: number, prev: number): boole
   return HIGHER_IS_BETTER[baseGameId(gameId)] === false ? next < prev : next > prev;
 }
 
-/** 勇者斗恶龙存档（楼层 + 勇者状态），跨设备同步用 */
-export interface DqSave {
-  floor: number;
-  player: {
-    level: number;
-    xp: number;
-    hp: number;
-    maxHp: number;
-    mp: number;
-    maxMp: number;
-    atk: number;
-    def: number;
-    gold: number;
-    kills: number;
-  };
+/** 云端成绩必须是有限正数且不超过服务端的 MAX_SCORE；0/字符串/NaN 一律丢弃 */
+function validCloudScore(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 1e9;
 }
 
 /** 云同步负载：成绩 + 进度 + 偏好 */
@@ -48,48 +44,6 @@ export interface SyncPayload {
 
 const DQ_SAVE_KEY = 'pp:dq:save';
 const SOUND_MUTE_KEY = 'pp:sound-muted';
-/** 存档字段兜底值（与勇者斗恶龙 PLAYER_START 一致）：脏存档/旧版存档缺字段时按起点补齐 */
-const DQ_START: DqSave['player'] = {
-  level: 1,
-  xp: 0,
-  hp: 60,
-  maxHp: 60,
-  mp: 10,
-  maxMp: 10,
-  atk: 8,
-  def: 3,
-  gold: 0,
-  kills: 0,
-};
-
-/**
- * 存档结构校验与清洗：非有限数一律回退默认值，并夹到合法区间。
- * 本地手改、旧版结构或另一台设备上传的脏数据都可能缺字段，而 NaN 的攻击力会让
- * `newHp > 0` 恒假 —— 玩家会一路"秒杀"包括 10 层恶龙在内的全部怪物并把最高层数写进最佳分。
- */
-export function sanitizeDqSave(raw: unknown): DqSave | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as { floor?: unknown; player?: unknown };
-  if (!o.player || typeof o.player !== 'object') return null;
-  const src = o.player as Record<string, unknown>;
-  const num = (v: unknown, def: number, min: number) =>
-    typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.floor(v)) : def;
-  const player: DqSave['player'] = {
-    level: num(src.level, DQ_START.level, 1),
-    xp: num(src.xp, DQ_START.xp, 0),
-    hp: 1,
-    maxHp: num(src.maxHp, DQ_START.maxHp, 1),
-    mp: 0,
-    maxMp: num(src.maxMp, DQ_START.maxMp, 0),
-    atk: num(src.atk, DQ_START.atk, 1),
-    def: num(src.def, DQ_START.def, 0),
-    gold: num(src.gold, DQ_START.gold, 0),
-    kills: num(src.kills, DQ_START.kills, 0),
-  };
-  player.hp = Math.min(num(src.hp, player.maxHp, 1), player.maxHp);
-  player.mp = Math.min(num(src.mp, player.maxMp, 0), player.maxMp);
-  return { floor: Math.min(num(o.floor, 1, 1), 999), player };
-}
 
 /** 读取本机勇者斗恶龙存档（已清洗，结构不合法时视为无存档） */
 export function readDqSave(): DqSave | null {
@@ -124,12 +78,6 @@ export function readSoundMuted(): boolean {
 /** 写入本机音效开关（委托 sound.ts 的 setMuted：同时更新内存态，避免按钮显示与实际发声不一致） */
 export function writeSoundMuted(muted: boolean): void {
   applySoundMuted(muted);
-}
-
-/** 比较两份存档优劣：楼层高者优；同层则勇者等级高者优 */
-export function isBetterDqSave(a: DqSave, b: DqSave): boolean {
-  if (a.floor !== b.floor) return a.floor > b.floor;
-  return a.player.level > b.player.level;
 }
 
 export function getSyncCode(): string | null {
@@ -231,11 +179,7 @@ export function useBestScore(gameId: string) {
     [local],
   );
 
-  // 最新本地值的 ref 镜像：云端拉取回调里读取，避免切换 key（如扫雷切难度）时闭包过期
-  const valueRef = useRef(local.value);
-  valueRef.current = local.value;
-
-  // 挂载时从云端拉取并合并（云端更优才覆盖本地）
+  // 挂载时从云端拉取并合并（云端更优才覆盖本地；本地更优则补推一次）
   useEffect(() => {
     const code = getSyncCode();
     if (!code) return;
@@ -244,10 +188,27 @@ export function useBestScore(gameId: string) {
       .then((cloud) => {
         if (cancelled) return;
         const cloudBest = cloud.scores?.[gameId];
-        if (cloudBest == null) return;
-        const localBest = valueRef.current;
-        if (localBest == null || isBetterScore(gameId, cloudBest, localBest)) {
+        const cloudValid = validCloudScore(cloudBest);
+        // 直接读存储而不是 render 期 valueRef：拉取回来时本地可能刚写入更新的纪录
+        const localBest = readBestKey(`best:${gameId}`);
+        if (localBest == null || localBest <= 0) {
+          if (cloudValid) setLocal(cloudBest);
+          return;
+        }
+        if (!cloudValid) {
+          // 云端没有/是不合法值，但本地有有效纪录：补推一次
+          pushCloud(code, { scores: { [gameId]: localBest } }).catch(() => {
+            /* 离线静默 */
+          });
+          return;
+        }
+        if (isBetterScore(gameId, cloudBest, localBest)) {
           setLocal(cloudBest);
+        } else if (isBetterScore(gameId, localBest, cloudBest)) {
+          // 本地更好但之前在离线时没推上去：挂载时补一次 merge-up
+          pushCloud(code, { scores: { [gameId]: localBest } }).catch(() => {
+            /* 离线静默 */
+          });
         }
       })
       .catch(() => {

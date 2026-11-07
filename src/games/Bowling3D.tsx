@@ -183,6 +183,8 @@ interface World {
   aim: number;
   power: number;
   spin: number;
+  /** 出手瞬间冻结的旋转值：物理只读它，滑杆在球飞行中改动不再影响球路 */
+  throwSpin: number;
   drag: 'none' | 'stance' | 'aim';
   dragMoved: boolean;
   dragX0: number;
@@ -234,6 +236,7 @@ function newWorld(): World {
     aim: 0,
     power: 0.62,
     spin: 0,
+    throwSpin: 0,
     drag: 'none',
   dragMoved: false,
   dragX0: 0,
@@ -316,7 +319,7 @@ function substep(w: World, h: number) {
   if (rolling) {
     // 侧旋：球道后段（约 3→11）逐渐发力，形成先直后弯的弧线
     const ramp = clamp((b.z - 3) / 8, 0.08, 1);
-    b.vx += w.spin * HOOK_A * ramp * h;
+    b.vx += w.throwSpin * HOOK_A * ramp * h;
     b.x += b.vx * h;
     b.z += b.vz * h;
     const damp = Math.exp(-BALL_DAMP * h);
@@ -438,6 +441,8 @@ function throwBall(w: World) {
   b.pit = false;
   b.travel = 0;
   b.trail = [[b.x, b.z]];
+  // 出手即锁定旋转：之后再拖滑杆只影响下一球
+  w.throwSpin = w.spin;
   w.phase = 'roll';
   w.rollT = 0;
   w.settleT = 0;

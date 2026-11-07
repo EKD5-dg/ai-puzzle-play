@@ -1362,6 +1362,8 @@ export default function Racing3D() {
 
   const start = useCallback(() => {
     worldRef.current = newWorld();
+    // 新世界从零开始：清掉上一局仍按住的转向，避免左转被残留的右转抵消
+    steerHeldRef.current = { kL: false, kR: false, tL: false, tR: false };
     overHandledRef.current = false;
     setNewRecord(false);
     setHud({ kmh: 0, meters: 0, lives: 3, nearMiss: 0, score: 0 });
@@ -1590,7 +1592,7 @@ export default function Racing3D() {
             </div>
           )}
           {status === 'over' && (
-            <div className="rc3d-overlay" onClick={start}>
+            <div className="rc3d-overlay">
               <h2>🏁 比赛结束</h2>
               <p>
                 得分 {hud.score}（里程 {hud.meters} m + 近失 ×{hud.nearMiss}）

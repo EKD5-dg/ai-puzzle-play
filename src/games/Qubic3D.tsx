@@ -4,7 +4,7 @@ import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { useBestScore } from '../core/sync';
 import { metaQubic3D } from '../core/gameMetas';
-import { N, CELLS, HUMAN, AI, ax, ay, az, emptyBoard, winLineAt, winningSquares, enclosedCell, chooseMove, LEVELS } from './qubicAI';
+import { N, CELLS, HUMAN, AI, ax, ay, az, emptyBoard, winLineAt, winningSquares, chooseMove, LEVELS } from './qubicAI';
 
 // ============ 渲染常量 ============
 
@@ -108,6 +108,8 @@ export default function Qubic3D() {
     (lv: number) => {
       if (lv === level) return;
       setLevel(lv);
+      // 连胜是难度内纪录：简单档 3 连胜 + 困难档首胜不能写成困难档 4 连胜
+      setStreak(0);
       reset();
     },
     [level, reset],
@@ -639,8 +641,7 @@ export default function Qubic3D() {
         // 远端方块压暗一点，给纵深一个明确线索
         const fog = clamp((depth - D * 0.72) / (D * 0.7), 0, 1);
         const lig = (inWin ? 68 : v === HUMAN ? 57 : v === AI ? 59 : 60) * (1 - fog * 0.22);
-        // 空格子若六个正交邻居都被占满，就完全被包在里面，画了也只剩一层噪声
-        if (v === 0 && !isHover && !threatMineSet.has(i) && !threatTheirsSet.has(i) && enclosedCell(b, i)) continue;
+        // 被六个邻居包住的空格也保留极淡的落点圆点：此前整格跳过会让它完全不可见却仍可落子。
 
         items.push({
           depth,

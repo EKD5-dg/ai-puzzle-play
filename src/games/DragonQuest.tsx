@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameShell } from '../core/GameShell';
 import { useBestScore, getSyncCode, pushProgress, readDqSave, writeDqSave } from '../core/sync';
 import type { DqSave } from '../core/sync';
+import { DQ_MAX_FLOOR, DQ_XP_PER_LEVEL } from '../core/dqSave';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { Portrait, preloadPortraits } from './Portrait';
@@ -32,7 +33,7 @@ preloadPortraits([HERO_PORTRAIT, ...Object.values(MONSTER_PORTRAITS).map((p) => 
 
 
 
-const FLOORS = 10;
+const FLOORS = DQ_MAX_FLOOR;
 // 存档键统一由 core/sync 的 DQ_SAVE_KEY 管理，本文件不再自己拼 localStorage 键
 
 interface PlayerState {
@@ -108,7 +109,7 @@ function makeMonster(floor: number): Monster {
 }
 
 function xpNeed(level: number): number {
-  return level * 22;
+  return level * DQ_XP_PER_LEVEL;
 }
 
 /** 读档：统一走 core 的清洗入口（本地手改 / 旧版结构 / 云端同步下来的脏字段都会回退起点值） */

@@ -37,8 +37,10 @@ const FRICTION = 1.55;
 const STOP_EPS = 0.04;
 const MAX_POWER = 9.2;
 const MIN_POWER = 1.1;
-/** 自由球白球只能放在开球区（x ≤ 此值） */
-const CUE_MAX_X = -0.15;
+/** 开球线：开球犯规后的自由球只能放在它左侧 */
+const BREAK_LINE_X = -HX * 0.45;
+/** 普通犯规后的自由球上限：几乎全台（保留旧版手感，不缩成开球区） */
+const FREE_BALL_MAX_X = -0.15;
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
@@ -132,6 +134,8 @@ interface World {
   /** 自由球放置预览 */
   handX: number;
   handZ: number;
+  /** 本次自由球的 x 上限：开球犯规用 BREAK_LINE_X，普通犯规用 FREE_BALL_MAX_X */
+  handMaxX: number;
 }
 
 function ballColors(id: number): string {
@@ -190,6 +194,7 @@ function newWorld(): World {
     messageAt: -9,
     handX: -HX * 0.55,
     handZ: 0,
+    handMaxX: FREE_BALL_MAX_X,
   };
 }
 
@@ -223,7 +228,7 @@ function cueBall(w: World): Ball {
 function placeCue(w: World, x: number, z: number) {
   const c = cueBall(w);
   const minX = -HX + BALL_R + 0.05;
-  const maxX = CUE_MAX_X;
+  const maxX = w.handMaxX;
   const minZ = -HZ + BALL_R + 0.05;
   const maxZ = HZ - BALL_R - 0.05;
   let cx = clamp(x, minX, maxX);
@@ -595,7 +600,7 @@ export default function Pool3D() {
     const [sx, sy] = pointerToCanvas(e);
     if (w.phase === 'hand') {
       const [wx, wz] = unproject(sx, sy);
-      w.handX = clamp(wx, -HX + BALL_R + 0.05, CUE_MAX_X);
+      w.handX = clamp(wx, -HX + BALL_R + 0.05, w.handMaxX);
       w.handZ = clamp(wz, -HZ + BALL_R + 0.05, HZ - BALL_R - 0.05);
       return;
     }
@@ -694,6 +699,8 @@ export default function Pool3D() {
         syncLeft();
         return true;
       }
+      // 开球犯规才限制在开球线内；中后盘普通犯规仍是几乎全台的自由球
+      w.handMaxX = w.shots <= 1 ? BREAK_LINE_X : FREE_BALL_MAX_X;
       const [cx, cz] = defaultCuePos(w);
       placeCue(w, cx, cz);
       cueBall(w).pocketed = false;
@@ -945,8 +952,8 @@ export default function Pool3D() {
       ctx.restore();
 
       // 开球线
-      const hsA = proj(-HX * 0.45, feltY + 0.02, -HZ + 0.15);
-      const hsB = proj(-HX * 0.45, feltY + 0.02, HZ - 0.15);
+      const hsA = proj(BREAK_LINE_X, feltY + 0.02, -HZ + 0.15);
+      const hsB = proj(BREAK_LINE_X, feltY + 0.02, HZ - 0.15);
       ctx.strokeStyle = 'rgba(255,255,255,0.18)';
       ctx.lineWidth = 1;
       ctx.beginPath();

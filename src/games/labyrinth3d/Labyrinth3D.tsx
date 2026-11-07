@@ -4,7 +4,7 @@ import { GameShell } from '../../core/GameShell';
 import { metaLabyrinth3D } from '../../core/gameMetas';
 import { notifyScoresUpdated, readBestKey } from '../../core/useLocalStorage';
 import { sfx } from '../../core/sound';
-import { useBestScore } from '../../core/sync';
+import { fetchCloud, getSyncCode, pushCloud, useBestScore } from '../../core/sync';
 import { useToast } from '../../core/Toast';
 import { controlTilt, createControl, isTiltKey, reduceControl } from './input.ts';
 import type { ControlState } from './input.ts';
@@ -14,6 +14,7 @@ import type { ScoreBreakdown } from './physics.ts';
 import { drawScene, makeCamera } from './render3d.ts';
 import type { Camera } from './render3d.ts';
 import { findRoute } from './route.ts';
+import { clampStars, starId, starKey } from './stars.ts';
 import type { RunState, Vec2 } from './types.ts';
 import './Labyrinth3D.css';
 
@@ -27,17 +28,56 @@ interface Hud {
   hints: number;
 }
 
-const STAR_KEY = (index: number) => `labyrinth:star:${index}`;
+/**
+ * 星级放进 `pp:best:` 命名空间：这样现有的全量成绩上传/云同步/加入合并会自动带上，
+ * 又因为 meta 没声明 bestVariants，不会污染大厅的“最高分”聚合。
+ * 用稳定关卡 id 而不是数组下标，未来调整关卡顺序不会把星星错配。
+ */
+const STAR_ID = (index: number) => starId(metaLabyrinth3D.id, LEVELS[index].def.id);
+const STAR_KEY = (index: number) => starKey(metaLabyrinth3D.id, LEVELS[index].def.id);
 
 function readStars(index: number): number {
-  return readBestKey(STAR_KEY(index)) ?? 0;
+  // 云端/手改的 4、3.1、NaN 都可能进本地；夹取后再参与渲染与解锁
+  return clampStars(readBestKey(STAR_KEY(index)));
+}
+
+/** 把旧版 `pp:labyrinth:star:<index>` 迁移到新键；返回是否有变更 */
+function migrateLegacyStars(): boolean {
+  let changed = false;
+  for (let i = 0; i < LEVELS.length; i++) {
+    const oldKey = `pp:labyrinth:star:${i}`;
+    try {
+      const raw = localStorage.getItem(oldKey);
+      if (raw !== null) {
+        const v = clampStars(JSON.parse(raw));
+        if (v > 0) {
+          const key = STAR_KEY(i);
+          const cur = readBestKey(key);
+          if (cur === null || v > cur) {
+            localStorage.setItem(`pp:${key}`, JSON.stringify(v));
+            changed = true;
+          }
+        }
+        localStorage.removeItem(oldKey);
+      }
+    } catch {
+      /* 隐私模式/脏数据跳过 */
+    }
+  }
+  if (changed) notifyScoresUpdated();
+  return changed;
 }
 
 function writeStars(index: number, stars: number): void {
-  if (stars <= readStars(index)) return;
+  const value = clampStars(stars);
+  if (value <= readStars(index)) return;
+  const key = STAR_KEY(index);
   try {
-    localStorage.setItem(`pp:${STAR_KEY(index)}`, JSON.stringify(stars));
+    localStorage.setItem(`pp:${key}`, JSON.stringify(value));
     notifyScoresUpdated();
+    // 本地 key 带 best: 前缀，云端 gameId 不能带；分开生成
+    const code = getSyncCode();
+    if (code) pushCloud(code, { scores: { [STAR_ID(index)]: value } }).catch(() => { /* 离线静默 */ });
   } catch {
     /* 隐私模式跳过 */
   }
@@ -68,6 +108,8 @@ export default function Labyrinth3D() {
   const modeRef = useRef<Mode>('intro');
   const levelRef = useRef(level);
   const totalRef = useRef(0);
+  /** 进入当前关时的累计分：重开本关保留它，不再把整局分数清零 */
+  const levelStartTotalRef = useRef(0);
   const bestRef = useRef(best);
   const hintRef = useRef<{ path: Vec2[]; until: number } | null>(null);
   const hudClockRef = useRef(0);
@@ -85,6 +127,56 @@ export default function Labyrinth3D() {
     [starVersion],
   );
 
+  // 迁移旧下标键，并从云端补拉星级（已配同步码时）；本地更优则补推
+  useEffect(() => {
+    const migrated = migrateLegacyStars();
+    const code = getSyncCode();
+    if (!code) {
+      if (migrated) setStarVersion((v) => v + 1);
+      return;
+    }
+    let cancelled = false;
+    fetchCloud(code)
+      .then((data) => {
+        if (cancelled) return;
+        let changed = migrated;
+        const toPush: Record<string, number> = {};
+        for (let i = 0; i < LEVELS.length; i++) {
+          const key = STAR_KEY(i);
+          const id = STAR_ID(i);
+          const cloud = data.scores?.[id];
+          const local = clampStars(readBestKey(key));
+          if (typeof cloud === 'number' && Number.isFinite(cloud) && cloud > 0 && cloud <= 3) {
+            if (local < cloud) {
+              try {
+                localStorage.setItem(`pp:${key}`, JSON.stringify(clampStars(cloud)));
+                changed = true;
+              } catch {
+                /* 配额满等 */
+              }
+            } else if (local > cloud) {
+              toPush[id] = local;
+            }
+          } else if (local > 0) {
+            toPush[id] = local;
+          }
+        }
+        if (Object.keys(toPush).length > 0) {
+          pushCloud(code, { scores: toPush }).catch(() => { /* 离线静默 */ });
+        }
+        if (changed) {
+          notifyScoresUpdated();
+          setStarVersion((v) => v + 1);
+        }
+      })
+      .catch(() => {
+        if (!cancelled && migrated) setStarVersion((v) => v + 1);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const beginLevel = useCallback((index: number, carry: number) => {
     const next = LEVELS[index];
     levelRef.current = next;
@@ -93,6 +185,7 @@ export default function Labyrinth3D() {
     hintRef.current = null;
     settledRef.current = false;
     cameraRef.current = null;
+    levelStartTotalRef.current = carry;
     totalRef.current = carry;
     setLevelIndex(index);
     setTotalScore(carry);
@@ -136,12 +229,35 @@ export default function Labyrinth3D() {
   }, [toast]);
 
   const restartLevel = useCallback(() => {
-    beginLevel(LEVELS.indexOf(levelRef.current), 0);
+    // 保留进入本关时的累计分：重开本关不等于重开整局
+    beginLevel(LEVELS.indexOf(levelRef.current), levelStartTotalRef.current);
   }, [beginLevel]);
 
-  const togglePause = useCallback(() => {
-    setMode((m) => (m === 'playing' ? 'paused' : m === 'paused' ? 'playing' : m));
+  /** 暂停时把盘面回正并清空输入，避免恢复后带着旧倾角直接滑出去 */
+  const pauseGame = useCallback(() => {
+    if (modeRef.current !== 'playing') return;
+    const run = runRef.current;
+    run.pitch = 0;
+    run.roll = 0;
+    controlRef.current = createControl();
+    setMode('paused');
   }, []);
+
+  const togglePause = useCallback(() => {
+    if (modeRef.current === 'playing') pauseGame();
+    else if (modeRef.current === 'paused') setMode('playing');
+  }, [pauseGame]);
+
+  /** 游玩中切关会丢弃当前局：先确认，避免侧栏误触 */
+  const selectLevel = useCallback(
+    (index: number) => {
+      if (modeRef.current !== 'intro') {
+        if (!window.confirm('当前关卡进度将丢失，确定切换关卡吗？')) return;
+      }
+      beginLevel(index, 0);
+    },
+    [beginLevel],
+  );
 
   const showHint = useCallback(() => {
     if (modeRef.current !== 'playing') return;
@@ -291,23 +407,25 @@ export default function Labyrinth3D() {
     };
     const clear = () => { controlRef.current = reduceControl(controlRef.current, { type: 'clear' }).state; };
     const hidden = () => {
-      if (document.hidden) {
-        clear();
-        setMode((m) => (m === 'playing' ? 'paused' : m));
-      }
+      if (document.hidden) pauseGame();
+    };
+    const blur = () => {
+      clear();
+      // 窗口失焦但仍可见（并排窗口/开发者工具）时也要暂停，否则物理继续跑
+      pauseGame();
     };
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
-    window.addEventListener('blur', clear);
+    window.addEventListener('blur', blur);
     document.addEventListener('visibilitychange', hidden);
     return () => {
       window.removeEventListener('keydown', keydown);
       window.removeEventListener('keyup', keyup);
-      window.removeEventListener('blur', clear);
+      window.removeEventListener('blur', blur);
       document.removeEventListener('visibilitychange', hidden);
       clear();
     };
-  }, [beginLevel, restartLevel, showHint, togglePause]);
+  }, [beginLevel, restartLevel, showHint, togglePause, pauseGame]);
 
   const pointOf = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -456,7 +574,11 @@ export default function Labyrinth3D() {
                   key={item.def.id}
                   className={`lab-level ${index === levelIndex ? 'active' : ''}`}
                   disabled={!unlocked}
-                  onClick={() => beginLevel(index, 0)}
+                  onClick={(e) => {
+                    // 移除焦点：否则 Enter 会再次触发本按钮，反复弹确认框
+                    e.currentTarget.blur();
+                    selectLevel(index);
+                  }}
                   title={unlocked ? `${item.def.name}（选中即从这一关开新局）` : '上一关拿到至少一星后解锁'}
                 >
                   <span>{index + 1}. {unlocked ? item.def.name : '尚未解锁'}</span>
