@@ -2,6 +2,9 @@
   "name": "puzzle-play",
   "private": true,
   "version": "1.0.0",
+  "engines": {
+    "node": ">=22.18"
+  },
   "type": "module",
   "description": "可扩展的网页版益智游戏合集",
   "scripts": {

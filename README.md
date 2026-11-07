@@ -62,7 +62,7 @@
 
 ## 🚀 本地运行
 
-需要 Node.js 18+。
+需要 Node.js 22.18+（测试直接导入 `.ts`，依赖 Node 原生类型剥离；推荐 24）。
 
 ```bash
 npm install        # 安装依赖
