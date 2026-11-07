@@ -175,12 +175,17 @@ function collideSweepers(level: Level, run: RunState): void {
     const bvz = ca * armT * s.omega;
     const vn = b.vx * nx + b.vz * nz;
     const bvn = bvx * nx + bvz * nz;
-    const want = bvn + Math.max(0.5, -vn * 0.35);
-    b.vx += (want - vn) * nx;
-    b.vz += (want - vn) * nz;
-    if (run.bumpLock <= 0) {
-      run.events.push({ type: 'bump', speed: Math.abs(want - vn) });
-      run.bumpLock = 0.12;
+    // 只处理"球正在接近杆面"的情形。原实现只看绝对法向速度，会把已经在
+    // 逃离杆面的球硬压到 bvn+0.5，甚至把静止球吸向杆面。
+    const rel = vn - bvn;
+    if (rel < 0) {
+      const want = bvn + Math.max(0.5, -rel * 0.35);
+      b.vx += (want - vn) * nx;
+      b.vz += (want - vn) * nz;
+      if (run.bumpLock <= 0) {
+        run.events.push({ type: 'bump', speed: Math.abs(want - vn) });
+        run.bumpLock = 0.12;
+      }
     }
   }
 }

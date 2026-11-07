@@ -180,6 +180,8 @@ export default function Game2048() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // 不吞浏览器快捷键（Ctrl+S 保存、Ctrl+D 书签等）
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const dir = DIR_KEYS[e.key];
       if (dir) {
         e.preventDefault();

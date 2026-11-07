@@ -13,6 +13,7 @@ import {
   createEngine,
   ensureMove,
   findValidMove,
+  hasReachedTarget,
   idx,
   rowOf,
   targetForLevel,
@@ -123,6 +124,8 @@ export default function Match3() {
 
   const statusRef = useRef<Status>('ready');
   const scoreRef = useRef(0);
+  /** 进入本关时的累计分：目标按"本关增量"判定，避免上一关溢出分直接抬过下一关 */
+  const levelStartRef = useRef(0);
   const levelRef = useRef(1);
   const movesRef = useRef(MOVES_PER_LEVEL);
   const bestRef = useRef(best);
@@ -299,7 +302,7 @@ export default function Match3() {
     const finishTurn = (now: number) => {
       const engine = engineRef.current!;
       cellsRef.current = engine.board.map((g) => (g ? { ...g } : null));
-      if (scoreRef.current >= targetForLevel(levelRef.current)) {
+      if (hasReachedTarget(scoreRef.current, levelStartRef.current, levelRef.current)) {
         syncVis(now);
         animRef.current = { ...animRef.current, phase: 'idle' };
         setGame({ status: 'clear' });
@@ -370,6 +373,7 @@ export default function Match3() {
       selectedRef.current = null;
       popupsRef.current = [];
       particlesRef.current = [];
+      levelStartRef.current = 0;
       setGame({ score: 0, level: 1, moves: MOVES_PER_LEVEL, status: 'playing' });
       deal(now);
     };
@@ -378,6 +382,8 @@ export default function Match3() {
       engineRef.current = createEngine();
       selectedRef.current = null;
       popupsRef.current = [];
+      // 分数继续携带，但下一关目标从当前总分重新起算
+      levelStartRef.current = scoreRef.current;
       setGame({ level: levelRef.current + 1, moves: MOVES_PER_LEVEL, status: 'playing' });
       deal(now);
     };
@@ -778,6 +784,9 @@ export default function Match3() {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const key = e.key;
+      // Enter/空格在按钮/链接焦点下交给原生点击，避免"返回大厅"被当成开始游戏
+      const target = e.target as HTMLElement | null;
+      if ((key === 'Enter' || key === ' ') && target?.closest('button,a,input,textarea,select')) return;
       const st = statusRef.current;
       if (st === 'ready' && (key === 'Enter' || key === ' ')) {
         e.preventDefault();
@@ -894,7 +903,8 @@ export default function Match3() {
   }, []);
 
   const target = targetForLevel(level);
-  const progress = Math.min(100, (score / target) * 100);
+  const levelScore = Math.max(0, score - levelStartRef.current);
+  const progress = Math.min(100, (levelScore / target) * 100);
 
   return (
     <GameShell
@@ -907,9 +917,9 @@ export default function Match3() {
             <strong>{level}</strong>
           </div>
           <div className="stat-box">
-            <span>分数 / 目标</span>
+            <span>本关分数 / 目标</span>
             <strong>
-              {score}
+              {levelScore}
               <small className="m3-target"> / {target}</small>
             </strong>
           </div>
@@ -956,7 +966,7 @@ export default function Match3() {
             <div className="m3-overlay">
               <h2>🎉 第 {level} 关完成！</h2>
               <p>
-                当前总分 {score} · 下一关目标 {targetForLevel(level + 1)}
+                本关得分 {levelScore} · 当前总分 {score} · 下一关目标 {targetForLevel(level + 1)}
               </p>
               <button className="btn btn-primary" onClick={() => controlsRef.current?.next()}>
                 下一关（Enter）
@@ -967,7 +977,7 @@ export default function Match3() {
             <div className="m3-overlay">
               <h2>💀 步数用完</h2>
               <p>
-                总分 {score} · 第 {level} 关目标 {target}
+                总分 {score} · 本关 {levelScore} / {target}
                 <br />
                 最高纪录 {best.value ?? score}
               </p>

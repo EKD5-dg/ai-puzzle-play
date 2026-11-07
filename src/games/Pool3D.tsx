@@ -770,11 +770,14 @@ export default function Pool3D() {
     };
 
     if (scratched) {
-      if (multi > 0) {
+      // 首碰犯规时进球不计分、也不锁花色；犯规与洗袋同时发生时提示两者
+      if (multi > 0 && !contactFoul) {
         w.score += gain;
         setScore(w.score);
         claimGroup();
         applyFoul(`进球 +${gain}，白球落袋！`);
+      } else if (contactFoul) {
+        applyFoul(!w.cueHit ? '空杆犯规且白球落袋！' : '首碰犯规且白球落袋，进球不计分！');
       } else {
         applyFoul('白球落袋！');
       }

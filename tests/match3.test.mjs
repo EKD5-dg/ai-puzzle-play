@@ -9,6 +9,7 @@ import {
   ensureMove,
   findClusters,
   findValidMove,
+  hasReachedTarget,
   idx,
   reshuffle,
   targetForLevel,
@@ -205,6 +206,12 @@ test('星钻交换：消同色；星钻+星钻清屏', () => {
   assert.ok(steps);
   assert.ok(steps[0].cleared.includes(idx(3, 3)), '星钻自身清除');
   for (const i of expected) assert.ok(steps[0].cleared.includes(i));
+  // 精确集合：只清星钻 + 目标色，不能额外触发"全场最多颜色"的 blast
+  assert.deepEqual(
+    new Set(steps[0].cleared),
+    new Set([...expected, idx(3, 3)]),
+    '星钻交换普通宝石只能消同色',
+  );
 
   const st2 = makeState(new Map([
     [idx(0, 0), { type: 0, special: 'star' }],
@@ -305,4 +312,11 @@ test('关卡目标校准：随机乱玩能过第1关，第5关需要技巧', () 
   assert.ok(median >= targetForLevel(1), `随机中位数 ${median} 应过第1关 ${targetForLevel(1)}`);
   assert.ok(p90 >= targetForLevel(2), `随机 p90 ${p90} 应能摸到第2关 ${targetForLevel(2)}`);
   assert.ok(targetForLevel(5) > p90, `第5关 ${targetForLevel(5)} 应高于随机 p90 ${p90}`);
+});
+
+test('跨关分数携带：下一关目标按本关增量判定，溢出分不会直接过关', () => {
+  // 第 1 关拿了 2500 分进入第 2 关：本关进度从 0 起算，不能直接判过
+  assert.equal(hasReachedTarget(2500, 2500, 2), false);
+  assert.equal(hasReachedTarget(2500 + targetForLevel(2) - 1, 2500, 2), false);
+  assert.equal(hasReachedTarget(2500 + targetForLevel(2), 2500, 2), true);
 });

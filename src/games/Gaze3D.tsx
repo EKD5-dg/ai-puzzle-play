@@ -2282,7 +2282,8 @@ export default function Gaze3D() {
     if (settledRef.current) return;
     settledRef.current = true;
     const score = worldRef.current.score;
-    if (best.updateBest(score, (a, b) => a > b)) {
+    // 0 分终局不写档：空档位会被 0 占住并弹"新纪录 0 分"
+    if (score > 0 && best.updateBest(score, (a, b) => a > b)) {
       sfx.record();
       toast(`🏆 新纪录！${score} 分`, 'record');
     }

@@ -101,7 +101,10 @@ export default function Minesweeper() {
   const [time, setTime] = useState(0);
   const [firstClick, setFirstClick] = useState(false);
   const [shake, setShake] = useState(0); // 震屏触发器
-  const timerRef = useRef<number | null>(null);
+  // 墙钟计时：startedAt=本次可见运行起点，elapsedMs=之前可见时段累计。
+  // 不能用 interval 回调次数计时——隐藏标签页被节流后会少算大量时间，写出假纪录。
+  const startedAtRef = useRef<number | null>(null);
+  const elapsedMsRef = useRef(0);
   // 最佳成绩按难度细分（简单档记录不再压住困难档），云端键同步带后缀
   const best = useBestScore(`${metaMines.id}:${levelIdx}`);
 
@@ -113,11 +116,37 @@ export default function Minesweeper() {
 
   useEffect(() => {
     // 首次翻开后才走时：开局摆姿势的时间不计入最佳时间
-    if (status === 'playing' && firstClick) {
-      timerRef.current = window.setInterval(() => setTime((t) => t + 1), 1000);
-    }
+    if (status !== 'playing' || !firstClick) return;
+    if (startedAtRef.current === null) startedAtRef.current = performance.now();
+    const sync = () => {
+      const ms =
+        elapsedMsRef.current +
+        (startedAtRef.current === null ? 0 : performance.now() - startedAtRef.current);
+      setTime(Math.max(0, Math.floor(ms / 1000)));
+    };
+    const id = window.setInterval(sync, 250);
+    // 切后台/锁屏暂停累计，回来继续；期间间隔不再按回调次数缩水
+    const onVis = () => {
+      const now = performance.now();
+      if (document.hidden) {
+        if (startedAtRef.current !== null) {
+          elapsedMsRef.current += now - startedAtRef.current;
+          startedAtRef.current = null;
+        }
+      } else if (startedAtRef.current === null) {
+        startedAtRef.current = now;
+      }
+      sync();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    sync();
     return () => {
-      if (timerRef.current) window.clearInterval(timerRef.current);
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVis);
+      if (startedAtRef.current !== null) {
+        elapsedMsRef.current += performance.now() - startedAtRef.current;
+        startedAtRef.current = null;
+      }
     };
   }, [status, firstClick]);
 
@@ -130,12 +159,14 @@ export default function Minesweeper() {
       if (!wonHandledRef.current) {
         wonHandledRef.current = true;
         sfx.win();
-        if (time > 0) {
-          const isNew = best.updateBest(time, (a, b) => a < b);
-          if (isNew) {
-            sfx.record();
-            toast(`新纪录！最快 ${time}s 通关`, 'record');
-          }
+        // 状态切换时计时 effect 的 cleanup 已把最后一段累计进 elapsedMsRef；
+        // 最少记 1 秒，避免极快通关把 0 写进"越小越好"的纪录。
+        const finalTime = Math.max(1, Math.floor(elapsedMsRef.current / 1000));
+        setTime(finalTime);
+        const isNew = best.updateBest(finalTime, (a, b) => a < b);
+        if (isNew) {
+          sfx.record();
+          toast(`新纪录！最快 ${finalTime}s 通关`, 'record');
         }
       }
     } else {
@@ -145,7 +176,7 @@ export default function Minesweeper() {
       sfx.lose();
       toast('踩到地雷了，再来一次！', 'info');
     }
-  }, [status, time, best, toast]);
+  }, [status, best, toast]);
 
   const startNew = useCallback(
     (idx: number) => {
@@ -156,6 +187,8 @@ export default function Minesweeper() {
       setLevelIdx(idx);
       setGrid(buildGrid(lv.rows, lv.cols, lv.mines, 0, 0));
       setStatus('playing');
+      elapsedMsRef.current = 0;
+      startedAtRef.current = null;
       setTime(0);
       setFirstClick(false);
     },

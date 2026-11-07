@@ -1016,12 +1016,15 @@ code {
   }
 
   .sudoku-grid {
-    grid-template-columns: repeat(9, 36px);
+    /* 9×36 + 间隙/边框在 320px 会超出视口，改为随可用宽度收缩 */
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+    width: min(338px, 100%);
   }
 
   .sudoku-cell {
-    width: 36px;
-    height: 36px;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
     font-size: 16px;
   }
 
@@ -2540,11 +2543,13 @@ code {
   }
 
   .cseq-board {
-    grid-template-columns: repeat(3, 92px);
+    /* 3×92 + 间隙/内边距在 320px 会溢出，改为流式列 + 最大宽度 */
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: min(334px, 100%);
   }
 
   .cseq-key {
-    width: 92px;
+    width: 100%;
     height: 70px;
   }
 }
@@ -3175,7 +3180,8 @@ code {
 /* ============ 移动端小屏适配（贪吃蛇/打地鼠/2048） ============ */
 @media (max-width: 640px) {
   .snake-board {
-    --snake-cell: 15px;
+    /* 20 列：320px 下 15px 会溢出，按可用宽度收缩（留出内边距与 19 个 1px 间隙） */
+    --snake-cell: min(15px, calc((100vw - 60px) / 20));
   }
 
   .mole-field {
@@ -3212,17 +3218,20 @@ code {
 
 @media (max-width: 640px) {
   .gomoku-board {
-    --g-cell: 20px;
+    /* 15 列 + 6px×2 内边距：320px 下 20px 仍会超出 7px，按可用宽度收缩 */
+    --g-cell: min(20px, calc((100vw - 27px) / 15));
     transform: none; /* 覆盖旧 scale(0.92)：布局宽与视觉一致，不再溢出 */
   }
 
   .othello-board {
-    --o-cell: 36px;
+    /* 8 列：320px 下 36px + 间隙/边框会横向溢出 */
+    --o-cell: min(36px, calc((100vw - 60px) / 8));
     transform: none; /* 覆盖旧 scale(0.9) */
   }
 
   .memory-grid {
-    --card: 50px;
+    /* 困难档 6 列：320px 下 50px + 5×8px 间隙会超出视口 */
+    --card: min(50px, calc((100vw - 60px) / 6));
     gap: 8px;
   }
 

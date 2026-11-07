@@ -88,7 +88,13 @@ export default function Qubic3D() {
   winnerRef.current = winner;
   hintRef.current = hintOn;
 
+  // AI 请求令牌/待处理回调必须在 reset 之前声明：重开/切难度要同步作废旧结果
+  const pendingRef = useRef<{ id: number; run: (move: number, ms: number) => void } | null>(null);
+  const reqIdRef = useRef(0);
+
   const reset = useCallback(() => {
+    pendingRef.current = null;
+    reqIdRef.current += 1;
     setBoard(emptyBoard());
     setTurn('human');
     setWinner(0);
@@ -110,8 +116,6 @@ export default function Qubic3D() {
   // AI 搜索放进 Web Worker：困难档一次两万多节点，同步跑会让 rAF 停摆、
   // 触摸与点击被延迟（低端手机可达数百毫秒）。Worker 起不来/无响应时回退到同步搜索
   const workerRef = useRef<Worker | null>(null);
-  const pendingRef = useRef<{ id: number; run: (move: number, ms: number) => void } | null>(null);
-  const reqIdRef = useRef(0);
 
   useEffect(() => {
     let w: Worker | null = null;
@@ -149,11 +153,17 @@ export default function Qubic3D() {
     if (turn !== 'ai' || winner !== 0) return;
     const snapshot = boardRef.current;
     const run = (move: number, ms: number) => {
-      setThinkMs(Math.round(ms));
+      // 结果迟到时必须重新校验棋局：人类可能已经连四获胜，或已点"再来一局"/
+      // 切难度；否则 AI 会在胜利后继续落子，甚至把满盘胜利改成和棋、落到新空盘上。
+      if (winnerRef.current !== 0 || turnRef.current !== 'ai') return;
       if (move < 0) {
-        setWinner(3);
+        // 只有真正满盘且仍无胜者才是和棋；满盘恰好人类连四时 winnerRef 已非 0，
+        // 上面的守卫会先返回，不会把胜利改判成和棋。
+        if (boardRef.current.every((v) => v !== 0)) setWinner(3);
         return;
       }
+      if (boardRef.current[move] !== 0) return;
+      setThinkMs(Math.round(ms));
       sfx.move();
       setBoard((prev) => {
         const next = [...prev];

@@ -866,6 +866,9 @@ export default function AngryBirds() {
     b.vx = -gg.pullX * PULL_K;
     b.vy = -gg.pullY * PULL_K;
     b.state = 'flying';
+    // bounced 是"这一发已经撞过"的去重标记，不是木块永久属性：上一发的木块
+    // 落地后必须重新可撞，否则后续小鸟会直接穿过它。
+    for (const c of gg.crates) c.bounced = false;
     gg.birdMs = 0; // 每发鸟单独计飞行时长
     gg.pullX = 0;
     gg.pullY = 0;

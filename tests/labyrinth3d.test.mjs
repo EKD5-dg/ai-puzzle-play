@@ -296,6 +296,23 @@ test('摆杆把杆面线速度传给球：接触后球速被抬起来', () => {
   assert.ok(maxSpeed > 0.6, `摆杆应当把球甩出去，实测峰值 ${maxSpeed}`);
 });
 
+test('摆杆不会刹停正在逃离杆面的球（只处理相对接近）', () => {
+  const base = LEVELS[4];
+  const s = base.sweepers[0];
+  // 静止杆 + 清空洞/宝石/检查点，避免其它判定干扰
+  const level = { ...base, sweepers: [{ ...s, omega: 0 }], holes: [], gems: [], checkpoints: [] };
+  const run = createRun(level);
+  run.grace = 0;
+  // 放在杆中点右侧、刚进入接触范围的位置，法线为 +x
+  const reach = s.r + BALL_R;
+  run.ball.x = s.x + reach - 0.005;
+  run.ball.z = s.z;
+  run.ball.vx = 4;
+  run.ball.vz = 0;
+  advance(level, run, ZERO, SUBSTEP);
+  assert.ok(run.ball.vx > 3.5, `逃离中的球不应被刹停，实测 vx=${run.ball.vx}`);
+});
+
 test('sweeperEnds 与当前角度一致，长度等于两倍半臂长', () => {
   const level = LEVELS[4];
   const run = createRun(level);

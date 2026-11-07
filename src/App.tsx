@@ -541,7 +541,7 @@ export default function App() {
                   ✕
                 </button>
                 <h3>☁ 成绩云同步</h3>
-                <p className="sync-desc">同步码连接您的所有设备，成绩自动合并（取最高）。</p>
+                <p className="sync-desc">同步码连接您的所有设备，成绩按各游戏方向自动取优。</p>
                 {syncCode ? (
                   <div className="sync-current">
                     <span>当前同步码</span>

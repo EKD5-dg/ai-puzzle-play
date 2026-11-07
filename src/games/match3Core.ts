@@ -245,7 +245,13 @@ function blastCells(state: EngineState, index: number, triggered: Set<number>): 
  * 从一组初始清除格开始，链式引爆特殊宝石，返回最终清除集。
  * 生成位（transform）不在清除集里，新特殊宝石当步不引爆。
  */
-function chainClear(state: EngineState, initial: number[], protectedCells: Set<number>): number[] {
+function chainClear(
+  state: EngineState,
+  initial: number[],
+  protectedCells: Set<number>,
+  /** 这些格子只被清除，不触发自身的特殊效果（星钻交换时用，避免再清第二种颜色） */
+  noTrigger?: Set<number>,
+): number[] {
   const clear = new Set<number>();
   const queue: number[] = [];
   const triggered = new Set<number>();
@@ -258,7 +264,7 @@ function chainClear(state: EngineState, initial: number[], protectedCells: Set<n
   while (queue.length) {
     const i = queue.shift()!;
     const g = state.board[i];
-    if (g && g.special !== 'none') {
+    if (g && g.special !== 'none' && !noTrigger?.has(i)) {
       for (const j of blastCells(state, i, triggered)) push(j);
     }
   }
@@ -289,11 +295,16 @@ function makeStep(state: EngineState, cleared: number[], transform: Transform[],
 }
 
 /** 交换后（或星钻引爆后）的完整连锁结算，原地推进 state.board */
-function resolve(state: EngineState, prefer: number[], first?: { cleared: number[] }): Step[] {
+function resolve(
+  state: EngineState,
+  prefer: number[],
+  first?: { cleared: number[] },
+  noTrigger?: Set<number>,
+): Step[] {
   const steps: Step[] = [];
   let cascade = 1;
   if (first) {
-    const cleared = chainClear(state, first.cleared, new Set());
+    const cleared = chainClear(state, first.cleared, new Set(), noTrigger);
     steps.push(makeStep(state, cleared, [], cascade++));
   }
   for (;;) {
@@ -332,7 +343,9 @@ function resolveStar(state: EngineState, a: number, b: number): Step[] {
       if (g && g.special !== 'star' && g.type === target.type) initial.push(i);
     });
   }
-  return resolve(state, [], { cleared: initial });
+  // 星钻自身只清除、不触发"全场最多颜色"的 blast；否则交换普通宝石会多清一种颜色，
+  // 与"与任意宝石交换消同色"的规则/文案不符（被其他特殊宝石链式引爆时仍会正常触发）。
+  return resolve(state, [], { cleared: initial }, new Set([star]));
 }
 
 /**
@@ -447,7 +460,15 @@ export function createEngine(rng: () => number = Math.random): EngineState {
 /** 每关步数 */
 export const MOVES_PER_LEVEL = 20;
 
-/** 关卡目标分：随关卡线性增长（数值由随机对局模拟校准，见测试） */
+/** 本关目标增量：随关卡线性增长（数值由随机对局模拟校准，见测试） */
 export function targetForLevel(level: number): number {
   return 900 + (level - 1) * 500;
+}
+
+/**
+ * 是否达到本关目标。分数跨关携带，所以必须减去进入本关时的总分，
+ * 否则第 2 关起会直接沿用上一关的累计分，进关即过关。
+ */
+export function hasReachedTarget(totalScore: number, levelStartScore: number, level: number): boolean {
+  return totalScore - levelStartScore >= targetForLevel(level);
 }

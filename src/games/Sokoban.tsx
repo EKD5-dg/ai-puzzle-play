@@ -187,6 +187,7 @@ export default function Sokoban() {
   // 键盘控制
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const map: Record<string, 'up' | 'down' | 'left' | 'right'> = {
         ArrowUp: 'up',
         ArrowDown: 'down',

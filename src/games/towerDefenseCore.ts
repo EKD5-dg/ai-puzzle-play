@@ -635,8 +635,11 @@ function updateTowers(w: GameState, dt: number): void {
         if (dx * dx + dy * dy > st.range * st.range) continue;
         any = true;
         const slow = (st.slow ?? 0) * (1 - e.slowResist);
-        e.slowK = Math.max(e.slowK, slow);
-        e.slowT = Math.max(e.slowT, st.slowT ?? 0);
+        // 只有同级或更强的减速才能刷新计时；否则低级霜塔会无限续上高级塔的强减速
+        if (e.slowT <= 0 || slow >= e.slowK) {
+          e.slowK = slow;
+          e.slowT = Math.max(e.slowT, st.slowT ?? 0);
+        }
         damage(w, e, st.dmg, true);
       }
       if (!any) continue;

@@ -105,7 +105,8 @@ export default function Labyrinth3D() {
   const settle = useCallback((finalScore: number) => {
     if (settledRef.current) return;
     settledRef.current = true;
-    const record = bestRef.current.updateBest(finalScore, (a, b) => a > b);
+    // 0 分不是有效纪录：新档第一关掉光命或扣分扣到 0 时不应显示"新纪录 0 分"
+    const record = finalScore > 0 && bestRef.current.updateBest(finalScore, (a, b) => a > b);
     if (record) {
       sfx.record();
       toast(`新纪录：${finalScore} 分`, 'record');
@@ -124,7 +125,7 @@ export default function Labyrinth3D() {
     totalRef.current = carry;
     setTotalScore(carry);
     setResult(breakdown);
-    const record = bestRef.current.updateBest(carry, (a, b) => a > b);
+    const record = carry > 0 && bestRef.current.updateBest(carry, (a, b) => a > b);
     if (record) {
       sfx.record();
       toast(`新纪录：${carry} 分`, 'record');

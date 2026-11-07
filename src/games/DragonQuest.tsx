@@ -139,9 +139,14 @@ function clearSave(): void {
 const rand = (n: number) => Math.floor(Math.random() * (n + 1));
 
 export default function DragonQuest() {
+  // 首屏就用存档初始化，避免"默认 Lv1 + 战斗中实时落档 effect"在挂载时把真实存档覆盖掉
+  const [initialSave] = useState(loadSave);
+  const startedRef = useRef(false);
+  /** 落档楼层唯一来源：击杀/逃跑会先更新它，避免 effect 用尚未 setFloor 的旧楼层覆盖 */
+  const saveFloorRef = useRef(initialSave?.floor ?? 1);
   const [phase, setPhase] = useState<Phase>('menu');
-  const [floor, setFloor] = useState(1);
-  const [player, setPlayer] = useState<PlayerState>(PLAYER_START);
+  const [floor, setFloor] = useState(initialSave?.floor ?? 1);
+  const [player, setPlayer] = useState<PlayerState>(initialSave?.player ?? PLAYER_START);
   const [monster, setMonster] = useState<Monster | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -160,14 +165,16 @@ export default function DragonQuest() {
   const [heroAnim, setHeroAnim] = useState<'idle' | 'attack' | 'hurt'>('idle');
   const [monsterAnim, setMonsterAnim] = useState<'idle' | 'attack' | 'hit' | 'dead'>('idle');
   const [floaters, setFloaters] = useState<Array<{ id: number; text: string; kind: 'hero' | 'monster' }>>([]);
-  const [saveExists, setSaveExists] = useState(loadSave() !== null);
+  const [saveExists, setSaveExists] = useState(initialSave !== null);
 
   // 战斗中每次掉血/耗蓝都立即落本地档：原来只在击杀/逃跑时写档，战斗中刷新页面（或关标签页）
   // 会用上一次存档把 HP/MP 恢复成战前值——等于免费回满 MP 并撤销本场伤害。
   // 这里只写本地，上云仍由 saveGame（击杀/逃跑/休息/换层）负责，避免频繁网络请求
   useEffect(() => {
-    if (!saveExists || player.hp <= 0) return;
-    persistLocal(floor, player);
+    // 只有真正开局后才实时落档：挂载时 player/floor 已是存档值，但 startedRef 仍拦住
+    // StrictMode 双挂载与"只打开菜单"的路径，避免误写。
+    if (!startedRef.current || !saveExists || player.hp <= 0) return;
+    persistLocal(saveFloorRef.current, player);
   }, [player, floor, saveExists]);
   const best = useBestScore(metaDragon.id);
   const { toast } = useToast();
@@ -208,6 +215,8 @@ export default function DragonQuest() {
 
   /** 开始新冒险 */
   const newGame = () => {
+    startedRef.current = true;
+    saveFloorRef.current = 1;
     clearSave();
     setSaveExists(false);
     setPlayer(PLAYER_START);
@@ -220,6 +229,8 @@ export default function DragonQuest() {
   const continueGame = () => {
     const save = loadSave();
     if (!save) return;
+    startedRef.current = true;
+    saveFloorRef.current = save.floor;
     setPlayer(save.player);
     setFloor(save.floor);
     setLog([]);
@@ -242,6 +253,7 @@ export default function DragonQuest() {
   /** 进入新楼层并记录最高层数 */
   const nextFloor = () => {
     const f = floor + 1;
+    saveFloorRef.current = f;
     setFloor(f);
     const isNew = best.updateBest(f, (a, b) => a > b);
     if (isNew) {
@@ -382,6 +394,7 @@ export default function DragonQuest() {
       const rested = { ...playerRef.current, hp: playerRef.current.maxHp, mp: playerRef.current.maxMp };
       setPlayer(rested);
       // 同步落盘：存档层数与城镇"再次出发（第 1 层）"一致，否则旧档会让"继续冒险"拿到深层进度配逃跑前的低 HP
+      saveFloorRef.current = 1;
       saveGame(1, rested);
       setSaveExists(true);
       setPhase('town');
@@ -396,6 +409,7 @@ export default function DragonQuest() {
 
   /** 从城镇再次出发：保留等级/金币，回到第 1 层 */
   const leaveTown = () => {
+    saveFloorRef.current = 1;
     setFloor(1);
     setLog([]);
     pushLog('你再次踏上了冒险之旅！');
@@ -445,8 +459,10 @@ export default function DragonQuest() {
       sfx.win();
     }
     const next: PlayerState = { ...player, level, xp: remainingXp, gold, kills, maxHp, maxMp, atk, def, hp, mp };
-    setPlayer(next);
     const nextFloorNum = floor + 1 <= FLOORS ? floor + 1 : FLOORS;
+    // 先同步楼层来源再 setPlayer：否则下面的实时落档 effect 会拿旧 floor 覆盖 nextFloorNum
+    saveFloorRef.current = nextFloorNum;
+    setPlayer(next);
     saveGame(nextFloorNum, next);
     setSaveExists(true);
     setPhase('idle');
