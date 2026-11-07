@@ -261,6 +261,9 @@ export default function SpaceInvaders() {
   // 键盘控制（左右键阻止页面滚动；窗口失焦时清空按键，防止切回后炮台漂移）
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as Element | null;
+      if (e.key === ' ' && el?.closest?.('button,a,input,textarea,select')) return;
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
         e.preventDefault();
         keysRef.current.left = true;

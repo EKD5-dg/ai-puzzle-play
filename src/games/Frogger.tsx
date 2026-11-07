@@ -343,6 +343,9 @@ export default function Frogger() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as Element | null;
+      if (e.key === ' ' && el?.closest?.('button,a,input,textarea,select')) return;
       if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
         e.preventDefault();
         if (status === 'ready') startGame();

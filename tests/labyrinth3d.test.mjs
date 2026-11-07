@@ -299,18 +299,24 @@ test('摆杆把杆面线速度传给球：接触后球速被抬起来', () => {
 test('摆杆不会刹停正在逃离杆面的球（只处理相对接近）', () => {
   const base = LEVELS[4];
   const s = base.sweepers[0];
-  // 静止杆 + 清空洞/宝石/检查点，避免其它判定干扰
-  const level = { ...base, sweepers: [{ ...s, omega: 0 }], holes: [], gems: [], checkpoints: [] };
+  // phase=0 让杆沿 x 轴，球放在中点右侧、深入接触区 0.05；
+  // 一个 SUBSTEP 只会前进约 0.017，碰撞检查时仍在 reach 内，保证真的进入该分支。
+  const level = { ...base, sweepers: [{ ...s, omega: 0, phase: 0 }], holes: [], gems: [], checkpoints: [] };
   const run = createRun(level);
   run.grace = 0;
-  // 放在杆中点右侧、刚进入接触范围的位置，法线为 +x
   const reach = s.r + BALL_R;
-  run.ball.x = s.x + reach - 0.005;
+  run.ball.x = s.x + reach - 0.05;
   run.ball.z = s.z;
   run.ball.vx = 4;
   run.ball.vz = 0;
+  drainEvents(run);
   advance(level, run, ZERO, SUBSTEP);
   assert.ok(run.ball.vx > 3.5, `逃离中的球不应被刹停，实测 vx=${run.ball.vx}`);
+  assert.equal(
+    drainEvents(run).some((e) => e.type === 'bump'),
+    false,
+    '远离杆面的球不应触发 bump',
+  );
 });
 
 test('sweeperEnds 与当前角度一致，长度等于两倍半臂长', () => {

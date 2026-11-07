@@ -2088,8 +2088,10 @@ code {
 }
 
 .gomoku-stone {
-  width: 24px;
-  height: 24px;
+  /* 相对格子缩放：小屏 --g-cell 收缩后固定 24px 会变成椭圆并上下重叠 */
+  width: 80%;
+  height: auto;
+  aspect-ratio: 1;
   border-radius: 50%;
   z-index: 1;
   animation: pop 0.2s ease;
@@ -2136,8 +2138,10 @@ code {
 }
 
 .othello-stone {
-  width: 40px;
-  height: 40px;
+  /* 相对格子缩放：小屏 --o-cell 收缩后固定 40px 会变成椭圆并上下重叠 */
+  width: 80%;
+  height: auto;
+  aspect-ratio: 1;
   border-radius: 50%;
   animation: pop 0.25s ease;
 }
@@ -2540,6 +2544,11 @@ code {
 
   .digit-screen {
     width: 92vw;
+  }
+
+  .cseq {
+    /* 父级是居中 flex，未显式给宽时棋盘会按内容 intrinsic 宽度缩到约 179px */
+    width: 100%;
   }
 
   .cseq-board {

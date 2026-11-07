@@ -485,6 +485,9 @@ export default function PacMan() {
   // 键盘控制
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as Element | null;
+      if (e.key === ' ' && el?.closest?.('button,a,input,textarea,select')) return;
       const map: Record<string, string> = {
         ArrowUp: 'up',
         ArrowDown: 'down',

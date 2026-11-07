@@ -129,8 +129,8 @@ export default function Snake() {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       // 焦点在按钮/链接上时，空格/回车交给原生激活（否则"开始游戏"按钮无法用空格触发）
-      const target = e.target as HTMLElement | null;
-      if ((e.key === ' ' || e.key === 'Enter') && target?.closest('button,a,input,textarea,select')) return;
+      const target = e.target as Element | null;
+      if ((e.key === ' ' || e.key === 'Enter') && target?.closest?.('button,a,input,textarea,select')) return;
       const d = KEY_DIRS[e.key];
       if (d) {
         e.preventDefault();

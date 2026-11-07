@@ -218,7 +218,10 @@ export default function DragonQuest() {
     startedRef.current = true;
     saveFloorRef.current = 1;
     clearSave();
-    setSaveExists(false);
+    // 立刻落一份第 1 层初始档：否则首战掉血前 saveExists 仍为 false，
+    // 实时落档 effect 被拦住，刷新会回到"无存档"菜单、整局丢失。
+    persistLocal(1, PLAYER_START);
+    setSaveExists(true);
     setPlayer(PLAYER_START);
     setFloor(1);
     setLog([]);
@@ -395,6 +398,7 @@ export default function DragonQuest() {
       setPlayer(rested);
       // 同步落盘：存档层数与城镇"再次出发（第 1 层）"一致，否则旧档会让"继续冒险"拿到深层进度配逃跑前的低 HP
       saveFloorRef.current = 1;
+      setFloor(1);
       saveGame(1, rested);
       setSaveExists(true);
       setPhase('town');
@@ -486,7 +490,13 @@ export default function DragonQuest() {
   // 键盘支持：战斗中 1-5 行动，其余阶段 Enter/空格 触发当前主按钮
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (phase === 'battle') {
+        // 战斗中没有空格动作，但不是所有浏览器都会忽略空格滚动；焦点在按钮上时保留原生激活
+        if (e.key === ' ') {
+          const el = e.target as Element | null;
+          if (!el?.closest?.('button,a,input,textarea,select')) e.preventDefault();
+        }
         if (busy) return;
         switch (e.key) {
           case '1':
@@ -508,9 +518,9 @@ export default function DragonQuest() {
         return;
       }
       if (e.key !== 'Enter' && e.key !== ' ') return;
-      // 焦点在按钮上时交给浏览器原生激活（Enter/空格会点中它），避免与按钮 click 双触发
-      const el = e.target;
-      if (el instanceof HTMLElement && el.closest('button')) return;
+      // 焦点在按钮/链接等可交互元素上时交给原生激活，避免与 click 双触发
+      const el = e.target as Element | null;
+      if (el?.closest?.('button,a,input,textarea,select')) return;
       e.preventDefault(); // 阻止空格滚动页面
       if (phase === 'menu') (saveExists ? continueGame : newGame)();
       else if (phase === 'town') leaveTown();

@@ -785,8 +785,8 @@ export default function Match3() {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const key = e.key;
       // Enter/空格在按钮/链接焦点下交给原生点击，避免"返回大厅"被当成开始游戏
-      const target = e.target as HTMLElement | null;
-      if ((key === 'Enter' || key === ' ') && target?.closest('button,a,input,textarea,select')) return;
+      const target = e.target as Element | null;
+      if ((key === 'Enter' || key === ' ') && target?.closest?.('button,a,input,textarea,select')) return;
       const st = statusRef.current;
       if (st === 'ready' && (key === 'Enter' || key === ' ')) {
         e.preventDefault();

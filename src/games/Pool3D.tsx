@@ -777,7 +777,13 @@ export default function Pool3D() {
         claimGroup();
         applyFoul(`进球 +${gain}，白球落袋！`);
       } else if (contactFoul) {
-        applyFoul(!w.cueHit ? '空杆犯规且白球落袋！' : '首碰犯规且白球落袋，进球不计分！');
+        applyFoul(
+          !w.cueHit
+            ? '空杆犯规且白球落袋！'
+            : multi > 0
+              ? '首碰犯规且白球落袋，进球不计分！'
+              : '首碰犯规且白球落袋！',
+        );
       } else {
         applyFoul('白球落袋！');
       }

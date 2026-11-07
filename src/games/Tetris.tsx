@@ -253,8 +253,8 @@ export default function Tetris() {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       // 焦点在按钮/链接上时，空格交给原生激活（否则无法用键盘点"暂停/重开"）
-      const target = e.target as HTMLElement | null;
-      if (e.key === ' ' && target?.closest('button,a,input,textarea,select')) return;
+      const target = e.target as Element | null;
+      if (e.key === ' ' && target?.closest?.('button,a,input,textarea,select')) return;
       switch (e.key) {
         case 'ArrowLeft':
           e.preventDefault();

@@ -404,6 +404,7 @@ export default function Qubic3D() {
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const cam = camRef.current;
       const k = e.code;
       if (k === 'ArrowLeft') cam.yaw -= 0.18;

@@ -222,6 +222,18 @@ test('星钻交换：消同色；星钻+星钻清屏', () => {
   assert.equal(steps2[0].cleared.length, CELLS, '双星钻清屏');
 });
 
+test('星钻+特殊宝石：消同色并引爆该特殊宝石', () => {
+  const st = makeState(new Map([
+    [idx(3, 3), { type: 0, special: 'star' }],
+    [idx(3, 4), { type: 2, special: 'bomb' }],
+  ]));
+  const steps = trySwap(st, idx(3, 3), idx(3, 4));
+  assert.ok(steps);
+  const cleared = new Set(steps[0].cleared);
+  for (let r = 2; r <= 4; r++)
+    for (let c = 3; c <= 5; c++) assert.ok(cleared.has(idx(r, c)), '炸弹应触发 3×3 引爆');
+});
+
 test('重力：上方宝石落到被消除格，列内相对顺序不变', () => {
   const st = makeState(new Map([
     [idx(2, 1), { type: 5 }], [idx(2, 3), { type: 5 }], [idx(1, 2), { type: 5 }],
