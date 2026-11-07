@@ -92,3 +92,22 @@ test('switching anchor pairs resets partial alignment charge', () => {
   assert.equal(result.locked, null);
   assert.deepEqual(result.state, { edgeId: 'B', charge: 0.05 });
 });
+
+test('the node the traveler stands on may be occluded without blocking alignment', () => {
+  const level = LEVELS[0];
+  const edge = level.illusions[0];
+  const camera = makeCamera(level, edge.view);
+  const session = { ...createSession(level), node: edge.a };
+  const candidate = findAlignableEdge(level, session, camera, viewport, (id) => id !== edge.a);
+  assert.equal(candidate?.id, edge.id);
+});
+
+test('small viewports keep a usable minimum alignment gap', () => {
+  const result = stepAlignment(
+    { edgeId: null, charge: 0 },
+    { id: 'A', gap: 17 },
+    0.1,
+    { width: 200, height: 125 },
+  );
+  assert.equal(result.state.charge, 0.1);
+});

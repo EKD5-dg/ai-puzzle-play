@@ -13,10 +13,11 @@ export interface GestureState {
   dragged: boolean;
   multi: boolean;
   pinch: number;
+  slop: number;
 }
 
 export type GestureEvent =
-  | { type: 'down'; id: number; x: number; y: number }
+  | { type: 'down'; id: number; x: number; y: number; pointerType?: string }
   | { type: 'move'; id: number; x: number; y: number }
   | { type: 'up'; id: number; x: number; y: number }
   | { type: 'cancel'; id: number };
@@ -37,14 +38,21 @@ function idleResult(state: GestureState): GestureResult {
 }
 
 export function createGesture(): GestureState {
-  return { pointers: [], origin: null, dragged: false, multi: false, pinch: 0 };
+  return { pointers: [], origin: null, dragged: false, multi: false, pinch: 0, slop: 6 };
 }
 
 export function reduceGesture(previous: GestureState, event: GestureEvent): GestureResult {
   if (event.type === 'down') {
     const pointers = [...previous.pointers.filter((point) => point.id !== event.id), { id: event.id, x: event.x, y: event.y }];
     if (pointers.length === 1) {
-      return idleResult({ pointers, origin: { x: event.x, y: event.y }, dragged: false, multi: false, pinch: 0 });
+      return idleResult({
+        pointers,
+        origin: { x: event.x, y: event.y },
+        dragged: false,
+        multi: false,
+        pinch: 0,
+        slop: event.pointerType === 'touch' ? 10 : 6,
+      });
     }
     return idleResult({
       pointers,
@@ -52,6 +60,7 @@ export function reduceGesture(previous: GestureState, event: GestureEvent): Gest
       dragged: true,
       multi: true,
       pinch: pointers.length === 2 ? distance(pointers[0], pointers[1]) : previous.pinch,
+      slop: previous.slop,
     });
   }
 
@@ -77,7 +86,7 @@ export function reduceGesture(previous: GestureState, event: GestureEvent): Gest
       };
     }
     if (pointers.length === 1 && !previous.multi) {
-      const dragged = previous.dragged || !previous.origin || Math.hypot(event.x - previous.origin.x, event.y - previous.origin.y) > 6;
+      const dragged = previous.dragged || !previous.origin || Math.hypot(event.x - previous.origin.x, event.y - previous.origin.y) > previous.slop;
       return {
         state: { ...previous, pointers, dragged },
         orbit: { dx: event.x - existing.x, dy: event.y - existing.y },
@@ -131,4 +140,29 @@ export function walkPosition(
     from.p[1] + (to.p[1] - from.p[1]) * t,
     from.p[2] + (to.p[2] - from.p[2]) * t,
   ];
+}
+
+export interface TapHit {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+}
+
+export function selectTapTarget(
+  hits: readonly TapHit[],
+  x: number,
+  y: number,
+  currentNode: string,
+  reachable: ReadonlySet<string>,
+  minRadius = 18,
+): string | null {
+  const candidates = hits
+    .map((hit) => ({ hit, distance: Math.hypot(hit.x - x, hit.y - y) }))
+    .filter(({ hit, distance }) => distance <= Math.max(minRadius, hit.radius));
+  if (candidates.length === 0) return null;
+  const preferred = candidates.filter(({ hit }) => hit.id !== currentNode && reachable.has(hit.id));
+  const pool = preferred.length > 0 ? preferred : candidates;
+  pool.sort((a, b) => a.distance - b.distance);
+  return pool[0].hit.id;
 }

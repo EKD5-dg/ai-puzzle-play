@@ -129,7 +129,8 @@ export function findAlignableEdge(
   for (const edge of level.illusions) {
     if (session.unlocked.includes(edge.id)) continue;
     if (session.node !== edge.a && session.node !== edge.b) continue;
-    if (!isVisible(edge.a) || !isVisible(edge.b)) continue;
+    if (edge.a !== session.node && !isVisible(edge.a)) continue;
+    if (edge.b !== session.node && !isVisible(edge.b)) continue;
     const a = level.nodes.find((node) => node.id === edge.a);
     const b = level.nodes.find((node) => node.id === edge.b);
     if (!a || !b) continue;
@@ -151,7 +152,7 @@ export function stepAlignment(
   dt: number,
   viewport: Viewport,
 ): { state: AlignmentState; locked: string | null } {
-  const enterGap = Math.min(viewport.width, viewport.height) * 0.055;
+  const enterGap = Math.max(18, Math.min(viewport.width, viewport.height) * 0.055);
   const releaseGap = enterGap * 1.8;
   let state = previous;
   if (candidate && state.edgeId !== candidate.id) state = { edgeId: candidate.id, charge: 0 };

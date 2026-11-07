@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOrbit, createGesture, reduceGesture, walkPosition, wheelZoomFactor, zoomCamera } from '../src/games/illusion3d/input.ts';
+import { applyOrbit, createGesture, reduceGesture, selectTapTarget, walkPosition, wheelZoomFactor, zoomCamera } from '../src/games/illusion3d/input.ts';
 
 test('a press and release without movement is exactly one tap', () => {
   const empty = createGesture();
@@ -51,6 +51,30 @@ test('camera orbit, pitch, and zoom stay inside usable limits', () => {
   assert.equal(applyOrbit(camera, 0, -10000).pitch, 0.28);
   assert.equal(zoomCamera(camera, 100).zoom, 1.8);
   assert.equal(zoomCamera(camera, 0.001).zoom, 0.65);
+});
+
+test('overlapping tap targets prefer a reachable non-current node', () => {
+  const hits = [
+    { id: 'A', x: 0, y: 0, radius: 20 },
+    { id: 'B', x: 1, y: 0, radius: 20 },
+  ];
+  const reachable = new Set(['B']);
+  assert.equal(selectTapTarget(hits, 0.4, 0, 'A', reachable), 'B');
+  assert.equal(selectTapTarget(hits, -10, 0, 'A', reachable), 'B');
+  assert.equal(selectTapTarget(hits, 100, 100, 'A', reachable), null);
+  assert.equal(selectTapTarget(hits, 0.4, 0, 'A', new Set()), 'A');
+});
+
+test('touch taps tolerate more jitter than mouse drags', () => {
+  let touch = reduceGesture(createGesture(), { type: 'down', id: 1, x: 10, y: 10, pointerType: 'touch' });
+  touch = reduceGesture(touch.state, { type: 'move', id: 1, x: 18, y: 10 });
+  touch = reduceGesture(touch.state, { type: 'up', id: 1, x: 18, y: 10 });
+  assert.deepEqual(touch.tap, { x: 18, y: 10 });
+
+  let mouse = reduceGesture(createGesture(), { type: 'down', id: 2, x: 10, y: 10, pointerType: 'mouse' });
+  mouse = reduceGesture(mouse.state, { type: 'move', id: 2, x: 18, y: 10 });
+  mouse = reduceGesture(mouse.state, { type: 'up', id: 2, x: 18, y: 10 });
+  assert.equal(mouse.tap, null);
 });
 
 test('wheel zoom normalizes pixel, line, and page delta modes', () => {

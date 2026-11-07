@@ -94,7 +94,7 @@ export const LEVELS: IllusionLevel[] = [
       { id: 'A', p: [-2, 1.8, 0.8], label: '晨星核', core: true },
       { id: 'B', p: [1.8, 2.6, 0.4], label: '曜星核', core: true },
       { id: 'C', p: [0.4, 1.6, -2], label: '暮星核', core: true },
-      { id: 'E', p: [0, 1, -2.2], label: '星门' },
+      { id: 'E', p: [0, 1.8, -3], label: '星门' },
     ],
     edges: [['S', 'H'], ['H', 'E']],
     illusions: [

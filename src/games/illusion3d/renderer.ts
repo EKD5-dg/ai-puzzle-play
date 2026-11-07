@@ -237,7 +237,7 @@ function drawRunes(ctx: CanvasRenderingContext2D, frame: RenderFrame): NodeHit[]
       if (a && b && frame.visibleNodes.has(a.id) && frame.visibleNodes.has(b.id)) {
         const pa = projectPoint(runeAnchor(a.p), frame.camera, frame.viewport);
         const pb = projectPoint(runeAnchor(b.p), frame.camera, frame.viewport);
-        const alpha = Math.max(0.08, 1 - frame.candidate.gap / 42);
+        const alpha = Math.max(0.25, 1 - frame.candidate.gap / 42);
         ctx.save();
         ctx.strokeStyle = `rgba(255,209,119,${alpha})`;
         ctx.lineWidth = 1.2;
@@ -256,12 +256,18 @@ function drawRunes(ctx: CanvasRenderingContext2D, frame: RenderFrame): NodeHit[]
     const projected = projectPoint(node.p, frame.camera, frame.viewport);
     if (projected.depth <= 0.05) continue;
     if (projected.x < -20 || projected.x > frame.viewport.width + 20 || projected.y < -20 || projected.y > frame.viewport.height + 20) continue;
-    hits.push({ id: node.id, x: projected.x, y: projected.y, radius: Math.max(12, Math.min(30, projected.scale * 0.48)) });
+    const anchorProjected = projectPoint(runeAnchor(node.p), frame.camera, frame.viewport);
+    hits.push({
+      id: node.id,
+      x: (projected.x + anchorProjected.x) / 2,
+      y: (projected.y + anchorProjected.y) / 2,
+      radius: Math.max(18, Math.min(34, projected.scale * 0.55)),
+    });
 
     const activeTarget = frame.selected === node.id || (frame.hint?.type === 'move' && frame.hint.node === node.id);
     if (frame.reachable.has(node.id) && node.id !== frame.session.node) {
       ctx.beginPath();
-      ctx.arc(projected.x, projected.y, activeTarget ? 8 + Math.sin(frame.time * 4) : 3.2, 0, Math.PI * 2);
+      ctx.arc(projected.x, projected.y, activeTarget ? 8 + Math.sin(frame.time * 4) : 4.5, 0, Math.PI * 2);
       ctx.fillStyle = activeTarget ? '#ffe0a0' : 'rgba(121,225,211,0.78)';
       ctx.fill();
     }
@@ -277,7 +283,7 @@ function drawRunes(ctx: CanvasRenderingContext2D, frame: RenderFrame): NodeHit[]
     const candidate = pending.some((edge) => frame.candidate?.id === edge.id);
     const hinted = pending.some((edge) => frame.hint?.type === 'align' && frame.hint.illusion === edge.id);
     const charging = pending.some((edge) => frame.alignment.edgeId === edge.id);
-    const radius = Math.max(5, Math.min(14, rune.scale * 0.16));
+    const radius = Math.max(6, Math.min(14, rune.scale * 0.16));
 
     ctx.save();
     ctx.strokeStyle = 'rgba(132,202,197,0.18)';

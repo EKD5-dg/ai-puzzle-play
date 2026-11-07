@@ -60,3 +60,17 @@ test('authored alignment views keep both rune anchors visible', () => {
     }
   }
 });
+
+test('exit runes remain visible across most orbit angles', () => {
+  for (const level of LEVELS) {
+    const mesh = buildLevelMesh(level, new Set());
+    const exit = level.nodes.find((node) => node.id === level.exit);
+    let visible = 0;
+    const samples = 36;
+    for (let index = 0; index < samples; index += 1) {
+      const camera = makeCamera(level, { yaw: index / samples * Math.PI * 2, pitch: 0.6 });
+      if (isPointVisible(runeAnchor(exit.p), mesh, camera, viewport)) visible += 1;
+    }
+    assert.ok(visible / samples >= 0.7, `${level.id}: exit visible ${visible}/${samples}`);
+  }
+});

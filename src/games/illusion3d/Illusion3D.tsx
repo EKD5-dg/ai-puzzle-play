@@ -6,7 +6,7 @@ import { sfx } from '../../core/sound';
 import { useBestScore } from '../../core/sync';
 import { useToast } from '../../core/Toast';
 import { buildLevelMesh, isPointVisible } from './geometry.ts';
-import { applyOrbit, createGesture, reduceGesture, walkPosition, wheelZoomFactor, zoomCamera } from './input.ts';
+import { applyOrbit, createGesture, reduceGesture, selectTapTarget, walkPosition, wheelZoomFactor, zoomCamera } from './input.ts';
 import { LEVELS } from './levels.ts';
 import {
   advanceWalk,
@@ -298,8 +298,9 @@ export default function Illusion3D() {
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest('button,input,textarea,select,a')) return;
+      if (target?.closest('input,textarea,select')) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key === 'Enter' && target?.closest('button,a')) return;
       if (event.key.startsWith('Arrow')) {
         event.preventDefault();
         keysRef.current.add(event.key);
@@ -342,20 +343,17 @@ export default function Illusion3D() {
 
   const handleTap = (x: number, y: number) => {
     if (walkRef.current || sessionRef.current.complete) return;
-    const hit = hitsRef.current
-      .map((item) => ({ item, distance: Math.hypot(item.x - x, item.y - y) }))
-      .filter((entry) => entry.distance <= Math.max(16, entry.item.radius))
-      .sort((a, b) => a.distance - b.distance)[0]?.item;
-    if (!hit) {
+    const id = selectTapTarget(hitsRef.current, x, y, sessionRef.current.node, reachableRef.current);
+    if (!id) {
       setSelected(null);
       return;
     }
-    setSelected(hit.id);
-    if (hit.id === sessionRef.current.node) {
-      const node = levelRef.current.nodes.find((item) => item.id === hit.id);
+    setSelected(id);
+    if (id === sessionRef.current.node) {
+      const node = levelRef.current.nodes.find((item) => item.id === id);
       setNotice(`旅人正在「${node?.label}」。选择另一处发光平台，或转动寻找断口。`);
     } else {
-      startWalk(hit.id);
+      startWalk(id);
     }
   };
 
@@ -392,7 +390,7 @@ export default function Illusion3D() {
               event.currentTarget.setPointerCapture(event.pointerId);
               const point = pointerPosition(event);
               gestureRef.current = reduceGesture(gestureRef.current, {
-                type: 'down', id: event.pointerId, x: point.x, y: point.y,
+                type: 'down', id: event.pointerId, x: point.x, y: point.y, pointerType: event.pointerType,
               }).state;
             }}
             onPointerMove={(event) => {
@@ -403,6 +401,13 @@ export default function Illusion3D() {
               gestureRef.current = result.state;
               if (result.orbit) cameraRef.current = applyOrbit(cameraRef.current, result.orbit.dx, result.orbit.dy);
               if (result.zoom !== null) cameraRef.current = zoomCamera(cameraRef.current, result.zoom);
+              if (gestureRef.current.pointers.length === 0) {
+                const hover = selectTapTarget(hitsRef.current, point.x, point.y, sessionRef.current.node, reachableRef.current);
+                event.currentTarget.style.cursor = hover ? 'pointer' : 'grab';
+              }
+            }}
+            onPointerLeave={(event) => {
+              event.currentTarget.style.cursor = 'grab';
             }}
             onPointerUp={(event) => {
               const point = pointerPosition(event);
