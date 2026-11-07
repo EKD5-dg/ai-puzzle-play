@@ -36,6 +36,7 @@ import {
   metaQubic3D,
   metaCrystalDefense,
   metaIllusion3D,
+  metaMatch3,
 } from './gameMetas';
 
 /**
@@ -81,6 +82,7 @@ export const games: GameDefinition[] = [
   { meta: metaQubic3D, component: lazy(() => import('../games/Qubic3D')) },
   { meta: metaCrystalDefense, component: lazy(() => import('../games/CrystalDefense3D')) },
   { meta: metaIllusion3D, component: lazy(() => import('../games/illusion3d/Illusion3D')) },
+  { meta: metaMatch3, component: lazy(() => import('../games/Match3')) },
 ];
 
 /** 按 id 查找游戏 */

@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node --test tests/illusion3d.test.mjs tests/illusion3d-projection.test.mjs tests/illusion3d-geometry.test.mjs tests/illusion3d-render.test.mjs tests/illusion3d-input.test.mjs"
+    "test": "node --test tests/illusion3d.test.mjs tests/illusion3d-projection.test.mjs tests/illusion3d-geometry.test.mjs tests/illusion3d-render.test.mjs tests/illusion3d-input.test.mjs tests/match3.test.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

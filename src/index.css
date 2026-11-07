@@ -4952,3 +4952,104 @@ html {
     display: none;
   }
 }
+
+/* ============ 宝石三消 ============ */
+.m3 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.m3-stage {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+}
+
+.m3-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.m3-progress > div {
+  height: 100%;
+  background: linear-gradient(90deg, #4ade80, #ffd93d);
+  transition: width 0.3s ease;
+}
+
+.m3-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  background: #0b1220;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+
+.m3-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(4, 8, 16, 0.82);
+  backdrop-filter: blur(4px);
+  border-radius: var(--radius);
+  text-align: center;
+  padding: 20px;
+}
+
+.m3-overlay h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.m3-overlay p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.m3-rules {
+  text-align: left;
+}
+
+.m3-target {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.m3-low {
+  color: #ff5a6e;
+}
+
+@media (max-width: 560px) {
+  .m3-overlay {
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .m3-overlay h2 {
+    font-size: 19px;
+  }
+
+  .m3-overlay p {
+    font-size: 12px;
+    line-height: 1.6;
+  }
+}
