@@ -38,6 +38,17 @@ interface CameraBasis {
   forward: Vec3;
 }
 
+/** 每帧复用一次的相机基/焦距：避免每次 projectPoint 都重算三角函数与归一化 */
+export interface CameraFrame {
+  position: Vec3;
+  right: Vec3;
+  up: Vec3;
+  forward: Vec3;
+  focal: number;
+  width: number;
+  height: number;
+}
+
 function sub(a: Vec3, b: Vec3): Vec3 {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 }
@@ -104,18 +115,33 @@ export function makeCamera(level: IllusionLevel, view: CameraView = level.camera
   };
 }
 
-export function projectPoint(point: Vec3, camera: OrbitCamera, viewport: Viewport): ProjectedPoint {
+export function makeCameraFrame(camera: OrbitCamera, viewport: Viewport): CameraFrame {
   const basis = cameraBasis(camera);
-  const relative = sub(point, cameraPosition(camera));
-  const depth = dot(relative, basis.forward);
-  const focal = Math.min(viewport.width, viewport.height) * 1.4 * camera.zoom * (camera.distance / 10);
-  const scale = focal / depth;
   return {
-    x: viewport.width / 2 + dot(relative, basis.right) * scale,
-    y: viewport.height / 2 - dot(relative, basis.up) * scale,
+    position: cameraPosition(camera),
+    right: basis.right,
+    up: basis.up,
+    forward: basis.forward,
+    focal: Math.min(viewport.width, viewport.height) * 1.4 * camera.zoom * (camera.distance / 10),
+    width: viewport.width,
+    height: viewport.height,
+  };
+}
+
+export function projectPointWithFrame(point: Vec3, frame: CameraFrame): ProjectedPoint {
+  const relative = sub(point, frame.position);
+  const depth = dot(relative, frame.forward);
+  const scale = frame.focal / depth;
+  return {
+    x: frame.width / 2 + dot(relative, frame.right) * scale,
+    y: frame.height / 2 - dot(relative, frame.up) * scale,
     depth,
     scale,
   };
+}
+
+export function projectPoint(point: Vec3, camera: OrbitCamera, viewport: Viewport): ProjectedPoint {
+  return projectPointWithFrame(point, makeCameraFrame(camera, viewport));
 }
 
 export function findAlignableEdge(

@@ -1,5 +1,5 @@
-import { projectPoint } from './projection.ts';
-import type { OrbitCamera, Viewport } from './projection.ts';
+import { makeCameraFrame, projectPointWithFrame } from './projection.ts';
+import type { CameraFrame, OrbitCamera, ProjectedPoint, Viewport } from './projection.ts';
 import type { IllusionLevel, Vec3 } from './types.ts';
 
 export type FaceMaterial = 'stone' | 'cap' | 'path' | 'bridge' | 'underside' | 'gate';
@@ -156,18 +156,34 @@ export function buildLevelMesh(level: IllusionLevel, unlocked: ReadonlySet<strin
   return mesh;
 }
 
-export function isPointVisible(
+/** 一帧内所有网格三角形的投影结果，供多个可见性查询复用 */
+export interface ProjectedTriangle {
+  triangle: Triangle;
+  a: ProjectedPoint;
+  b: ProjectedPoint;
+  c: ProjectedPoint;
+  depth: number;
+}
+
+/** 每帧只投影一次全部三角形（376 个），可见性查询不再各自重投影 3 个顶点 */
+export function projectMesh(mesh: Mesh, frame: CameraFrame): ProjectedTriangle[] {
+  return mesh.map((triangle) => {
+    const a = projectPointWithFrame(triangle.a, frame);
+    const b = projectPointWithFrame(triangle.b, frame);
+    const c = projectPointWithFrame(triangle.c, frame);
+    return { triangle, a, b, c, depth: (a.depth + b.depth + c.depth) / 3 };
+  });
+}
+
+export function isPointVisibleWithFrame(
   point: Vec3,
-  mesh: Mesh,
-  camera: OrbitCamera,
-  viewport: Viewport,
+  screenMesh: ProjectedTriangle[],
+  frame: CameraFrame,
 ): boolean {
-  const target = projectPoint(point, camera, viewport);
+  const target = projectPointWithFrame(point, frame);
   if (target.depth <= 0.05) return false;
-  for (const triangle of mesh) {
-    const a = projectPoint(triangle.a, camera, viewport);
-    const b = projectPoint(triangle.b, camera, viewport);
-    const c = projectPoint(triangle.c, camera, viewport);
+  for (const item of screenMesh) {
+    const { a, b, c } = item;
     if (a.depth <= 0.05 || b.depth <= 0.05 || c.depth <= 0.05) continue;
     const denominator = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
     if (Math.abs(denominator) < 1e-7) continue;
@@ -179,4 +195,15 @@ export function isPointVisible(
     if (surfaceDepth < target.depth - 0.035) return false;
   }
   return true;
+}
+
+/** 兼容旧调用：内部仍按一次查询构建投影缓存（测试/低频路径） */
+export function isPointVisible(
+  point: Vec3,
+  mesh: Mesh,
+  camera: OrbitCamera,
+  viewport: Viewport,
+): boolean {
+  const frame = makeCameraFrame(camera, viewport);
+  return isPointVisibleWithFrame(point, projectMesh(mesh, frame), frame);
 }

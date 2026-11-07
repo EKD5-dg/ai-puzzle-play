@@ -1,7 +1,7 @@
-import { isPointVisible } from './geometry.ts';
-import type { FaceMaterial, Mesh } from './geometry.ts';
-import { cameraPosition, projectPoint, runeAnchor } from './projection.ts';
-import type { AlignmentCandidate, AlignmentState, OrbitCamera, Viewport } from './projection.ts';
+import { isPointVisible, isPointVisibleWithFrame } from './geometry.ts';
+import type { FaceMaterial, Mesh, ProjectedTriangle } from './geometry.ts';
+import { cameraPosition, projectPoint, projectPointWithFrame, runeAnchor } from './projection.ts';
+import type { AlignmentCandidate, AlignmentState, CameraFrame, OrbitCamera, ProjectedPoint, Viewport } from './projection.ts';
 import type { IllusionHint, IllusionLevel, IllusionSession, LevelNode, Vec3 } from './types.ts';
 
 type RenderMaterial = FaceMaterial | 'core' | 'cloak' | 'skin' | 'scarf';
@@ -26,6 +26,9 @@ export interface RenderFrame {
   mesh: Mesh;
   camera: OrbitCamera;
   viewport: Viewport;
+  /** 每帧复用的相机基/焦距与网格投影（可选，缺省走旧路径） */
+  cameraFrame?: CameraFrame;
+  screenMesh?: ProjectedTriangle[];
   traveler: TravelerVisual;
   visibleNodes: ReadonlySet<string>;
   reachable: ReadonlySet<string>;
@@ -186,6 +189,18 @@ function drawBackground(ctx: CanvasRenderingContext2D, viewport: Viewport, time:
   ctx.globalAlpha = 1;
 }
 
+function projectInFrame(frame: RenderFrame, point: Vec3): ProjectedPoint {
+  return frame.cameraFrame
+    ? projectPointWithFrame(point, frame.cameraFrame)
+    : projectPoint(point, frame.camera, frame.viewport);
+}
+
+function isVisibleInFrame(frame: RenderFrame, point: Vec3): boolean {
+  return frame.cameraFrame && frame.screenMesh
+    ? isPointVisibleWithFrame(point, frame.screenMesh, frame.cameraFrame)
+    : isPointVisible(point, frame.mesh, frame.camera, frame.viewport);
+}
+
 function tracePolygon(ctx: CanvasRenderingContext2D, points: Array<{ x: number; y: number }>): void {
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
@@ -197,14 +212,14 @@ function drawPortal(ctx: CanvasRenderingContext2D, frame: RenderFrame): void {
   const node = frame.level.nodes.find((item) => item.id === frame.level.exit);
   if (!node || !frame.visibleNodes.has(node.id)) return;
   const center = add(node.p, [0, 0.56, 0]);
-  if (!isPointVisible(center, frame.mesh, frame.camera, frame.viewport)) return;
+  if (!isVisibleInFrame(frame, center)) return;
   const right: Vec3 = [Math.cos(frame.level.camera.yaw), 0, -Math.sin(frame.level.camera.yaw)];
   const points: Vec3[] = [];
   for (let index = 0; index < 28; index += 1) {
     const angle = index / 28 * Math.PI * 2;
     points.push(add(center, add(scale(right, Math.cos(angle) * 0.27), [0, Math.sin(angle) * 0.43, 0])));
   }
-  const projected = points.map((point) => projectPoint(point, frame.camera, frame.viewport));
+  const projected = points.map((point) => projectInFrame(frame, point));
   const open = frame.session.collected.length === frame.level.nodes.filter((item) => item.core).length;
   ctx.save();
   tracePolygon(ctx, projected);
@@ -235,8 +250,8 @@ function drawRunes(ctx: CanvasRenderingContext2D, frame: RenderFrame): NodeHit[]
       const a = nodeById.get(edge.a);
       const b = nodeById.get(edge.b);
       if (a && b && frame.visibleNodes.has(a.id) && frame.visibleNodes.has(b.id)) {
-        const pa = projectPoint(runeAnchor(a.p), frame.camera, frame.viewport);
-        const pb = projectPoint(runeAnchor(b.p), frame.camera, frame.viewport);
+        const pa = projectInFrame(frame, runeAnchor(a.p));
+        const pb = projectInFrame(frame, runeAnchor(b.p));
         const alpha = Math.max(0.25, 1 - frame.candidate.gap / 42);
         ctx.save();
         ctx.strokeStyle = `rgba(255,209,119,${alpha})`;
@@ -253,10 +268,10 @@ function drawRunes(ctx: CanvasRenderingContext2D, frame: RenderFrame): NodeHit[]
 
   for (const node of frame.level.nodes) {
     if (!frame.visibleNodes.has(node.id)) continue;
-    const projected = projectPoint(node.p, frame.camera, frame.viewport);
+    const projected = projectInFrame(frame, node.p);
     if (projected.depth <= 0.05) continue;
     if (projected.x < -20 || projected.x > frame.viewport.width + 20 || projected.y < -20 || projected.y > frame.viewport.height + 20) continue;
-    const anchorProjected = projectPoint(runeAnchor(node.p), frame.camera, frame.viewport);
+    const anchorProjected = projectInFrame(frame, runeAnchor(node.p));
     hits.push({
       id: node.id,
       x: (projected.x + anchorProjected.x) / 2,
@@ -277,8 +292,8 @@ function drawRunes(ctx: CanvasRenderingContext2D, frame: RenderFrame): NodeHit[]
     );
     if (pending.length === 0) continue;
     const anchor = runeAnchor(node.p);
-    if (!isPointVisible(anchor, frame.mesh, frame.camera, frame.viewport)) continue;
-    const rune = projectPoint(anchor, frame.camera, frame.viewport);
+    if (!isVisibleInFrame(frame, anchor)) continue;
+    const rune = projectInFrame(frame, anchor);
     const eligible = frame.session.node === node.id;
     const candidate = pending.some((edge) => frame.candidate?.id === edge.id);
     const hinted = pending.some((edge) => frame.hint?.type === 'align' && frame.hint.illusion === edge.id);
@@ -317,7 +332,7 @@ function drawRunes(ctx: CanvasRenderingContext2D, frame: RenderFrame): NodeHit[]
 }
 
 function drawLabel(ctx: CanvasRenderingContext2D, node: LevelNode, frame: RenderFrame): void {
-  const point = projectPoint(add(node.p, [0, -0.18, 0]), frame.camera, frame.viewport);
+  const point = projectInFrame(frame, add(node.p, [0, -0.18, 0]));
   ctx.save();
   ctx.font = '11px "Microsoft YaHei", sans-serif';
   ctx.textAlign = 'center';
@@ -332,22 +347,33 @@ function drawLabel(ctx: CanvasRenderingContext2D, node: LevelNode, frame: Render
 
 export function drawScene(ctx: CanvasRenderingContext2D, frame: RenderFrame): NodeHit[] {
   drawBackground(ctx, frame.viewport, frame.time);
-  const triangles: RenderTriangle[] = [...frame.mesh];
+  const dynamic: RenderTriangle[] = [];
   for (const node of frame.level.nodes) {
     if (!node.core || frame.session.collected.includes(node.id) || !frame.visibleNodes.has(node.id)) continue;
     const center = add(node.p, [0, 0.76 + Math.sin(frame.time * 2.1 + node.p[0]) * 0.05, 0]);
-    triangles.push(...octahedron(center, 0.19, frame.time * 0.9 + node.p[2], 'core'));
+    dynamic.push(...octahedron(center, 0.19, frame.time * 0.9 + node.p[2], 'core'));
   }
   const bob = frame.traveler.moving ? Math.sin(frame.traveler.phase * Math.PI * 2) * 0.025 : 0;
-  triangles.push(...cloak(frame.traveler.position, bob));
+  dynamic.push(...cloak(frame.traveler.position, bob));
 
-  const eye = cameraPosition(frame.camera);
-  const visible = triangles.flatMap((triangle) => {
-    if (dot(triangle.normal, sub(eye, triangle.a)) <= 0) return [];
-    const points = [triangle.a, triangle.b, triangle.c].map((point) => projectPoint(point, frame.camera, frame.viewport));
-    if (points.some((point) => point.depth <= 0.05)) return [];
-    return [{ triangle, points, depth: (points[0].depth + points[1].depth + points[2].depth) / 3 }];
-  });
+  const eye = frame.cameraFrame?.position ?? cameraPosition(frame.camera);
+  const visible: Array<{ triangle: RenderTriangle; points: ProjectedPoint[]; depth: number }> = [];
+  const addVisible = (triangle: RenderTriangle, points: ProjectedPoint[]) => {
+    if (points.some((point) => point.depth <= 0.05)) return;
+    if (dot(triangle.normal, sub(eye, triangle.a)) <= 0) return;
+    visible.push({ triangle, points, depth: (points[0].depth + points[1].depth + points[2].depth) / 3 });
+  };
+  if (frame.screenMesh) {
+    // 网格三角形已在本帧统一投影，直接复用
+    for (const item of frame.screenMesh) addVisible(item.triangle, [item.a, item.b, item.c]);
+  } else {
+    for (const triangle of frame.mesh) {
+      addVisible(triangle, [triangle.a, triangle.b, triangle.c].map((point) => projectInFrame(frame, point)));
+    }
+  }
+  for (const triangle of dynamic) {
+    addVisible(triangle, [triangle.a, triangle.b, triangle.c].map((point) => projectInFrame(frame, point)));
+  }
   visible.sort((a, b) => b.depth - a.depth);
   for (const item of visible) {
     tracePolygon(ctx, item.points);
@@ -361,8 +387,8 @@ export function drawScene(ctx: CanvasRenderingContext2D, frame: RenderFrame): No
   for (const node of frame.level.nodes) {
     if (!node.core || frame.session.collected.includes(node.id) || !frame.visibleNodes.has(node.id)) continue;
     const center = add(node.p, [0, 0.76 + Math.sin(frame.time * 2.1 + node.p[0]) * 0.05, 0]);
-    if (!isPointVisible(center, frame.mesh, frame.camera, frame.viewport)) continue;
-    const point = projectPoint(center, frame.camera, frame.viewport);
+    if (!isVisibleInFrame(frame, center)) continue;
+    const point = projectInFrame(frame, center);
     drawGlow(ctx, point.x, point.y, Math.max(12, point.scale * 0.42), 'rgba(255,190,75,0.24)');
   }
 

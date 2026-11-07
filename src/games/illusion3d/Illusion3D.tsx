@@ -5,9 +5,10 @@ import { readBestKey } from '../../core/useLocalStorage';
 import { sfx } from '../../core/sound';
 import { useBestScore } from '../../core/sync';
 import { useToast } from '../../core/Toast';
-import { buildLevelMesh, isPointVisible } from './geometry.ts';
+import { buildLevelMesh, isPointVisibleWithFrame, projectMesh } from './geometry.ts';
 import { applyOrbit, createGesture, reduceGesture, selectTapTarget, walkPosition, wheelZoomFactor, zoomCamera } from './input.ts';
 import { LEVELS } from './levels.ts';
+import { makeCameraFrame } from './projection.ts';
 import {
   advanceWalk,
   createSession,
@@ -191,9 +192,12 @@ export default function Illusion3D() {
 
       const size = sizeRef.current;
       const viewport = { width: size.width, height: size.height };
+      // 每帧只算一次相机基和全部三角形投影，避免每个节点各自重投影 376 个三角形
+      const cameraFrame = makeCameraFrame(orbited, viewport);
+      const screenMesh = projectMesh(meshRef.current, cameraFrame);
       const visibleNodes = new Set(
         current.nodes
-          .filter((node) => isPointVisible(runeAnchor(node.p), meshRef.current, orbited, viewport))
+          .filter((node) => isPointVisibleWithFrame(runeAnchor(node.p), screenMesh, cameraFrame))
           .map((node) => node.id),
       );
       const activeSession = sessionRef.current;
@@ -206,6 +210,7 @@ export default function Illusion3D() {
         const next = unlockIllusion(current, activeSession, alignment.locked);
         if (next !== activeSession) {
           commitSession(next);
+          // 本帧 screenMesh/visibleNodes 仍基于旧网格，最多延迟一帧显示新桥；下一帧自动重建
           meshRef.current = buildLevelMesh(current, new Set(next.unlocked));
           setHint(null);
           setNotice('光桥已固定。现在可以自由转动视角，并点按发光平台前往。');
@@ -227,6 +232,8 @@ export default function Illusion3D() {
           mesh: meshRef.current,
           camera: orbited,
           viewport,
+          cameraFrame,
+          screenMesh,
           traveler: {
             position: travelerPosition,
             moving: Boolean(activeWalk),

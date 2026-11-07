@@ -1782,7 +1782,8 @@ export default function Gaze3D() {
     const p = toCanvas(e);
     if (e.pointerType === 'touch' && p.x < RW * 0.42) {
       stickRef.current = { id: e.pointerId, ox: p.x, oy: p.y, dx: 0, dy: 0 };
-    } else {
+    } else if (lookHoldIdRef.current === null) {
+      // 已经有视角指针时忽略第二根右半屏手指，避免覆盖 lookRef 后提前停火
       lookRef.current = { id: e.pointerId, lastX: p.x, lastY: p.y, x0: p.x, y0: p.y, t0: performance.now(), moved: false };
       // 按住视角区 = 持续射击（帧循环按 cd 节流）：注释一直这么写但只有键盘/光矛按钮接了持续射击
       lookHoldRef.current = true;

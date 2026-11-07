@@ -4246,6 +4246,27 @@ html {
   padding: 16px;
 }
 
+/* 4:3 舞台在 320px 下只有约 219px 高，结算/开始层内容可能比舞台高：
+   允许纵向滚动并用 safe center 避免上下同时溢出。 */
+@media (max-width: 560px) {
+  .p3d-overlay,
+  .pl3d-overlay,
+  .bw3d-overlay,
+  .rc3d-overlay,
+  .brk-overlay,
+  .s3d-overlay,
+  .stk-overlay,
+  .t3d-overlay,
+  .qb3d-overlay {
+    /* 不支持 safe 关键字的浏览器回退到顶部对齐，配合 overflow 保证按钮可达 */
+    justify-content: flex-start;
+    justify-content: safe center;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 12px;
+  }
+}
+
 .brk-overlay h2 {
   font-size: 24px;
 }
