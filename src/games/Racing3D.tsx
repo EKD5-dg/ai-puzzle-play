@@ -4,7 +4,7 @@ import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { TouchButtons } from '../core/TouchControls';
-import { RACING_LANES, applyCarFollowing, pickFreeLaneIndex } from './racingCore';
+import { RACING_LANES, applyCarFollowing, isSceneryVisible, pickFreeLaneIndex } from './racingCore';
 import { accelHeld, brakeHeld, createRacingHold, setKeyHold, setTouchHold, steerAxis } from './racingInput';
 import { metaRacing3D } from '../core/gameMetas';
 
@@ -172,29 +172,26 @@ function buildTrack(): Segment[] {
   return segs;
 }
 
-/** 重新撒一遍路边树木/岩石（保留弯道指示牌）：赛道是定长环，
- *  每跑完一圈换一批景物，不然"5 秒一循环"的观感复读很明显 */
-function reshuffleScenery(segs: Segment[]): void {
-  for (const s of segs) s.sprites = s.sprites.filter((sp) => sp.type === 'sign');
-  for (let i = 4; i < segs.length; i += 2) {
-    if (Math.random() < 0.62) {
-      const side = Math.random() < 0.5 ? -1 : 1;
-      segs[i].sprites.push({
-        type: Math.random() < 0.78 ? 'tree' : 'rock',
-        offset: side * rand(TREE_MIN_X, 3.4),
-      });
-      if (Math.random() < 0.35) {
-        segs[i].sprites.push({
-          type: 'tree',
-          offset: -side * rand(TREE_MIN_X, 3.6),
-        });
-      }
-    }
+/** 重新撒一段路边树木/岩石（保留弯道指示牌），供整圈刷新与窗口外延迟刷新共用 */
+function reshuffleSegment(seg: Segment): void {
+  seg.sprites = seg.sprites.filter((sp) => sp.type === 'sign');
+  const i = seg.index;
+  if (i < 4 || i % 2 !== 0) return;
+  if (Math.random() >= 0.62) return;
+  const side = Math.random() < 0.5 ? -1 : 1;
+  seg.sprites.push({
+    type: Math.random() < 0.78 ? 'tree' : 'rock',
+    offset: side * rand(TREE_MIN_X, 3.4),
+  });
+  if (Math.random() < 0.35) {
+    seg.sprites.push({
+      type: 'tree',
+      offset: -side * rand(TREE_MIN_X, 3.6),
+    });
   }
 }
 
-/** 世界 → 屏幕；dz 下限避免相机脚下的段爆掉多边形；scale 上限防止巨大路径拖垮光栅 */
-function project(p: Pt, camX: number, camY: number, camZ: number) {
+/** 世界 → 屏幕；dz 下限避免相机脚下的段爆掉多边形；scale 上限防止巨大路径拖垮光栅 */function project(p: Pt, camX: number, camY: number, camZ: number) {
   const dz = Math.max(20, p.world.z - camZ);
   const scale = Math.min(CAM_DEPTH / dz, 0.0052);
   p.screen.dz = dz;
@@ -252,6 +249,8 @@ interface World {
   meters: number;
   /** 已经跑完的圈数：跨圈时换一批路边景物 */
   lap: number;
+  /** 换景物时正在画面内、需要等它移出窗口后再刷新的段 */
+  sceneryPending: Set<number>;
   over: boolean;
 }
 
@@ -287,6 +286,7 @@ function newWorld(): World {
     tilt: 0,
     meters: 0,
     lap: 0,
+    sceneryPending: new Set(),
     over: false,
   };
 }
@@ -421,11 +421,25 @@ function substep(w: World, dt: number, tNow: number) {
     }
   }
 
-  // 每跑完一圈换一批路边景物：赛道是定长环，景物原样复读最容易暴露"几秒一循环"
+  // 每跑完一圈换一批路边景物：赛道是定长环，景物原样复读最容易暴露"几秒一循环"。
+  // 只立即刷新画面外的段；窗口内的段先挂起，等移出视距后再换，避免整片闪变。
+  const baseNow = () => Math.floor((((w.position % w.trackLen) + w.trackLen) % w.trackLen) / SEG_LEN) % w.segs.length;
   const lap = Math.floor(w.position / w.trackLen);
   if (lap !== w.lap) {
     w.lap = lap;
-    reshuffleScenery(w.segs);
+    const base = baseNow();
+    for (let i = 0; i < w.segs.length; i++) {
+      if (isSceneryVisible(i, base, w.segs.length, DRAW_DIST)) w.sceneryPending.add(i);
+      else reshuffleSegment(w.segs[i]);
+    }
+  }
+  if (w.sceneryPending.size > 0) {
+    const base = baseNow();
+    for (const i of w.sceneryPending) {
+      if (isSceneryVisible(i, base, w.segs.length, DRAW_DIST)) continue;
+      reshuffleSegment(w.segs[i]);
+      w.sceneryPending.delete(i);
+    }
   }
 
   // 碰撞 / 近失（relZ 判定窗只有 2×CAR_LEN，靠 step 的子步保证一帧不会整辆跨过）
@@ -1155,10 +1169,6 @@ function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
       ctx.fillStyle = 'rgba(255,214,150,0.05)';
       poly(ctx, p1.x, p1.y, p2.x, p2.y, p1.w * 1.5, p2.w * 1.5, 'rgba(255,214,150,0.05)');
     }
-    if (fogA > 0.02) {
-      ctx.fillStyle = rgba(COL.fog, fogA);
-      ctx.fillRect(0, p2.y, RW, bandH);
-    }
     // 路缘（红白相间）
     const r1 = Math.max(1, p1.w * 0.11);
     const r2 = Math.max(1, p2.w * 0.11);
@@ -1198,8 +1208,6 @@ function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
         }
       }
     }
-    if (fogA > 0.02) poly(ctx, p1.x, p1.y, p2.x, p2.y, p1.w + r1, p2.w + r2, rgba(COL.fog, fogA * 0.9));
-
     // 护栏
     drawSegRail(ctx, seg);
 
@@ -1229,6 +1237,12 @@ function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
         const cw = lerp(p1.w, p2.w, cz) * (c.kind === 'truck' ? 0.44 : c.kind === 'van' ? 0.48 : 0.46);
         drawTrafficCar(ctx, cx, cy, cw, c);
       }
+    }
+
+    // 雾必须罩在该段所有元素之后，否则车流/护栏/路侧物会在雾面上“浮”出来
+    if (fogA > 0.02) {
+      ctx.fillStyle = rgba(COL.fog, fogA);
+      ctx.fillRect(0, p2.y, RW, bandH);
     }
   }
 

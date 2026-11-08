@@ -4,6 +4,7 @@ import {
   RACING_LANES,
   RACING_LANE_GAP,
   applyCarFollowing,
+  isSceneryVisible,
   nearestLaneIndex,
   pickFreeLaneIndex,
 } from '../src/games/racingCore.ts';
@@ -62,6 +63,18 @@ test('跟车按空间顺序解析：数组顺序相反也不会穿模', () => {
   assert.equal(front.speed, 1000);
   assert.equal(middle.speed, 1000);
   assert.equal(rear.speed, 1000);
+});
+
+test('换景物窗口按环回绕，窗口内的段不得立刻刷新', () => {
+  const total = 100;
+  const draw = 20;
+  assert.equal(isSceneryVisible(10, 0, total, draw), true);
+  assert.equal(isSceneryVisible(19, 0, total, draw), true);
+  assert.equal(isSceneryVisible(20, 0, total, draw), false);
+  assert.equal(isSceneryVisible(99, 90, total, draw), true);
+  assert.equal(isSceneryVisible(9, 90, total, draw), true);
+  assert.equal(isSceneryVisible(10, 90, total, draw), false); // 刚出窗口
+  assert.equal(isSceneryVisible(89, 90, total, draw), false);
 });
 
 test('不同车道互不影响，前车离开后恢复巡航', () => {

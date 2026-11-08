@@ -36,6 +36,15 @@ export function pickFreeLaneIndex(cars: readonly LaneCar[], z: number, exclude: 
   return free[Math.floor(Math.random() * free.length)];
 }
 
+/**
+ * 某段是否落在当前绘制窗口内（窗口从 base 起向前 drawDist 段，绕环）。
+ * 换景物时必须跳过窗口内的段，否则玩家眼前会整片闪变。
+ */
+export function isSceneryVisible(index: number, base: number, total: number, drawDist: number): boolean {
+  const d = ((index - base) % total + total) % total;
+  return d < drawDist;
+}
+
 export interface FollowCar {
   offset: number;
   z: number;
