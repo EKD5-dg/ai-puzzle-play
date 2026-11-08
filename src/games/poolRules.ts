@@ -66,3 +66,69 @@ export function safeHandSpot(x: number, z: number, b: CueHandBounds): [number, n
   }
   return best;
 }
+
+export interface CueBallLike {
+  id: number;
+  x: number;
+  z: number;
+  pocketed: boolean;
+}
+
+/**
+ * 自由球最终落点：躲袋口 → 推开压住的球 → 仍不合法则用默认点/网格兜底。
+ * 预览与点击共用，保证玩家看到的白球位置就是落点。
+ */
+export function resolveCueSpot(
+  x: number,
+  z: number,
+  b: CueHandBounds,
+  balls: ReadonlyArray<CueBallLike>,
+  fallback: readonly [number, number],
+): [number, number] {
+  const overlaps = (px: number, pz: number) =>
+    balls.some((o) => o.id !== 0 && !o.pocketed && Math.hypot(px - o.x, pz - o.z) < b.ballR * 2 + 0.02);
+  let [cx, cz] = safeHandSpot(x, z, b);
+  // 反复"推开再回钳"：一次推开可能把白球顶到库边外，回钳后又压回原来那颗球上
+  for (let pass = 0; pass < 6 && overlaps(cx, cz); pass++) {
+    for (const o of balls) {
+      if (o.id === 0 || o.pocketed) continue;
+      const dx = cx - o.x;
+      const dz = cz - o.z;
+      const d = Math.hypot(dx, dz);
+      const min = b.ballR * 2 + 0.02;
+      if (d >= min) continue;
+      if (d > 0.0001) {
+        const push = (min - d) / d;
+        cx -= dx * push;
+        cz -= dz * push;
+      } else {
+        cz += min; // 完全同心：任选一向挪开，下一轮再收敛
+      }
+      cx = clamp(cx, b.minX, b.maxX);
+      cz = clamp(cz, b.minZ, b.maxZ);
+    }
+  }
+  if (!overlaps(cx, cz) && isCueSpotSafe(cx, cz, b)) return [cx, cz];
+
+  // 推球失败时不要直接甩到默认点：在可放置区内找离玩家点击最近的合法点
+  const wantX = clamp(x, b.minX, b.maxX);
+  const wantZ = clamp(z, b.minZ, b.maxZ);
+  let best: [number, number] | null = null;
+  let bestD = Infinity;
+  const step = Math.max(0.06, b.ballR * 0.5);
+  for (let gz = b.minZ; gz <= b.maxZ + 1e-9; gz += step) {
+    for (let gx = b.minX; gx <= b.maxX + 1e-9; gx += step) {
+      if (overlaps(gx, gz) || !isCueSpotSafe(gx, gz, b)) continue;
+      const d = (gx - wantX) * (gx - wantX) + (gz - wantZ) * (gz - wantZ);
+      if (d < bestD) {
+        bestD = d;
+        best = [gx, gz];
+      }
+    }
+  }
+  if (best) return best;
+
+  // 理论上只有台面小到放不下白球才会走到这里
+  const [fx, fz] = fallback;
+  return [fx, fz];
+}

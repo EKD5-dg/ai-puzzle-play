@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cuePocketClearance, isCueSpotSafe, safeHandSpot } from '../src/games/poolRules.ts';
+import { cuePocketClearance, isCueSpotSafe, resolveCueSpot, safeHandSpot } from '../src/games/poolRules.ts';
 
 // 与 Pool3D 一致的台面/袋口尺寸
 const HX = 4.3;
@@ -61,4 +61,39 @@ test('普通钳制与安全区内目标点保持不变', () => {
   const [x, z] = safeHandSpot(2.5, 1.0, b);
   assert.ok(Math.abs(x - 2.5) < 1e-9);
   assert.ok(Math.abs(z - 1.0) < 1e-9);
+});
+
+test('resolveCueSpot 推开压住的球，且落点仍避开袋口', () => {
+  const b = bounds();
+  const ball = { id: 1, x: 0, z: 0, pocketed: false };
+  const [x, z] = resolveCueSpot(0, 0, b, [ball], [-HX * 0.55, 0]);
+  assert.ok(Math.hypot(x - ball.x, z - ball.z) >= BALL_R * 2 + 0.02 - 1e-9);
+  assert.ok(isCueSpotSafe(x, z, b));
+});
+
+test('袋口边压球时落点应靠近点击处，而不是瞬移到默认点', () => {
+  const b = bounds();
+  const ball = { id: 1, x: 0, z: 1.72, pocketed: false };
+  const click = { x: 0, z: 1.9 };
+  const [x, z] = resolveCueSpot(click.x, click.z, b, [ball], [-HX * 0.55, 0]);
+  assert.ok(Math.hypot(x - ball.x, z - ball.z) >= BALL_R * 2 + 0.02 - 1e-9);
+  assert.ok(isCueSpotSafe(x, z, b));
+  const moved = Math.hypot(x - click.x, z - click.z);
+  assert.ok(moved < 1.0, `落点应靠近点击处，实测偏移 ${moved.toFixed(2)}`);
+});
+
+test('球群围住目标点时最终落点不压球、不入袋', () => {
+  const b = bounds();
+  const balls = [
+    { id: 1, x: 0, z: 0.33, pocketed: false },
+    { id: 2, x: 0, z: -0.33, pocketed: false },
+    { id: 3, x: 0.33, z: 0, pocketed: false },
+    { id: 4, x: -0.33, z: 0, pocketed: false },
+    { id: 5, x: 0, z: 0, pocketed: false },
+  ];
+  const [x, z] = resolveCueSpot(0, 0, b, balls, [-HX * 0.55, 0]);
+  assert.ok(isCueSpotSafe(x, z, b));
+  for (const o of balls) {
+    assert.ok(Math.hypot(x - o.x, z - o.z) >= BALL_R * 2 + 0.02 - 1e-9, `压住了 ${o.id} 号球`);
+  }
 });

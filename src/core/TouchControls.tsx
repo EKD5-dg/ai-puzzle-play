@@ -45,10 +45,12 @@ export function TouchDpad({ onDir, size = 56 }: DpadProps) {
 }
 
 interface ButtonGroupProps {
-  items: Array<{ label: string; onPress: () => void; onRelease?: () => void; primary?: boolean }>;
+  items: Array<{ label: string; onPress: (pointerId: number) => void; onRelease?: (pointerId: number) => void; primary?: boolean }>;
 }
 
 export function TouchButtons({ items }: ButtonGroupProps) {
+  /** 只释放真正在本组按下过的指针：鼠标只是悬停掠过不应触发 onRelease */
+  const activeRef = useRef(new Set<number>());
   return (
     <div className="tc-buttons">
       {items.map((it) => (
@@ -57,15 +59,23 @@ export function TouchButtons({ items }: ButtonGroupProps) {
           className={`tc-btn tc-action ${it.primary ? 'primary' : ''}`}
           onPointerDown={(e) => {
             e.preventDefault();
-            it.onPress();
+            activeRef.current.add(e.pointerId);
+            it.onPress(e.pointerId);
           }}
           onPointerUp={(e) => {
+            if (!activeRef.current.delete(e.pointerId)) return;
             e.preventDefault();
-            it.onRelease?.();
+            it.onRelease?.(e.pointerId);
           }}
-          onPointerCancel={() => it.onRelease?.()}
-          onLostPointerCapture={() => it.onRelease?.()}
-          onPointerLeave={() => it.onRelease?.()}
+          onPointerCancel={(e) => {
+            if (activeRef.current.delete(e.pointerId)) it.onRelease?.(e.pointerId);
+          }}
+          onLostPointerCapture={(e) => {
+            if (activeRef.current.delete(e.pointerId)) it.onRelease?.(e.pointerId);
+          }}
+          onPointerLeave={(e) => {
+            if (activeRef.current.delete(e.pointerId)) it.onRelease?.(e.pointerId);
+          }}
         >
           {it.label}
         </button>

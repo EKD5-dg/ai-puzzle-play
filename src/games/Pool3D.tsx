@@ -5,7 +5,7 @@ import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { metaPool3D } from '../core/gameMetas';
-import { isCueSpotSafe, safeHandSpot } from './poolRules';
+import { resolveCueSpot } from './poolRules';
 
 // ============ 常量 ============
 
@@ -237,54 +237,9 @@ function handBounds(w: World) {
   };
 }
 
-function cueOverlaps(w: World, x: number, z: number): boolean {
-  return w.balls.some((b) => b.id !== 0 && !b.pocketed && Math.hypot(x - b.x, z - b.z) < BALL_R * 2 + 0.02);
-}
-
-/** 默认点若也被围死，按球距网格搜一个空闲点（极端残局兜底） */
-function fallbackCueSpot(w: World, b: ReturnType<typeof handBounds>): [number, number] {
-  const [dx, dz] = defaultCuePos(w);
-  if (!cueOverlaps(w, dx, dz) && isCueSpotSafe(dx, dz, b)) return [dx, dz];
-  const step = BALL_R * 2.1;
-  for (let z = b.minZ; z <= b.maxZ; z += step) {
-    for (let x = b.minX; x <= b.maxX; x += step) {
-      if (!cueOverlaps(w, x, z) && isCueSpotSafe(x, z, b)) return [x, z];
-    }
-  }
-  return [dx, dz];
-}
-
-/**
- * 自由球最终落点：躲袋口 → 推开压住的球 → 仍不合法则退回默认/网格点。
- * 预览与点击共用，保证玩家看到的白球位置就是落点。
- */
+/** 预览与点击共用：袋口安全 + 推开压住的球 + 极端情况兜底 */
 function resolveHandSpot(w: World, x: number, z: number): [number, number] {
-  const b = handBounds(w);
-  // 先躲袋口：钳到台角/袋边的点可能正好落进捕获圈
-  let [cx, cz] = safeHandSpot(x, z, b);
-  // 反复"推开再回钳"：一次推开可能把白球顶到库边外，回钳后又压回原来那颗球上
-  for (let pass = 0; pass < 6 && cueOverlaps(w, cx, cz); pass++) {
-    for (const b2 of w.balls) {
-      if (b2.id === 0 || b2.pocketed) continue;
-      const dx = cx - b2.x;
-      const dz = cz - b2.z;
-      const d = Math.hypot(dx, dz);
-      const min = BALL_R * 2 + 0.02;
-      if (d >= min) continue;
-      if (d > 0.0001) {
-        const push = (min - d) / d;
-        cx -= dx * push;
-        cz -= dz * push;
-      } else {
-        cz += min; // 完全同心：任选一向挪开，下一轮再收敛
-      }
-      cx = clamp(cx, b.minX, b.maxX);
-      cz = clamp(cz, b.minZ, b.maxZ);
-    }
-  }
-  // 推开过程也可能把白球顶进袋口；此时退回确定安全的默认点
-  if (cueOverlaps(w, cx, cz) || !isCueSpotSafe(cx, cz, b)) return fallbackCueSpot(w, b);
-  return [cx, cz];
+  return resolveCueSpot(x, z, handBounds(w), w.balls, defaultCuePos(w));
 }
 
 function placeCue(w: World, x: number, z: number) {

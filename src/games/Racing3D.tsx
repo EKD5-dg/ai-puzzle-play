@@ -5,6 +5,7 @@ import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { TouchButtons } from '../core/TouchControls';
 import { RACING_LANES, applyCarFollowing, pickFreeLaneIndex } from './racingCore';
+import { accelHeld, brakeHeld, createRacingHold, setKeyHold, setTouchHold, steerAxis } from './racingInput';
 import { metaRacing3D } from '../core/gameMetas';
 
 // ============ 常量 ============
@@ -1364,14 +1365,14 @@ export default function Racing3D() {
   if (!worldRef.current) worldRef.current = newWorld();
   const statusRef = useRef<Status>('ready');
   const overHandledRef = useRef(false);
-  /** 当前按住的转向输入（键盘 / 触屏分开记，松手时按剩余按键重算） */
-  const steerHeldRef = useRef({ kL: false, kR: false, tL: false, tR: false });
+  /** 当前按住的转向/油门来源（键盘与触屏分开记，松开一个来源不会清掉另一个） */
+  const holdRef = useRef(createRacingHold());
   statusRef.current = status;
 
   const start = useCallback(() => {
     worldRef.current = newWorld();
-    // 新世界从零开始：清掉上一局仍按住的转向，避免左转被残留的右转抵消
-    steerHeldRef.current = { kL: false, kR: false, tL: false, tR: false };
+    // 新世界从零开始：清掉上一局仍按住的输入，避免左转被残留的右转抵消
+    holdRef.current = createRacingHold();
     overHandledRef.current = false;
     setNewRecord(false);
     setHud({ kmh: 0, meters: 0, lives: 3, nearMiss: 0, score: 0 });
@@ -1389,27 +1390,32 @@ export default function Racing3D() {
   const togglePauseRef = useRef(togglePause);
   togglePauseRef.current = togglePause;
 
-  // 按住 ←、点一下 → 再松开时 steer 必须还原成 ← 仍按住，否则要等系统按键重复才有转向
-  const applySteer = useCallback(() => {
-    const s = steerHeldRef.current;
-    worldRef.current.steer = (s.kR || s.tR ? 1 : 0) - (s.kL || s.tL ? 1 : 0);
+  // 按住 ←、点一下 → 再松开时 steer 必须还原成 ← 仍按住；同名方向可能同时有键盘/多根手指
+  const applyHold = useCallback(() => {
+    const h = holdRef.current;
+    const w = worldRef.current;
+    w.steer = steerAxis(h);
+    w.accel = accelHeld(h);
+    w.brake = brakeHeld(h);
   }, []);
-  const applySteerRef = useRef(applySteer);
-  applySteerRef.current = applySteer;
+  const applyHoldRef = useRef(applyHold);
+  applyHoldRef.current = applyHold;
 
-  // 触屏按住式操控
+  // 触屏按住式操控（按 pointerId 记，双指按同一按钮时松开一根不会误停）
   const touchSteer = useCallback(
-    (dir: -1 | 1, on: boolean) => {
-      const s = steerHeldRef.current;
-      if (dir < 0) s.tL = on;
-      else s.tR = on;
-      applySteer();
+    (dir: -1 | 1, on: boolean, pointerId: number) => {
+      setTouchHold(holdRef.current, dir < 0 ? 'left' : 'right', pointerId, on);
+      applyHold();
     },
-    [applySteer],
+    [applyHold],
   );
-  const touchHold = useCallback((key: 'accel' | 'brake', on: boolean) => {
-    worldRef.current[key] = on;
-  }, []);
+  const touchHold = useCallback(
+    (key: 'accel' | 'brake', on: boolean, pointerId: number) => {
+      setTouchHold(holdRef.current, key, pointerId, on);
+      applyHold();
+    },
+    [applyHold],
+  );
 
   // 主循环
   useEffect(() => {
@@ -1483,7 +1489,6 @@ export default function Racing3D() {
       if (k.startsWith('Arrow') || k === 'Space') e.preventDefault();
       // 焦点还停在按钮上（例如刚点过 🔄 重新开始）时，Enter 交给浏览器原生激活，别再触发起跑
       if (e.key === 'Enter' && (e.target as HTMLElement | null)?.closest('button')) return;
-      const w = worldRef.current;
       if (k === 'KeyP' && !e.repeat) {
         togglePauseRef.current();
         return;
@@ -1495,32 +1500,27 @@ export default function Racing3D() {
         return;
       }
       if (statusRef.current !== 'playing') return;
-      const held = steerHeldRef.current;
-      if (k === 'ArrowLeft' || k === 'KeyA') {
-        held.kL = true;
-        applySteerRef.current();
-      } else if (k === 'ArrowRight' || k === 'KeyD') {
-        held.kR = true;
-        applySteerRef.current();
-      } else if (k === 'ArrowUp' || k === 'KeyW') w.accel = true;
-      else if (k === 'ArrowDown' || k === 'KeyS') w.brake = true;
+      const held = holdRef.current;
+      if (k === 'ArrowLeft' || k === 'KeyA') setKeyHold(held, 'left', k, true);
+      else if (k === 'ArrowRight' || k === 'KeyD') setKeyHold(held, 'right', k, true);
+      else if (k === 'ArrowUp' || k === 'KeyW') setKeyHold(held, 'accel', k, true);
+      else if (k === 'ArrowDown' || k === 'KeyS') setKeyHold(held, 'brake', k, true);
+      else return;
+      applyHoldRef.current();
     };
     const up = (e: KeyboardEvent) => {
-      const w = worldRef.current;
       const k = e.code;
-      const held = steerHeldRef.current;
-      if (k === 'ArrowLeft' || k === 'KeyA') {
-        held.kL = false;
-        applySteerRef.current();
-      } else if (k === 'ArrowRight' || k === 'KeyD') {
-        held.kR = false;
-        applySteerRef.current();
-      } else if (k === 'ArrowUp' || k === 'KeyW') w.accel = false;
-      else if (k === 'ArrowDown' || k === 'KeyS') w.brake = false;
+      const held = holdRef.current;
+      if (k === 'ArrowLeft' || k === 'KeyA') setKeyHold(held, 'left', k, false);
+      else if (k === 'ArrowRight' || k === 'KeyD') setKeyHold(held, 'right', k, false);
+      else if (k === 'ArrowUp' || k === 'KeyW') setKeyHold(held, 'accel', k, false);
+      else if (k === 'ArrowDown' || k === 'KeyS') setKeyHold(held, 'brake', k, false);
+      else return;
+      applyHoldRef.current();
     };
     const clear = () => {
       const w = worldRef.current;
-      steerHeldRef.current = { kL: false, kR: false, tL: false, tR: false };
+      holdRef.current = createRacingHold();
       w.steer = 0;
       w.accel = false;
       w.brake = false;
@@ -1622,8 +1622,8 @@ export default function Racing3D() {
         <div className="rc3d-controls">
           <TouchButtons
             items={[
-              { label: '◀', onPress: () => touchSteer(-1, true), onRelease: () => touchSteer(-1, false) },
-              { label: '▶', onPress: () => touchSteer(1, true), onRelease: () => touchSteer(1, false) },
+              { label: '◀', onPress: (id) => touchSteer(-1, true, id), onRelease: (id) => touchSteer(-1, false, id) },
+              { label: '▶', onPress: (id) => touchSteer(1, true, id), onRelease: (id) => touchSteer(1, false, id) },
             ]}
           />
           <div className="rc3d-actions">
@@ -1636,8 +1636,8 @@ export default function Racing3D() {
           </div>
           <TouchButtons
             items={[
-              { label: '🛑 刹车', onPress: () => touchHold('brake', true), onRelease: () => touchHold('brake', false) },
-              { label: '⛽ 油门', primary: true, onPress: () => touchHold('accel', true), onRelease: () => touchHold('accel', false) },
+              { label: '🛑 刹车', onPress: (id) => touchHold('brake', true, id), onRelease: (id) => touchHold('brake', false, id) },
+              { label: '⛽ 油门', primary: true, onPress: (id) => touchHold('accel', true, id), onRelease: (id) => touchHold('accel', false, id) },
             ]}
           />
         </div>
