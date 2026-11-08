@@ -2313,10 +2313,14 @@ code {
 }
 
 /* ============ 太鼓达人 ============ */
+.arcade {
+  /* .game-body 是 flex 容器，.arcade 作为 flex item 会按内容收缩；
+     给定宽度让 max-width:100% 有确定的解析基准，DPR 改变 canvas 内在尺寸不再撑大舞台 */
+  width: 100%;
+}
+
 .taiko-wrap {
   background: #151028;
-  /* 固定显示宽度，避免 DPR 改变 canvas 内在尺寸后把舞台撑大 */
-  width: 520px;
   max-width: 100%;
 }
 
