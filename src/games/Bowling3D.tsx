@@ -5,6 +5,7 @@ import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { metaBowling3D } from '../core/gameMetas';
+import { frameTotals } from './bowlingScore';
 
 // ============ 常量 ============
 
@@ -539,48 +540,6 @@ function predictPath(w: World): Array<[number, number]> {
     if (i % 5 === 0) pts.push([x, z]);
   }
   return pts;
-}
-
-// ============ 计分 ============
-
-/** 按标准十瓶规则算各局累计分（未定局为 null） */
-function frameTotals(frames: FrameRec[]): Array<number | null> {
-  const flat: number[] = [];
-  const starts: number[] = [];
-  for (let f = 0; f < 10; f++) {
-    starts.push(flat.length);
-    for (const v of frames[f]?.rolls ?? []) flat.push(v);
-  }
-  const totals: Array<number | null> = new Array(10).fill(null);
-  let cum = 0;
-  for (let f = 0; f < 10; f++) {
-    const r = frames[f]?.rolls ?? [];
-    if (r.length === 0) break;
-    if (f === 9) {
-      const complete = r.length === 3 || (r.length === 2 && r[0] !== 10 && r[0] + r[1] < 10);
-      if (!complete) break;
-      cum += r[0] + r[1] + (r[2] ?? 0);
-      totals[9] = cum;
-      break;
-    }
-    const i = starts[f];
-    if (r[0] === 10) {
-      const n1 = flat[i + 1];
-      const n2 = flat[i + 2];
-      if (n1 === undefined || n2 === undefined) break;
-      cum += 10 + n1 + n2;
-    } else if (r.length < 2) {
-      break;
-    } else if (r[0] + r[1] === 10) {
-      const n1 = flat[i + 2];
-      if (n1 === undefined) break;
-      cum += 10 + n1;
-    } else {
-      cum += r[0] + r[1];
-    }
-    totals[f] = cum;
-  }
-  return totals;
 }
 
 // ============ 渲染 ============
