@@ -444,10 +444,13 @@ export default function Breakout3D() {
             [px[i3], py[i3]],
           ],
           style: `hsl(${hue} ${sat}% ${Math.round(lig * f.sh)}%)`,
-          glow,
+          glow: false,
         });
       }
       faces.sort((a, b) => b.depth - a.depth);
+      // 只有离相机最近的一面做 shadowBlur：原来每个可见面（最多 3 面）都做，
+      // 无尽后期几十块发光砖会有上百次模糊填充；单面光晕视觉上足够。
+      if (glow && faces.length > 0) faces[faces.length - 1].glow = true;
       for (const f of faces) {
         if (f.glow) {
           ctx.shadowColor = `hsla(${hue} 90% 60% / 0.85)`;

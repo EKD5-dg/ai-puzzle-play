@@ -159,6 +159,14 @@ export default function Taiko() {
     if (status !== 'playing') return;
     let raf = 0;
     let last = performance.now();
+    const setup = canvasRef.current;
+    if (setup) {
+      // 高 DPI 屏：逻辑坐标仍按 W×H，背板按 DPR 放大，音符/判定文字更清晰
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      setup.width = Math.round(W * dpr);
+      setup.height = Math.round(H * dpr);
+      setup.getContext('2d')?.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
     const step = (now: number) => {
       const dt = Math.min(32, now - last);
       last = now;

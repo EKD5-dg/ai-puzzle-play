@@ -2315,6 +2315,15 @@ code {
 /* ============ 太鼓达人 ============ */
 .taiko-wrap {
   background: #151028;
+  /* 固定显示宽度，避免 DPR 改变 canvas 内在尺寸后把舞台撑大 */
+  width: 520px;
+  max-width: 100%;
+}
+
+.taiko-wrap canvas {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 520 / 220;
 }
 
 .taiko-songs {
@@ -3001,7 +3010,11 @@ code {
   }
 }
 
-/* ============ 愤怒的小鸟 ============ */.ab { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; }.ab-canvas { display: block; width: 100%; max-width: 560px; height: auto; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }.ab-overlay { border-radius: var(--radius); }
+/* ============ 愤怒的小鸟 ============ */
+.ab { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+/* CSS 显示尺寸固定，backing store 才按 DPR 放大；否则 dpr=2 时 canvas 内在宽度会把容器撑大 */
+.ab-canvas { display: block; width: min(100%, 560px); height: auto; aspect-ratio: 480 / 400; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+.ab-overlay { border-radius: var(--radius); }
 
 
 /* ============ 打赏入口 ============ */

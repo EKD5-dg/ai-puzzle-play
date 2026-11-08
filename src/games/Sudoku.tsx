@@ -5,11 +5,9 @@ import { migrateLegacyBest } from '../core/useLocalStorage';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { metaSudoku } from '../core/gameMetas';
+import { generatePuzzle } from './sudokuCore';
+import type { Grid, SudokuPuzzle } from './sudokuCore';
 
-
-
-type Cell = number; // 0 = 空
-type Grid = Cell[]; // 81 格
 
 const LEVELS = [
   { label: '简单', blanks: 36 },
@@ -17,124 +15,6 @@ const LEVELS = [
   { label: '困难', blanks: 58 },
 ];
 
-/** 用回溯法随机生成一个完整数独盘 */
-function generateSolved(): Grid {
-  const grid: Grid = Array(81).fill(0);
-  const nums = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-
-  function shuffle(arr: number[]): number[] {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  }
-
-  function valid(idx: number, v: number): boolean {
-    const r = Math.floor(idx / 9);
-    const c = idx % 9;
-    for (let i = 0; i < 9; i++) {
-      if (grid[r * 9 + i] === v) return false;
-      if (grid[i * 9 + c] === v) return false;
-    }
-    const br = Math.floor(r / 3) * 3;
-    const bc = Math.floor(c / 3) * 3;
-    for (let i = 0; i < 3; i++)
-      for (let j = 0; j < 3; j++) {
-        if (grid[(br + i) * 9 + bc + j] === v) return false;
-      }
-    return true;
-  }
-
-  function fill(): boolean {
-    for (let idx = 0; idx < 81; idx++) {
-      if (grid[idx] !== 0) continue;
-      const candidates = shuffle(nums);
-      for (const v of candidates) {
-        if (valid(idx, v)) {
-          grid[idx] = v;
-          if (fill()) return true;
-          grid[idx] = 0;
-        }
-      }
-      return false;
-    }
-    return true;
-  }
-
-  fill();
-  return grid;
-}
-
-/** 挖空生成谜题（保证唯一解：挖掉后求解数仍为 1） */
-function generatePuzzle(blanks: number): { puzzle: Grid; solution: Grid } {
-  const solution = generateSolved();
-  const puzzle = [...solution];
-  const cells = Array.from({ length: 81 }, (_, i) => i);
-  // 洗牌
-  for (let i = cells.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [cells[i], cells[j]] = [cells[j], cells[i]];
-  }
-  let removed = 0;
-  for (const idx of cells) {
-    if (removed >= blanks) break;
-    const backup = puzzle[idx];
-    puzzle[idx] = 0;
-    if (countSolutions([...puzzle]) !== 1) {
-      puzzle[idx] = backup;
-    } else {
-      removed++;
-    }
-  }
-  return { puzzle, solution };
-}
-
-/** 求解数独，返回解的个数（最多数到 2） */
-function countSolutions(grid: Grid, limit = 2): number {
-  let count = 0;
-
-  function findEmpty(): number {
-    for (let i = 0; i < 81; i++) if (grid[i] === 0) return i;
-    return -1;
-  }
-
-  function valid(idx: number, v: number): boolean {
-    const r = Math.floor(idx / 9);
-    const c = idx % 9;
-    for (let i = 0; i < 9; i++) {
-      if (grid[r * 9 + i] === v) return false;
-      if (grid[i * 9 + c] === v) return false;
-    }
-    const br = Math.floor(r / 3) * 3;
-    const bc = Math.floor(c / 3) * 3;
-    for (let i = 0; i < 3; i++)
-      for (let j = 0; j < 3; j++) {
-        if (grid[(br + i) * 9 + bc + j] === v) return false;
-      }
-    return true;
-  }
-
-  function solve(): boolean {
-    const idx = findEmpty();
-    if (idx === -1) {
-      count++;
-      return count >= limit;
-    }
-    for (let v = 1; v <= 9; v++) {
-      if (valid(idx, v)) {
-        grid[idx] = v;
-        if (solve()) return true;
-        grid[idx] = 0;
-      }
-    }
-    return false;
-  }
-
-  solve();
-  return count;
-}
 
 export default function Sudoku() {
   const [levelIdx, setLevelIdx] = useState(1);
@@ -149,8 +29,8 @@ export default function Sudoku() {
   const [generating, setGenerating] = useState(false);
   /** 生成任务编号：快速连点新一局时丢弃过期任务 */
   const genRef = useRef(0);
-  /** 生成谜题的宏任务句柄：卸载/重开时要清掉，否则组件都没了还在跑几百毫秒的回溯求解 */
-  const genTimerRef = useRef<number | null>(null);
+  /** 当前这一局唯一的生成任务：新局直接终止旧 Worker，避免任务排队与过期结果 */
+  const jobRef = useRef<{ worker: Worker | null; timer: number; gen: number } | null>(null);
   /** 最佳时间按难度细分（简单档记录不再压住困难档），云端键同步带后缀 */
   const best = useBestScore(`${metaSudoku.id}:${levelIdx}`);
 
@@ -160,34 +40,90 @@ export default function Sudoku() {
   }, []);
   const { toast } = useToast();
 
+  const cancelJob = () => {
+    const job = jobRef.current;
+    if (job) {
+      window.clearTimeout(job.timer);
+      job.worker?.terminate();
+      jobRef.current = null;
+    }
+  };
+
+  // 卸载时终止当前 Worker 并作废所有迟到结果
+  useEffect(() => {
+    return () => {
+      genRef.current += 1;
+      cancelJob();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const startNew = (idx: number) => {
     const gen = ++genRef.current;
+    cancelJob();
     setGenerating(true);
-    if (genTimerRef.current !== null) window.clearTimeout(genTimerRef.current);
-    // 生成放到宏任务执行：困难难度回溯求解可能耗时数百毫秒，避免阻塞主线程 UI
-    genTimerRef.current = window.setTimeout(() => {
-      genTimerRef.current = null;
+    const blanks = LEVELS[idx].blanks;
+    const finish = (result: SudokuPuzzle) => {
       if (gen !== genRef.current) return;
-      const { puzzle: p, solution: s } = generatePuzzle(LEVELS[idx].blanks);
+      jobRef.current = null;
       setLevelIdx(idx);
-      setPuzzle(p);
-      setSolution(s);
-      setCurrent([...p]);
+      setPuzzle(result.puzzle);
+      setSolution(result.solution);
+      setCurrent([...result.puzzle]);
       setSelected(null);
       setMistakes(0);
       setTime(0);
       setWon(false);
       setGenerating(false);
-    }, 0);
-  };
-
-  // 卸载时取消待执行的生成任务（生成耗时可达数百毫秒，返回大厅后不该继续占主线程）
-  useEffect(() => {
-    return () => {
-      if (genTimerRef.current !== null) window.clearTimeout(genTimerRef.current);
-      genTimerRef.current = null;
     };
-  }, []);
+    let worker: Worker | null = null;
+    try {
+      worker = new Worker(new URL('./sudokuWorker.ts', import.meta.url), { type: 'module' });
+    } catch {
+      worker = null;
+    }
+    if (!worker) {
+      // Worker 不可用：让出一帧再同步生成，至少让"生成中"提示先绘制
+      const timer = window.setTimeout(() => {
+        jobRef.current = null;
+        if (gen === genRef.current) finish(generatePuzzle(blanks));
+      }, 0);
+      jobRef.current = { worker: null, timer, gen };
+      return;
+    }
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      worker?.terminate();
+      // Worker 8s 无响应：先让出一帧再同步兜底，避免在深层调用栈里冻结
+      window.setTimeout(() => {
+        if (gen === genRef.current) finish(generatePuzzle(blanks));
+      }, 0);
+    }, 8000);
+    const settle = (result: SudokuPuzzle) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      worker?.terminate();
+      if (jobRef.current?.gen === gen) jobRef.current = null;
+      finish(result);
+    };
+    worker.onmessage = (ev: MessageEvent<SudokuPuzzle>) => settle(ev.data);
+    worker.onerror = () => {
+      // Worker 起不来/运行时异常：立即兜底，不再空等 8 秒
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      worker?.terminate();
+      if (jobRef.current?.gen === gen) jobRef.current = null;
+      window.setTimeout(() => {
+        if (gen === genRef.current) finish(generatePuzzle(blanks));
+      }, 0);
+    };
+    jobRef.current = { worker, timer, gen };
+    worker.postMessage({ id: gen, blanks });
+  };
 
   // 首次进入生成一局
   useEffect(() => {
