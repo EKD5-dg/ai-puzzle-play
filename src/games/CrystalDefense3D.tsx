@@ -2126,15 +2126,29 @@ export default function CrystalDefense3D() {
     return [gx, gy];
   };
 
-  const towerHit = (mx: number, my: number): Tower | null => {
+  /** 触屏用：吸附到屏幕距离最近的塔座，避免 320px 下相邻塔座仅差十几像素误触 */
+  const nearestPad = (mx: number, my: number, maxDist: number): [number, number] | null => {
+    let best: [number, number] | null = null;
+    let bestD = Infinity;
+    for (const [gx, gy] of PAD_LIST) {
+      const d = Math.hypot(mx - isoX(gx, gy), my - (isoY(gx, gy) + 8));
+      if (d < bestD) {
+        bestD = d;
+        best = [gx, gy];
+      }
+    }
+    return bestD <= maxDist ? best : null;
+  };
+
+  const towerHit = (mx: number, my: number, pad = 0): Tower | null => {
     let hit: Tower | null = null;
     let bestD = Infinity;
     for (const t of worldRef.current.towers) {
       const x = isoX(t.gx, t.gy);
       const y = isoY(t.gx, t.gy);
-      if (my < y - 62 || my > y + 12) continue;
+      if (my < y - 62 - pad || my > y + 12 + pad) continue;
       const dx = Math.abs(mx - x);
-      if (dx > 26) continue;
+      if (dx > 26 + pad) continue;
       const d = dx + Math.abs(my - (y - 30)) * 0.4;
       if (d < bestD) {
         bestD = d;
@@ -2163,12 +2177,18 @@ export default function CrystalDefense3D() {
     const w = worldRef.current;
     const [mx, my] = screenPoint(e);
     uiRef.current.hover = null;
-    const cell = cellAt(mx, my);
+    let cell = cellAt(mx, my);
     const kind = uiRef.current.build;
 
     // 建造模式优先按格子判定：相邻塔座的间距不大，
     // 先做"塔身屏幕命中"会把想放在邻座上的点击误判成选中了旁边的塔
     if (kind) {
+      // 触屏：吸附到最近的塔座；离所有塔座都远时不建造，防止误触花掉晶能
+      if (e.pointerType !== 'mouse') {
+        const snap = nearestPad(mx, my, 42);
+        if (!snap) return;
+        cell = snap;
+      }
       if (!cell) return;
       const existing = towerAt(w, cell[0], cell[1]);
       if (existing) {
@@ -2190,7 +2210,7 @@ export default function CrystalDefense3D() {
       return;
     }
 
-    const tower = towerHit(mx, my);
+    const tower = towerHit(mx, my, e.pointerType === 'mouse' ? 0 : 10);
     if (tower) {
       selectTower(tower.id);
       sfx.click();

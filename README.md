@@ -72,6 +72,10 @@ npm run build      # 类型检查 + 生产构建（输出 dist/）
 npm run preview    # 本地预览生产构建
 ```
 
+> ☁️ 云同步联调：`/api/sync`、`/api/pair` 是同源相对路径，`vite dev/preview` 本身不提供 Pages Functions。
+> 需要本地联调云同步时，先 `npm run build`，再 `npx wrangler pages dev dist`（自动挂载 functions/ 与本地 KV），
+> 用它给出的地址访问；直接用 `vite` 时云同步请求会失败，属预期行为（避免误写线上 KV）。
+
 ## 📁 项目结构
 
 ```

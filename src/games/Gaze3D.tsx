@@ -1781,7 +1781,11 @@ export default function Gaze3D() {
     if (statusRef.current !== 'playing') return;
     const p = toCanvas(e);
     if (e.pointerType === 'touch' && p.x < RW * 0.42) {
-      stickRef.current = { id: e.pointerId, ox: p.x, oy: p.y, dx: 0, dy: 0 };
+      // 已有摇杆指针时忽略第二根左半屏手指：否则它会覆盖 stickRef，
+      // 第一根手指抬起后摇杆就失效了
+      if (stickRef.current === null) {
+        stickRef.current = { id: e.pointerId, ox: p.x, oy: p.y, dx: 0, dy: 0 };
+      }
     } else if (lookHoldIdRef.current === null) {
       // 已经有视角指针时忽略第二根右半屏手指，避免覆盖 lookRef 后提前停火
       lookRef.current = { id: e.pointerId, lastX: p.x, lastY: p.y, x0: p.x, y0: p.y, t0: performance.now(), moved: false };
