@@ -5,6 +5,7 @@ import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { metaPool3D } from '../core/gameMetas';
+import { isCueSpotSafe, safeHandSpot } from './poolRules';
 
 // ============ 常量 ============
 
@@ -39,8 +40,8 @@ const MAX_POWER = 9.2;
 const MIN_POWER = 1.1;
 /** 开球线：开球犯规后的自由球只能放在它左侧 */
 const BREAK_LINE_X = -HX * 0.45;
-/** 普通犯规后的自由球上限：几乎全台（保留旧版手感，不缩成开球区） */
-const FREE_BALL_MAX_X = -0.15;
+/** 普通犯规后的自由球上限：全台（保留旧版手感，不缩成开球区） */
+const FREE_BALL_MAX_X = HX - BALL_R - 0.05;
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
@@ -128,7 +129,6 @@ interface World {
   shots: number;
   particles: Particle[];
   flashAt: number;
-  scratchAt: number;
   message: string;
   messageAt: number;
   /** 自由球放置预览 */
@@ -155,8 +155,8 @@ function rackBalls(): Ball[] {
   // 标准三角：尖朝白球（-x），底在 +x；底角一全色一条纹
   const gap = BALL_R * 2.08;
   const footX = HX * 0.48;
-  // 8 号固定中排；底排两角一全色(7)一条纹(15)
-  const order = [1, 9, 2, 10, 8, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15];
+  // 8 号固定中排；底排从左到右 [7,6,14,13,15]，两角一全色一条纹
+  const order = [1, 9, 2, 10, 8, 3, 11, 4, 12, 5, 7, 6, 14, 13, 15];
   let oi = 0;
   for (let row = 0; row < 5; row++) {
     for (let col = 0; col <= row; col++) {
@@ -189,7 +189,6 @@ function newWorld(): World {
     shots: 0,
     particles: [],
     flashAt: -9,
-    scratchAt: -9,
     message: '',
     messageAt: -9,
     handX: -HX * 0.55,
@@ -225,22 +224,50 @@ function cueBall(w: World): Ball {
   return w.balls[0];
 }
 
-function placeCue(w: World, x: number, z: number) {
-  const c = cueBall(w);
-  const minX = -HX + BALL_R + 0.05;
-  const maxX = w.handMaxX;
-  const minZ = -HZ + BALL_R + 0.05;
-  const maxZ = HZ - BALL_R - 0.05;
-  let cx = clamp(x, minX, maxX);
-  let cz = clamp(z, minZ, maxZ);
-  const overlaps = () =>
-    w.balls.some((b) => b.id !== 0 && !b.pocketed && Math.hypot(cx - b.x, cz - b.z) < BALL_R * 2 + 0.02);
+/** 自由球可放置区（含当前犯规对应的 x 上限） */
+function handBounds(w: World) {
+  return {
+    minX: -HX + BALL_R + 0.05,
+    maxX: w.handMaxX,
+    minZ: -HZ + BALL_R + 0.05,
+    maxZ: HZ - BALL_R - 0.05,
+    pocketR: POCKET_R,
+    ballR: BALL_R,
+    pockets: POCKETS,
+  };
+}
+
+function cueOverlaps(w: World, x: number, z: number): boolean {
+  return w.balls.some((b) => b.id !== 0 && !b.pocketed && Math.hypot(x - b.x, z - b.z) < BALL_R * 2 + 0.02);
+}
+
+/** 默认点若也被围死，按球距网格搜一个空闲点（极端残局兜底） */
+function fallbackCueSpot(w: World, b: ReturnType<typeof handBounds>): [number, number] {
+  const [dx, dz] = defaultCuePos(w);
+  if (!cueOverlaps(w, dx, dz) && isCueSpotSafe(dx, dz, b)) return [dx, dz];
+  const step = BALL_R * 2.1;
+  for (let z = b.minZ; z <= b.maxZ; z += step) {
+    for (let x = b.minX; x <= b.maxX; x += step) {
+      if (!cueOverlaps(w, x, z) && isCueSpotSafe(x, z, b)) return [x, z];
+    }
+  }
+  return [dx, dz];
+}
+
+/**
+ * 自由球最终落点：躲袋口 → 推开压住的球 → 仍不合法则退回默认/网格点。
+ * 预览与点击共用，保证玩家看到的白球位置就是落点。
+ */
+function resolveHandSpot(w: World, x: number, z: number): [number, number] {
+  const b = handBounds(w);
+  // 先躲袋口：钳到台角/袋边的点可能正好落进捕获圈
+  let [cx, cz] = safeHandSpot(x, z, b);
   // 反复"推开再回钳"：一次推开可能把白球顶到库边外，回钳后又压回原来那颗球上
-  for (let pass = 0; pass < 6 && overlaps(); pass++) {
-    for (const b of w.balls) {
-      if (b.id === 0 || b.pocketed) continue;
-      const dx = cx - b.x;
-      const dz = cz - b.z;
+  for (let pass = 0; pass < 6 && cueOverlaps(w, cx, cz); pass++) {
+    for (const b2 of w.balls) {
+      if (b2.id === 0 || b2.pocketed) continue;
+      const dx = cx - b2.x;
+      const dz = cz - b2.z;
       const d = Math.hypot(dx, dz);
       const min = BALL_R * 2 + 0.02;
       if (d >= min) continue;
@@ -251,13 +278,18 @@ function placeCue(w: World, x: number, z: number) {
       } else {
         cz += min; // 完全同心：任选一向挪开，下一轮再收敛
       }
-      cx = clamp(cx, minX, maxX);
-      cz = clamp(cz, minZ, maxZ);
+      cx = clamp(cx, b.minX, b.maxX);
+      cz = clamp(cz, b.minZ, b.maxZ);
     }
   }
-  if (overlaps()) {
-    [cx, cz] = defaultCuePos(w); // 拖放点被球群围死，退回一个确定能放的位置
-  }
+  // 推开过程也可能把白球顶进袋口；此时退回确定安全的默认点
+  if (cueOverlaps(w, cx, cz) || !isCueSpotSafe(cx, cz, b)) return fallbackCueSpot(w, b);
+  return [cx, cz];
+}
+
+function placeCue(w: World, x: number, z: number) {
+  const c = cueBall(w);
+  const [cx, cz] = resolveHandSpot(w, x, z);
   c.x = cx;
   c.z = cz;
 }
@@ -290,13 +322,13 @@ function ballGroup(id: number): Group | null {
   return null;
 }
 
-function pocketBall(w: World, b: Ball, px: number, pz: number, now: number) {
+function pocketBall(w: World, b: Ball, px: number, pz: number) {
   b.pocketed = true;
   b.sink = 1;
   b.vx = 0;
   b.vz = 0;
   if (b.id === 0) {
-    w.scratchAt = now;
+    // 白球落袋由 finishShot 读取 pocketed 状态结算
   } else {
     w.shotPotted.push(b.id);
     spawnSparkles(w, px, pz, ballColors(b.id));
@@ -304,11 +336,11 @@ function pocketBall(w: World, b: Ball, px: number, pz: number, now: number) {
 }
 
 /** 袋口捕获：中心距小于袋半径，或已越出台面且落在袋口扇区 */
-function tryPocket(w: World, b: Ball, now: number): boolean {
+function tryPocket(w: World, b: Ball): boolean {
   for (const [px, pz] of POCKETS) {
     const d = Math.hypot(b.x - px, b.z - pz);
     if (d < POCKET_R) {
-      pocketBall(w, b, px, pz, now);
+      pocketBall(w, b, px, pz);
       return true;
     }
   }
@@ -317,7 +349,7 @@ function tryPocket(w: World, b: Ball, now: number): boolean {
   if (outside) {
     for (const [px, pz] of POCKETS) {
       if (Math.hypot(b.x - px, b.z - pz) < POCKET_R + BALL_R * 1.35) {
-        pocketBall(w, b, px, pz, now);
+        pocketBall(w, b, px, pz);
         return true;
       }
     }
@@ -327,7 +359,7 @@ function tryPocket(w: World, b: Ball, now: number): boolean {
 
 // ============ 物理 ============
 
-function stepPhysics(w: World, dt: number, now: number) {
+function stepPhysics(w: World, dt: number) {
   // 入袋下落动画（不参与碰撞）
   for (const b of w.balls) {
     if (b.pocketed && b.sink > 0) {
@@ -363,7 +395,7 @@ function stepPhysics(w: World, dt: number, now: number) {
     // 袋口
     for (const b of live) {
       if (b.pocketed) continue;
-      tryPocket(w, b, now);
+      tryPocket(w, b);
     }
 
     // 库边：袋口附近放宽，但出界必须已被 tryPocket 捕获，否则仍夹紧
@@ -499,8 +531,13 @@ export default function Pool3D() {
 
   const togglePause = useCallback(() => {
     const s = statusRef.current;
-    if (s === 'playing') setStatus('paused');
-    else if (s === 'paused') setStatus('playing');
+    if (s === 'playing') {
+      // 拖拽中暂停：清掉蓄力态，恢复后悬停不再改瞄准/力度
+      const w = worldRef.current;
+      w.dragging = false;
+      w.dragArmed = false;
+      setStatus('paused');
+    } else if (s === 'paused') setStatus('playing');
   }, []);
 
   const shoot = useCallback(() => {
@@ -600,8 +637,9 @@ export default function Pool3D() {
     const [sx, sy] = pointerToCanvas(e);
     if (w.phase === 'hand') {
       const [wx, wz] = unproject(sx, sy);
-      w.handX = clamp(wx, -HX + BALL_R + 0.05, w.handMaxX);
-      w.handZ = clamp(wz, -HZ + BALL_R + 0.05, HZ - BALL_R - 0.05);
+      const [hx, hz] = resolveHandSpot(w, wx, wz);
+      w.handX = hx;
+      w.handZ = hz;
       return;
     }
     if (w.phase !== 'aim') return;
@@ -613,13 +651,22 @@ export default function Pool3D() {
     }
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const w = worldRef.current;
     if (!w.dragging) return;
     w.dragging = false;
     // 仅当拖拽距离足够才击球，轻点白球/画面不误触
     if (statusRef.current === 'playing' && w.phase === 'aim' && w.dragArmed && w.power > 0.14) shoot();
     w.dragArmed = false;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
+  /** 系统取消手势（电话、返回手势、窗口失焦）：只收杆，不按当前力度出杆 */
+  const onPointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const w = worldRef.current;
+    w.dragging = false;
+    w.dragArmed = false;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   };
 
   // 键盘
@@ -655,6 +702,9 @@ export default function Pool3D() {
       }
     };
     const clear = () => {
+      const w = worldRef.current;
+      w.dragging = false;
+      w.dragArmed = false;
       if (statusRef.current === 'playing') setStatus('paused');
     };
     const onVis = () => {
@@ -777,11 +827,11 @@ export default function Pool3D() {
     };
 
     if (scratched) {
-      // 首碰犯规时进球不计分、也不锁花色；犯规与洗袋同时发生时提示两者
+      // 首碰犯规时进球不计分、也不锁花色；洗袋杆同样不锁组（白球落袋是犯规，
+      // 不能因为同杆进了球就把玩家锁进一个没选过的花色）。进球仍计分。
       if (multi > 0 && !contactFoul) {
         w.score += gain;
         setScore(w.score);
-        claimGroup();
         applyFoul(`进球 +${gain}，白球落袋！`);
       } else if (contactFoul) {
         applyFoul(
@@ -853,7 +903,7 @@ export default function Pool3D() {
       const playing = statusRef.current === 'playing';
 
       if (playing && w.phase === 'roll') {
-        stepPhysics(w, dt, t);
+        stepPhysics(w, dt);
         if (!ballsMoving(w)) {
           settleAcc += dt;
           if (settleAcc > 0.12) {
@@ -1324,7 +1374,7 @@ export default function Pool3D() {
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
+            onPointerCancel={onPointerCancel}
           />
           {status === 'ready' && (
             <div className="pl3d-overlay">
@@ -1384,9 +1434,13 @@ export default function Pool3D() {
           </button>
         </div>
         <p className="hint">
-          {phase === 'hand'
-            ? '自由球：点击开球区放置白球'
-            : `拖拽瞄准蓄力，松手击球 · 花色：${group === 'solid' ? '全色' : group === 'stripe' ? '条纹' : '待定'} · 剩余 ${left} 球`}
+          {status === 'over' || status === 'win'
+            ? '本局结束 · 点击「再来一局」重新开球'
+            : phase === 'hand'
+              ? worldRef.current.handMaxX === BREAK_LINE_X
+                ? '自由球：点击开球线左侧放置白球'
+                : '自由球：点击台面放置白球（袋口附近会自动避开）'
+              : `拖拽瞄准蓄力，松手击球 · 花色：${group === 'solid' ? '全色' : group === 'stripe' ? '条纹' : '待定'} · 剩余 ${left} 球`}
         </p>
       </div>
     </GameShell>

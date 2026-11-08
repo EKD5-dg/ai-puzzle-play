@@ -4,6 +4,7 @@ import { useBestScore } from '../core/sync';
 import { useToast } from '../core/Toast';
 import { sfx } from '../core/sound';
 import { TouchButtons } from '../core/TouchControls';
+import { RACING_LANES, applyCarFollowing, pickFreeLaneIndex } from './racingCore';
 import { metaRacing3D } from '../core/gameMetas';
 
 // ============ 常量 ============
@@ -28,8 +29,8 @@ const DRAW_DIST = 80;
  *  1080 段 ≈ 2km（满速约 17 秒一圈），内存与生成时间仍然可以忽略 */
 const SEG_TARGET = 1080;
 
-/** 车道中心（路宽归一化 -1..1，共三车道） */
-const LANES = [-0.62, 0, 0.62];
+/** 车道中心（路宽归一化 -1..1，共三车道）由 racingCore 提供 */
+const LANES = RACING_LANES;
 
 /** 速度（世界单位/秒） */
 const MAX_SPEED = SEG_LEN * 62;
@@ -41,7 +42,7 @@ const OFFROAD_DECEL = -MAX_SPEED / 2.6;
 const OFFROAD_LIMIT = MAX_SPEED * 0.42;
 /** 转向角速度（路宽/秒，低速时保留下限以便微调） */
 const STEER_RATE = 3.4;
-/** 弯道离心力（把玩家往外甩的强度）：满速最急弯(6)时约等于转向能力的 90%，靠转向可守住线 */
+/** 弯道离心力（把玩家往外甩的强度）：按当前速度上限归一化后，满速最急弯(6)时约为转向能力的 90% */
 const CENTRIFUGAL = 0.15;
 
 /** 车流：初始数量 / 每 700m 加一辆 / 上限 / 速度范围（相对最高速）/ 生成距离（段，略远于视距免在地平线闪现） */
@@ -208,6 +209,8 @@ interface Car {
   offset: number;
   z: number;
   speed: number;
+  /** 本车目标巡航速度：跟车时临时降速，前车让开后恢复 */
+  cruise: number;
   color: string;
   /** 车型：轿车 / 面包车 / 货车，比例与尾部细节各不相同 */
   kind: 'sedan' | 'van' | 'truck';
@@ -302,29 +305,19 @@ function targetCars(meters: number): number {
  * 三车道同现时玩家既挤不过去、又只能越野（越野 42% 限速），实际是被迫急刹甚至丢命。
  */
 function pickFreeLane(cars: Car[], z: number, exclude: Car | null): number | null {
-  const used = new Set<number>();
-  for (const c of cars) {
-    if (c === exclude) continue;
-    if (Math.abs(c.z - z) > CAR_LEN * 1.8) continue;
-    let bi = 0;
-    for (let i = 1; i < LANES.length; i++) {
-      if (Math.abs(LANES[i] - c.offset) < Math.abs(LANES[bi] - c.offset)) bi = i;
-    }
-    used.add(bi);
-  }
-  const free: number[] = [];
-  for (let i = 0; i < LANES.length; i++) if (!used.has(i)) free.push(i);
-  if (free.length === 0) return null;
-  return LANES[free[Math.floor(Math.random() * free.length)]] + rand(-0.06, 0.06);
+  const idx = pickFreeLaneIndex(cars, z, exclude, CAR_LEN * 2.6);
+  return idx === null ? null : RACING_LANES[idx] + rand(-0.06, 0.06);
 }
 
 function spawnCar(w: World, aheadZ: number, laneOffset?: number): Car {
   const lane = laneOffset ?? LANES[Math.floor(Math.random() * 3)] + rand(-0.06, 0.06);
   const { color, kind } = rollCar();
+  const cruise = MAX_SPEED * carSpeedFrac(kind) * (1 + Math.min(0.35, w.meters / 6000));
   return {
     offset: lane,
     z: aheadZ,
-    speed: MAX_SPEED * carSpeedFrac(kind) * (1 + Math.min(0.35, w.meters / 6000)),
+    speed: cruise,
+    cruise,
     color,
     kind,
     passed: false,
@@ -344,14 +337,17 @@ function carSpeedFrac(kind: Car['kind']): number {
 /** 单个物理子步：转向/加减速/车流位移/碰撞与近失（近失的最小间距按子步采样） */
 function substep(w: World, dt: number, tNow: number) {
   const playerSegment = findSegment(w, w.position + PLAYER_Z);
+  const maxSpeed = MAX_SPEED + Math.min(MAX_SPEED * 0.45, w.meters * 2.2);
   const speedPercent = w.speed / MAX_SPEED;
+  /** 相对当前速度上限：冲刺/后期提速后离心力不能再按基础 MAX_SPEED 放大 */
+  const speedRatio = Math.min(1, w.speed / maxSpeed);
   const dx = dt * STEER_RATE * Math.max(speedPercent, 0.3);
 
   // 转向输入
   if (w.steer < 0) w.playerX -= dx;
   else if (w.steer > 0) w.playerX += dx;
-  // 弯道离心力：与速度平方同阶，满速急弯略强于转向，需提前靠内侧
-  w.playerX -= dx * speedPercent * playerSegment.curve * CENTRIFUGAL;
+  // 弯道离心力：与速度平方同阶；用当前上限归一化，冲刺时仍能靠转向守住线
+  w.playerX -= dx * speedRatio * playerSegment.curve * CENTRIFUGAL;
   // 护栏不可穿越：贴上去即被弹回并掉速（新接触才响一次）
   if (Math.abs(w.playerX) > RAIL_X) {
     const side = w.playerX > 0 ? 1 : -1;
@@ -367,7 +363,6 @@ function substep(w: World, dt: number, tNow: number) {
 
   // 加减速
   const offroad = Math.abs(w.playerX) > 1;
-  const maxSpeed = MAX_SPEED + Math.min(MAX_SPEED * 0.45, w.meters * 2.2);
   const boost = w.boostT > 0 ? 1.18 : 1;
   if (w.accel) w.speed += ACCEL * dt;
   else w.speed += DECEL * dt;
@@ -386,26 +381,37 @@ function substep(w: World, dt: number, tNow: number) {
   const targetTilt = clamp(w.steer * 0.7 - playerSegment.curve * speedPercent * 0.08, -1, 1);
   w.tilt += (targetTilt - w.tilt) * (1 - Math.exp(-10 * dt));
 
-  // 车流：补充 / 回收
+  // 车流：补充 / 跟车 / 回收
   const want = targetCars(w.meters);
+  const spawnMin = w.position + PLAYER_Z + CAR_SPAWN_SEG * SEG_LEN;
+  const spawnMax = w.position + PLAYER_Z + DRAW_DIST * 2.4 * SEG_LEN;
   while (w.cars.length < want) {
-    const nz = w.position + PLAYER_Z + rand(CAR_SPAWN_SEG, DRAW_DIST * 2.4) * SEG_LEN;
+    const nz = rand(spawnMin, spawnMax);
     const lane = pickFreeLane(w.cars, nz, null);
     if (lane === null) break; // 这一刻三条道都堵着，下一帧再补
     w.cars.push(spawnCar(w, nz, lane));
   }
+  // 同车道跟车：快车追上慢车时降到前车速度，避免两车穿模；前车让开后恢复巡航。
+  // 必须按 z 前→后处理：数组顺序不是空间顺序，后车若先读前车的巡航速度会再次追尾穿模。
+  applyCarFollowing(w.cars, CAR_LEN * 8);
   for (const c of w.cars) c.z += c.speed * dt;
+  // 远端回收阈值必须跟着生成带：原来用 0.75×赛道长（约 9 万单位），
+  // 慢速玩时车流会在视距外越跑越远、却一直占着 want 名额，重新加速后长时间无车。
+  const recycleAhead = spawnMax + CAR_LEN * 2;
   for (let i = w.cars.length - 1; i >= 0; i--) {
     const c = w.cars[i];
-    if (c.z < w.position - SEG_LEN * 4 || c.z > w.position + w.trackLen * 0.75) {
+    if (c.z < w.position - SEG_LEN * 4 || c.z > recycleAhead) {
       if (w.cars.length > want) w.cars.splice(i, 1);
       else {
         const next = rollCar();
-        const nz = w.position + PLAYER_Z + rand(CAR_SPAWN_SEG, DRAW_DIST * 2.4) * SEG_LEN;
+        const nz = rand(spawnMin, spawnMax);
         const lane = pickFreeLane(w.cars, nz, c);
+        if (lane === null) continue; // 三条道都堵时保持原位，下一子步重试（不能硬塞）
+        const cruise = MAX_SPEED * carSpeedFrac(next.kind) * (1 + Math.min(0.35, w.meters / 6000));
         c.z = nz;
-        if (lane !== null) c.offset = lane; // 三条道都堵时保留原车道，下一帧再挑
-        c.speed = MAX_SPEED * carSpeedFrac(next.kind) * (1 + Math.min(0.35, w.meters / 6000));
+        c.offset = lane;
+        c.speed = cruise;
+        c.cruise = cruise;
         c.color = next.color;
         c.kind = next.kind;
         c.passed = false;
@@ -1128,6 +1134,8 @@ function render(ctx: CanvasRenderingContext2D, w: World, t: number) {
     if (arr) arr.push(c);
     else carBySeg.set(segIdx, [c]);
   }
+  // 同段内远→近排，避免远车后画盖住近车
+  for (const arr of carBySeg.values()) arr.sort((a, b) => b.z - a.z);
 
   // 第二遍：由远及近画路面、路侧物、车流
   for (let n = DRAW_DIST - 1; n >= 0; n--) {

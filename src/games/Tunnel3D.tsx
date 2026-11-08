@@ -268,6 +268,10 @@ export default function Tunnel3D() {
         const s = statusRef.current;
         if (s === 'ready' || s === 'over') start();
       }
+      if (k.startsWith('Arrow') || k === 'KeyA' || k === 'KeyD' || k === 'KeyW' || k === 'KeyS') {
+        // 键盘接管后清掉悬停目标，否则指针弹簧会把飞船一直拉回旧位置
+        worldRef.current.aim = null;
+      }
     };
     const up = (e: KeyboardEvent) => {
       const keys = keysRef.current;
@@ -281,6 +285,8 @@ export default function Tunnel3D() {
     const clear = () => {
       keysRef.current = { l: false, r: false, u: false, d: false };
       worldRef.current.aim = null;
+      // 指针在后台/取消时可能收不到 pointerup，不清会让旧 pointerId 永久占据输入
+      activePtrRef.current = null;
       if (statusRef.current === 'playing') setStatus('paused');
     };
     const onVis = () => {
@@ -316,6 +322,18 @@ export default function Tunnel3D() {
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activePtrRef.current === e.pointerId) {
+      activePtrRef.current = null;
+      worldRef.current.aim = null;
+    }
+  };
+
+  /** 鼠标/触控笔移出画布即松开悬停目标；按住拖拽时由 pointer capture 继续跟随 */
+  const onPointerLeave = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType !== 'touch' && activePtrRef.current === null) worldRef.current.aim = null;
+  };
+
+  const onLostPointerCapture = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (activePtrRef.current === e.pointerId) {
       activePtrRef.current = null;
       worldRef.current.aim = null;
@@ -429,9 +447,8 @@ export default function Tunnel3D() {
       ctx.restore();
     };
 
-    /** 漂浮陨石：不规则五边形 + 受光面（极坐标贴壁摆放） */
-    const drawRock = (rk: Rock, t: number, cam: { x: number; y: number }) => {
-      const z = rk.z;
+    /** 漂浮陨石：不规则五边形 + 受光面（极坐标贴壁摆放）；z 必须是相对相机的距离 */
+    const drawRock = (rk: Rock, z: number, t: number, cam: { x: number; y: number }) => {
       const fog = clamp(z / FAR, 0, 1);
       const wob = rk.a + Math.sin(t * 1.2 + rk.seed * 9) * 0.04;
       const wx = Math.cos(wob) * rk.r;
@@ -640,15 +657,17 @@ export default function Tunnel3D() {
           const z = c.z - w.dist;
           if (!c.judged && z <= 0) {
             c.judged = true;
-            if (Math.hypot(c.x - p.x, c.y - p.y) < CORE_R) {
+            // 与碰撞共用免判窗口：被核心跳跃甩到身后的道具不再补拾取
+            if (z > -crossGrace && Math.hypot(c.x - p.x, c.y - p.y) < CORE_R) {
               w.cores += 1;
               w.combo = Math.min(5, w.combo + 1);
               const jump = 12 * w.combo;
               w.dist += jump;
-              // 里程前跳会掠过沿途障碍：被掠过及落点前方 4m 内的免判碰撞，
-              // 避免"吃核心却被撞"的不公平体验
-              for (const rg of w.rings) if (!rg.judged && rg.z - w.dist <= 4) rg.judged = true;
-              for (const rk of w.rocks) if (!rk.judged && rk.z - w.dist <= 4) rk.judged = true;
+              // 里程前跳会掠过沿途障碍：被掠过及落点前方一段内的免判碰撞。
+              // 豁免距离随速度放大（原来固定 4m，满速只有 0.14s，落点前的障碍根本来不及反应）
+              const clearAhead = Math.max(4, w.speed * 0.5);
+              for (const rg of w.rings) if (!rg.judged && rg.z - w.dist <= clearAhead) rg.judged = true;
+              for (const rk of w.rocks) if (!rk.judged && rk.z - w.dist <= clearAhead) rk.judged = true;
               w.coreFlash = t;
               setCores(w.cores);
               sfx.match();
@@ -815,7 +834,7 @@ export default function Tunnel3D() {
       for (const rk of w.rocks) {
         const z = rk.z - w.dist;
         if (z < 0 || z > FAR) continue;
-        items.push({ z, draw: () => drawRock(rk, t, cam) });
+        items.push({ z, draw: () => drawRock(rk, z, t, cam) });
       }
       for (const c of w.coreArr) {
         const z = c.z - w.dist;
@@ -1038,6 +1057,8 @@ export default function Tunnel3D() {
             onPointerMove={updateAim}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
+            onPointerLeave={onPointerLeave}
+            onLostPointerCapture={onLostPointerCapture}
           />
           {status === 'ready' && (
             <div className="t3d-overlay">

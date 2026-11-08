@@ -735,6 +735,8 @@ export default function Ski3D() {
 
         // ---- 碰撞与回收 ----
         const rel = (o: { z: number }) => o.z - w.dist;
+        // 单帧跨过判定面后的免判窗口：盖住 VMAX×dt（0.05s 上限）并留余量
+        const crossGrace = Math.max(1.2, w.speed * dt) + 0.05;
         for (let i = w.obstacles.length - 1; i >= 0; i--) {
           const o = w.obstacles[i];
           const z = rel(o);
@@ -742,8 +744,7 @@ export default function Ski3D() {
           if (!o.judged && z <= PZ) {
             o.judged = true;
             // 只在玩家身前判碰撞：已在身后的障碍（如异常生成）不伤人
-            // 窗口放宽到 -1.2 与单帧最大位移（VMAX×dt上限≈1.3m）对齐，防低帧率时障碍单帧跨过判定平面漏扣
-            if (z > -1.2 && w.invuln <= 0 && Math.abs(o.x - p.x) < o.r + 0.26) {
+            if (z > PZ - crossGrace && w.invuln <= 0 && Math.abs(o.x - p.x) < o.r + 0.26) {
               w.lives -= 1;
               w.combo = 1;
               w.invuln = INVULN;
@@ -769,10 +770,10 @@ export default function Ski3D() {
         for (let i = w.gemsArr.length - 1; i >= 0; i--) {
           const g = w.gemsArr[i];
           const z = rel(g);
-          // 宝石到达玩家平面时判一次收集
+          // 宝石到达玩家平面时判一次收集；被吃宝石的里程前跳甩到身后的不再补拾取
           if (!g.judged && z <= PZ) {
             g.judged = true;
-            if (Math.abs(g.x - p.x) < 0.6) {
+            if (z > PZ - crossGrace && Math.abs(g.x - p.x) < 0.6) {
               w.gems += 1;
               w.combo = Math.min(5, w.combo + 1);
               const jump = 15 * w.combo;
